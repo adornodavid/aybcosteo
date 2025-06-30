@@ -1,16 +1,15 @@
 import type React from "react"
-import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
-import { SidebarProvider } from "@/components/ui/sidebar"
-import { AppSidebar } from "@/components/app-sidebar"
-import { Toaster } from "@/components/ui/toaster"
+import { Toaster } from "@/components/ui/sonner"
+import { AuthProvider } from "@/contexts/auth-context"
+import { ConditionalLayout } from "@/components/conditional-layout"
 
 const inter = Inter({ subsets: ["latin"] })
 
-export const metadata: Metadata = {
-  title: "Sistema de Costeo - Gestión de Ingredientes y Menús",
-  description: "Sistema para gestión de ingredientes y creación de menús para restaurantes",
+export const metadata = {
+  title: "Sistema de Costeo - Gestión Hotelera",
+  description: "Sistema integral para gestión de costos en hoteles y restaurantes",
     generator: 'v0.dev'
 }
 
@@ -22,13 +21,10 @@ export default function RootLayout({
   return (
     <html lang="es">
       <body className={inter.className}>
-        <SidebarProvider>
-          <div className="flex min-h-screen w-full">
-            <AppSidebar />
-            <main className="flex-1">{children}</main>
-          </div>
+        <AuthProvider>
+          <ConditionalLayout>{children}</ConditionalLayout>
           <Toaster />
-        </SidebarProvider>
+        </AuthProvider>
       </body>
     </html>
   )

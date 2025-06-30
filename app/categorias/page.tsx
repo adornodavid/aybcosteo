@@ -1,311 +1,89 @@
-"use client"
-
-import { useState, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Plus, Edit, Trash2 } from "lucide-react"
-import { supabase, type Categoria } from "@/lib/supabase"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { useToast } from "@/components/ui/use-toast"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { useForm } from "react-hook-form"
-import * as z from "zod"
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
-import { Textarea } from "@/components/ui/textarea"
-
-const categoriaSchema = z.object({
-  nombre: z.string().min(1, "El nombre es requerido"),
-  descripcion: z.string().optional(),
-})
-
-type CategoriaFormValues = z.infer<typeof categoriaSchema>
+import { Button } from "@/components/ui/button"
+import { Plus, Tags, Package, TrendingUp } from "lucide-react"
+import Link from "next/link"
 
 export default function CategoriasPage() {
-  const [categorias, setCategorias] = useState<Categoria[]>([])
-  const [loading, setLoading] = useState(true)
-  const [openDialog, setOpenDialog] = useState(false)
-  const [editingCategoria, setEditingCategoria] = useState<Categoria | null>(null)
-  const [deleteCategoriaId, setDeleteCategoriaId] = useState<string | null>(null)
-  const { toast } = useToast()
-
-  const form = useForm<CategoriaFormValues>({
-    resolver: zodResolver(categoriaSchema),
-    defaultValues: {
-      nombre: "",
-      descripcion: "",
-    },
-  })
-
-  useEffect(() => {
-    fetchCategorias()
-  }, [])
-
-  useEffect(() => {
-    if (editingCategoria) {
-      form.reset({
-        nombre: editingCategoria.nombre,
-        descripcion: editingCategoria.descripcion || "",
-      })
-    } else {
-      form.reset({
-        nombre: "",
-        descripcion: "",
-      })
-    }
-  }, [editingCategoria, form])
-
-  const fetchCategorias = async () => {
-    try {
-      setLoading(true)
-      const { data, error } = await supabase.from("categorias").select("*").order("nombre")
-
-      if (error) throw error
-      setCategorias(data || [])
-    } catch (error) {
-      console.error("Error fetching categorias:", error)
-      toast({
-        title: "Error",
-        description: "No se pudieron cargar las categorías",
-        variant: "destructive",
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleOpenDialog = (categoria?: Categoria) => {
-    setEditingCategoria(categoria || null)
-    setOpenDialog(true)
-  }
-
-  const handleCloseDialog = () => {
-    setOpenDialog(false)
-    setEditingCategoria(null)
-    form.reset()
-  }
-
-  const onSubmit = async (values: CategoriaFormValues) => {
-    try {
-      if (editingCategoria) {
-        // Actualizar categoría existente
-        const { error } = await supabase
-          .from("categorias")
-          .update({
-            ...values,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", editingCategoria.id)
-
-        if (error) throw error
-
-        toast({
-          title: "Categoría actualizada",
-          description: "La categoría ha sido actualizada correctamente",
-        })
-      } else {
-        // Crear nueva categoría
-        const { error } = await supabase.from("categorias").insert([values])
-
-        if (error) throw error
-
-        toast({
-          title: "Categoría creada",
-          description: "La categoría ha sido creada correctamente",
-        })
-      }
-
-      handleCloseDialog()
-      fetchCategorias()
-    } catch (error: any) {
-      console.error("Error saving categoria:", error)
-      toast({
-        title: "Error",
-        description: error.message || "Ocurrió un error al guardar la categoría",
-        variant: "destructive",
-      })
-    }
-  }
-
-  const handleDeleteCategoria = async () => {
-    if (!deleteCategoriaId) return
-
-    try {
-      const { error } = await supabase.from("categorias").delete().eq("id", deleteCategoriaId)
-
-      if (error) throw error
-
-      setCategorias(categorias.filter((cat) => cat.id !== deleteCategoriaId))
-      toast({
-        title: "Categoría eliminada",
-        description: "La categoría ha sido eliminada correctamente",
-      })
-    } catch (error: any) {
-      console.error("Error deleting categoria:", error)
-      toast({
-        title: "Error",
-        description: error.message || "No se pudo eliminar la categoría",
-        variant: "destructive",
-      })
-    } finally {
-      setDeleteCategoriaId(null)
-    }
-  }
-
-  if (loading) {
-    return (
-      <div className="p-6">
-        <div className="animate-pulse space-y-4">
-          <div className="h-8 bg-gray-200 rounded w-1/4"></div>
-          <div className="h-64 bg-gray-200 rounded"></div>
-        </div>
-      </div>
-    )
-  }
-
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex justify-between items-center">
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Categorías</h1>
-          <p className="text-muted-foreground">Gestiona las categorías de ingredientes</p>
+          <h1 className="text-3xl font-bold tracking-tight">Categorías de Ingredientes</h1>
+          <p className="text-muted-foreground">Organiza y clasifica todos los ingredientes del sistema</p>
         </div>
-        <Button onClick={() => handleOpenDialog()}>
-          <Plus className="h-4 w-4 mr-2" />
-          Nueva Categoría
+        <Button asChild>
+          <Link href="/categorias/nueva">
+            <Plus className="mr-2 h-4 w-4" />
+            Nueva Categoría
+          </Link>
         </Button>
       </div>
 
+      {/* Stats Cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Categorías</CardTitle>
+            <Tags className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">0</div>
+            <p className="text-xs text-muted-foreground">Categorías creadas</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Categorías Activas</CardTitle>
+            <Tags className="h-4 w-4 text-green-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">0</div>
+            <p className="text-xs text-muted-foreground">En uso</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Ingredientes Totales</CardTitle>
+            <Package className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">0</div>
+            <p className="text-xs text-muted-foreground">Ingredientes clasificados</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Más Utilizada</CardTitle>
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">-</div>
+            <p className="text-xs text-muted-foreground">Categoría popular</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Categories List */}
       <Card>
         <CardHeader>
           <CardTitle>Lista de Categorías</CardTitle>
-          <CardDescription>{categorias.length} categorías encontradas</CardDescription>
+          <CardDescription>Todas las categorías de ingredientes del sistema</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nombre</TableHead>
-                <TableHead>Descripción</TableHead>
-                <TableHead>Acciones</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {categorias.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">
-                    No hay categorías registradas
-                  </TableCell>
-                </TableRow>
-              ) : (
-                categorias.map((categoria) => (
-                  <TableRow key={categoria.id}>
-                    <TableCell className="font-medium">{categoria.nombre}</TableCell>
-                    <TableCell>{categoria.descripcion || "Sin descripción"}</TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        <Button variant="outline" size="sm" onClick={() => handleOpenDialog(categoria)}>
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="outline" size="sm" onClick={() => setDeleteCategoriaId(categoria.id)}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                Esta acción no se puede deshacer. Se eliminará permanentemente la categoría{" "}
-                                <strong>{categoria.nombre}</strong> del sistema.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel onClick={() => setDeleteCategoriaId(null)}>Cancelar</AlertDialogCancel>
-                              <AlertDialogAction onClick={handleDeleteCategoria}>Eliminar</AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+          <div className="text-center py-8">
+            <Tags className="mx-auto h-12 w-12 text-muted-foreground" />
+            <h3 className="mt-4 text-lg font-semibold">No hay categorías registradas</h3>
+            <p className="text-muted-foreground">Comienza creando categorías para organizar tus ingredientes</p>
+            <Button asChild className="mt-4">
+              <Link href="/categorias/nueva">
+                <Plus className="mr-2 h-4 w-4" />
+                Crear Primera Categoría
+              </Link>
+            </Button>
+          </div>
         </CardContent>
       </Card>
-
-      <Dialog open={openDialog} onOpenChange={setOpenDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{editingCategoria ? "Editar Categoría" : "Nueva Categoría"}</DialogTitle>
-            <DialogDescription>
-              {editingCategoria
-                ? "Modifica los datos de la categoría"
-                : "Completa el formulario para crear una nueva categoría"}
-            </DialogDescription>
-          </DialogHeader>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <FormField
-                control={form.control}
-                name="nombre"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nombre</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Nombre de la categoría" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="descripcion"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Descripción</FormLabel>
-                    <FormControl>
-                      <Textarea placeholder="Descripción de la categoría (opcional)" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <DialogFooter>
-                <Button variant="outline" type="button" onClick={handleCloseDialog}>
-                  Cancelar
-                </Button>
-                <Button type="submit">{editingCategoria ? "Actualizar" : "Crear"}</Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

@@ -1,132 +1,207 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Search, Filter, Edit, Trash2, Package, Loader2 } from "lucide-react"
-import { useToast } from "@/components/ui/use-toast"
+import { Filter, Edit, Trash2, Package, Loader2, Eye, Calendar, AlertCircle } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import {
+  obtenerHoteles,
+  obtenerCategoriasIngredientes,
+  buscarIngredientes,
+  eliminarIngrediente,
+} from "@/app/actions/ingredientes-actions"
 
-// Datos mock para que la página funcione inmediatamente
-const mockIngredientes = [
-  {
-    id: "1",
-    clave: "CARNE001",
-    descripcion: "Filete de Res Premium",
-    categoria: { id: "1", nombre: "Carnes" },
-    restaurante: { id: "1", nombre: "Restaurante Principal" },
-    status: "activo",
-    tipo: "Proteína",
-    unidad_medida: "Kilogramo",
-    cantidad_por_presentacion: 1.0,
-    conversion: "Gramo",
-    precio_actual: { precio: 450.0 },
-    created_at: "2024-01-15",
-    updated_at: "2024-01-15",
-  },
-  {
-    id: "2",
-    clave: "VEG001",
-    descripcion: "Tomate Roma",
-    categoria: { id: "2", nombre: "Verduras" },
-    restaurante: { id: "1", nombre: "Restaurante Principal" },
-    status: "activo",
-    tipo: "Vegetal",
-    unidad_medida: "Kilogramo",
-    cantidad_por_presentacion: 1.0,
-    conversion: "Gramo",
-    precio_actual: { precio: 35.0 },
-    created_at: "2024-01-15",
-    updated_at: "2024-01-15",
-  },
-  {
-    id: "3",
-    clave: "LAC001",
-    descripcion: "Queso Manchego",
-    categoria: { id: "3", nombre: "Lácteos" },
-    restaurante: { id: "1", nombre: "Restaurante Principal" },
-    status: "activo",
-    tipo: "Lácteo",
-    unidad_medida: "Kilogramo",
-    cantidad_por_presentacion: 1.0,
-    conversion: "Gramo",
-    precio_actual: { precio: 280.0 },
-    created_at: "2024-01-15",
-    updated_at: "2024-01-15",
-  },
-  {
-    id: "4",
-    clave: "MAR001",
-    descripcion: "Salmón Fresco",
-    categoria: { id: "4", nombre: "Mariscos" },
-    restaurante: { id: "2", nombre: "Restaurante Vista Mar" },
-    status: "activo",
-    tipo: "Pescado",
-    unidad_medida: "Kilogramo",
-    cantidad_por_presentacion: 1.0,
-    conversion: "Gramo",
-    precio_actual: { precio: 650.0 },
-    created_at: "2024-01-15",
-    updated_at: "2024-01-15",
-  },
-  {
-    id: "5",
-    clave: "ACEI001",
-    descripcion: "Aceite de Oliva Extra Virgen",
-    categoria: { id: "5", nombre: "Aceites" },
-    restaurante: { id: "1", nombre: "Restaurante Principal" },
-    status: "activo",
-    tipo: "Aceite",
-    unidad_medida: "Litro",
-    cantidad_por_presentacion: 1.0,
-    conversion: "Mililitro",
-    precio_actual: { precio: 180.0 },
-    created_at: "2024-01-15",
-    updated_at: "2024-01-15",
-  },
-]
+interface Hotel {
+  id: number
+  nombre: string
+}
 
-const mockRestaurantes = [
-  { id: "1", nombre: "Restaurante Principal" },
-  { id: "2", nombre: "Restaurante Vista Mar" },
-  { id: "3", nombre: "Café Montaña" },
-]
-
-const mockCategorias = [
-  { id: "1", nombre: "Carnes" },
-  { id: "2", nombre: "Verduras" },
-  { id: "3", nombre: "Lácteos" },
-  { id: "4", nombre: "Mariscos" },
-  { id: "5", nombre: "Aceites" },
-]
+interface CategoriaIngrediente {
+  id: number
+  descripcion: string
+}
 
 interface Ingrediente {
-  id: string
-  clave: string
-  descripcion: string
-  categoria?: { id: string; nombre: string }
-  restaurante?: { id: string; nombre: string }
-  status: string
-  tipo?: string
-  unidad_medida?: string
-  cantidad_por_presentacion?: number
-  conversion?: string
-  precio_actual?: { precio: number } | null
-  created_at: string
-  updated_at: string
+  id: number
+  codigo?: string
+  nombre?: string
+  categoriaid?: number
+  costo?: number
+  unidadmedidaid?: number
+  hotelid?: number
+  imgurl?: string
+  cambio?: number
+  activo?: boolean
+  fechacreacion?: string
+  fechamodificacion?: string
+  hotel?: {
+    id: number
+    nombre: string
+  }
+  categoria?: {
+    id: number
+    descripcion: string
+  }
+  unidadmedida?: {
+    id: number
+    descripcion: string
+  }
 }
 
 export default function IngredientesPage() {
-  const [ingredientes, setIngredientes] = useState<Ingrediente[]>(mockIngredientes)
-  const [loading, setLoading] = useState(false)
-  const [searchTerm, setSearchTerm] = useState("")
-  const [selectedRestaurante, setSelectedRestaurante] = useState<string>("todos")
-  const [selectedCategoria, setSelectedCategoria] = useState<string>("todas")
+  const [ingredientes, setIngredientes] = useState<Ingrediente[]>([])
+  const [hoteles, setHoteles] = useState<Hotel[]>([])
+  const [categorias, setCategorias] = useState<CategoriaIngrediente[]>([])
+  const [loading, setLoading] = useState(true)
+  const [searching, setSearching] = useState(false)
+  const [totalCount, setTotalCount] = useState(0)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(0)
+  const [error, setError] = useState<string | null>(null)
   const { toast } = useToast()
+  const router = useRouter()
+
+  // Estados para los filtros
+  const [txtCodigo, setTxtCodigo] = useState("")
+  const [txtNombre, setTxtNombre] = useState("")
+  const [ddlHoteles, setDdlHoteles] = useState("")
+  const [ddlCategorias, setDdlCategorias] = useState("")
+
+  const itemsPerPage = 20
+
+  useEffect(() => {
+    cargarDatosIniciales()
+  }, [])
+
+  const cargarDatosIniciales = async () => {
+    setLoading(true)
+    setError(null)
+
+    try {
+      // Verificar variables de entorno
+      if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+        throw new Error("Variables de entorno de Supabase no configuradas")
+      }
+
+      // Cargar hoteles
+      console.log("Cargando hoteles...")
+      const hotelesResult = await obtenerHoteles()
+      if (hotelesResult.success) {
+        setHoteles(hotelesResult.data)
+        console.log("Hoteles cargados:", hotelesResult.data.length)
+      } else {
+        console.error("Error cargando hoteles:", hotelesResult.error)
+        setError(`Error cargando hoteles: ${hotelesResult.error}`)
+      }
+
+      // Cargar categorías
+      console.log("Cargando categorías...")
+      const categoriasResult = await obtenerCategoriasIngredientes()
+      if (categoriasResult.success) {
+        setCategorias(categoriasResult.data)
+        console.log("Categorías cargadas:", categoriasResult.data.length)
+      } else {
+        console.error("Error cargando categorías:", categoriasResult.error)
+      }
+
+      // Cargar ingredientes iniciales
+      console.log("Cargando ingredientes...")
+      await ejecutarBusqueda(1)
+    } catch (error: any) {
+      console.error("Error cargando datos iniciales:", error)
+      setError(`Error de conexión: ${error.message}`)
+      toast({
+        title: "Error de conexión",
+        description: "No se pudo conectar con la base de datos. Verifica tu conexión.",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const ejecutarBusqueda = async (page = 1) => {
+    setSearching(true)
+    try {
+      const filtros = {
+        codigo: txtCodigo,
+        nombre: txtNombre,
+        hotelId: ddlHoteles ? Number.parseInt(ddlHoteles) : undefined,
+        categoriaId: ddlCategorias ? Number.parseInt(ddlCategorias) : undefined,
+        page,
+        limit: itemsPerPage,
+      }
+
+      const result = await buscarIngredientes(filtros)
+      if (result.success) {
+        setIngredientes(result.data)
+        setTotalCount(result.count)
+        setCurrentPage(page)
+        setTotalPages(Math.ceil(result.count / itemsPerPage))
+      } else {
+        setError(`Error en búsqueda: ${result.error}`)
+      }
+    } catch (error: any) {
+      console.error("Error en búsqueda:", error)
+      setError(`Error en búsqueda: ${error.message}`)
+      toast({
+        title: "Error",
+        description: "Error al buscar ingredientes",
+        variant: "destructive",
+      })
+    } finally {
+      setSearching(false)
+    }
+  }
+
+  const handleBtnBuscar = () => {
+    ejecutarBusqueda(1)
+  }
+
+  const handleBtnLimpiar = () => {
+    setTxtCodigo("")
+    setTxtNombre("")
+    setDdlHoteles("")
+    setDdlCategorias("")
+  }
+
+  const handleBtnImportarExcel = () => {
+    router.push("/importar")
+  }
+
+  const handleEliminarIngrediente = async (id: number, nombre: string) => {
+    if (!confirm(`¿Estás seguro de que quieres eliminar "${nombre}"?`)) {
+      return
+    }
+
+    try {
+      const result = await eliminarIngrediente(id)
+      if (result.success) {
+        toast({
+          title: "Ingrediente eliminado",
+          description: `El ingrediente ${nombre} ha sido eliminado correctamente`,
+        })
+        ejecutarBusqueda(currentPage)
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "Error al eliminar el ingrediente",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Error al eliminar el ingrediente",
+        variant: "destructive",
+      })
+    }
+  }
 
   const formatCurrency = (amount: number): string => {
     return new Intl.NumberFormat("es-MX", {
@@ -135,61 +210,72 @@ export default function IngredientesPage() {
     }).format(amount)
   }
 
-  const handleEliminarIngrediente = (id: string, nombre: string) => {
-    setIngredientes(ingredientes.filter((i) => i.id !== id))
-    toast({
-      title: "Ingrediente eliminado",
-      description: `El ingrediente ${nombre} ha sido eliminado correctamente`,
-    })
+  const formatDate = (dateString?: string): string => {
+    if (!dateString) return "Sin fecha"
+    return new Date(dateString).toLocaleDateString("es-MX")
   }
 
-  // Filtrar ingredientes
-  const filteredIngredientes = ingredientes.filter((ingrediente) => {
-    const matchesSearch =
-      ingrediente.descripcion.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      ingrediente.clave.toLowerCase().includes(searchTerm.toLowerCase())
+  const calcularEstadisticas = () => {
+    const totalIngredientes = totalCount
+    const costoPromedio =
+      ingredientes.length > 0 ? ingredientes.reduce((sum, i) => sum + (i.costo || 0), 0) / ingredientes.length : 0
+    const costoTotal = ingredientes.reduce((sum, i) => sum + (i.costo || 0), 0)
+    const hotelesConIngredientes = new Set(ingredientes.map((i) => i.hotel?.nombre).filter(Boolean)).size
 
-    const matchesRestaurante = selectedRestaurante === "todos" || ingrediente.restaurante?.id === selectedRestaurante
+    return { totalIngredientes, costoPromedio, costoTotal, hotelesConIngredientes }
+  }
 
-    const matchesCategoria = selectedCategoria === "todas" || ingrediente.categoria?.id === selectedCategoria
+  const estadisticas = calcularEstadisticas()
 
-    return matchesSearch && matchesRestaurante && matchesCategoria
-  })
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <span className="ml-2">Cargando página...</span>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+        <div className="flex justify-center">
+          <Button onClick={cargarDatosIniciales}>Reintentar</Button>
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="space-y-6">
+      {/* 1. Título */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold">Gestión de Ingredientes</h1>
-          <p className="text-muted-foreground mt-2">Administra el inventario de ingredientes por restaurante</p>
+          <h1 className="text-3xl font-bold">Ingredientes</h1>
+          <p className="text-base text-muted-foreground mt-2">Gestión completa de ingredientes por hotel</p>
         </div>
+        {/* 2. Botones con alineación derecha */}
         <div className="flex gap-2">
-          <Button asChild>
-            <Link href="/ingredientes/nuevo">
-              <Plus className="h-4 w-4 mr-2" />
-              Nuevo Ingrediente
-            </Link>
-          </Button>
-          <Button variant="outline" asChild>
-            <Link href="/importar">
-              <Package className="h-4 w-4 mr-2" />
-              Importar Excel
-            </Link>
+          <Button onClick={() => router.push("/ingredientes/nuevo")}>Registrar Ingrediente</Button>
+          <Button variant="outline" onClick={handleBtnImportarExcel}>
+            Importar Excel
           </Button>
         </div>
       </div>
 
-      {/* Estadísticas Rápidas */}
+      {/* 3. Resumen de estadísticas generales */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Total Ingredientes</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{filteredIngredientes.length}</div>
-            <p className="text-xs text-muted-foreground">
-              {filteredIngredientes.filter((i) => i.status === "activo").length} activos
-            </p>
+            <div className="text-2xl font-bold">{estadisticas.totalIngredientes}</div>
+            <p className="text-xs text-muted-foreground">ingredientes activos</p>
           </CardContent>
         </Card>
 
@@ -198,44 +284,33 @@ export default function IngredientesPage() {
             <CardTitle className="text-sm font-medium">Costo Promedio</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {filteredIngredientes.length > 0
-                ? formatCurrency(
-                    filteredIngredientes.reduce((sum, i) => sum + (i.precio_actual?.precio || 0), 0) /
-                      filteredIngredientes.length,
-                  )
-                : "$0.00"}
-            </div>
+            <div className="text-2xl font-bold">{formatCurrency(estadisticas.costoPromedio)}</div>
             <p className="text-xs text-muted-foreground">Por ingrediente</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Costo Total</CardTitle>
+            <CardTitle className="text-sm font-medium">Costo Total Inventario</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrency(filteredIngredientes.reduce((sum, i) => sum + (i.precio_actual?.precio || 0), 0))}
-            </div>
-            <p className="text-xs text-muted-foreground">Inventario total</p>
+            <div className="text-2xl font-bold">{formatCurrency(estadisticas.costoTotal)}</div>
+            <p className="text-xs text-muted-foreground">Valor total</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Categorías</CardTitle>
+            <CardTitle className="text-sm font-medium">Hoteles</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {new Set(filteredIngredientes.map((i) => i.categoria?.nombre).filter(Boolean)).size}
-            </div>
-            <p className="text-xs text-muted-foreground">Diferentes tipos</p>
+            <div className="text-2xl font-bold">{estadisticas.hotelesConIngredientes}</div>
+            <p className="text-xs text-muted-foreground">Con ingredientes</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Filtros */}
+      {/* 4. Filtros de búsqueda */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -244,169 +319,234 @@ export default function IngredientesPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 md:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-6 items-end">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Buscar</label>
-              <div className="relative">
-                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Nombre o código..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-8"
-                />
-              </div>
+              <label className="text-sm font-medium">Código de Ingrediente</label>
+              <input
+                type="text"
+                value={txtCodigo}
+                onChange={(e) => setTxtCodigo(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Código..."
+                maxLength={20}
+              />
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">Restaurante</label>
-              <Select value={selectedRestaurante} onValueChange={setSelectedRestaurante}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar restaurante" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos los restaurantes</SelectItem>
-                  {mockRestaurantes.map((restaurante) => (
-                    <SelectItem key={restaurante.id} value={restaurante.id}>
-                      {restaurante.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <label className="text-sm font-medium">Nombre</label>
+              <input
+                type="text"
+                value={txtNombre}
+                onChange={(e) => setTxtNombre(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Nombre..."
+                maxLength={50}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Hotel</label>
+              <select
+                value={ddlHoteles}
+                onChange={(e) => setDdlHoteles(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="">Todos los hoteles</option>
+                {hoteles.map((hotel) => (
+                  <option key={hotel.id} value={hotel.id.toString()}>
+                    {hotel.nombre}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="space-y-2">
               <label className="text-sm font-medium">Categoría</label>
-              <Select value={selectedCategoria} onValueChange={setSelectedCategoria}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar categoría" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todas">Todas las categorías</SelectItem>
-                  {mockCategorias.map((categoria) => (
-                    <SelectItem key={categoria.id} value={categoria.id}>
-                      {categoria.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <select
+                value={ddlCategorias}
+                onChange={(e) => setDdlCategorias(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="">Todas las categorías</option>
+                {categorias.map((categoria) => (
+                  <option key={categoria.id} value={categoria.id.toString()}>
+                    {categoria.descripcion}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">Acciones</label>
-              <Button variant="outline" className="w-full" onClick={() => setSearchTerm("")}>
-                <Search className="h-4 w-4 mr-2" />
+              <Button variant="outline" onClick={handleBtnLimpiar} className="w-full">
                 Limpiar Filtros
+              </Button>
+            </div>
+
+            <div className="space-y-2">
+              <Button onClick={handleBtnBuscar} disabled={searching} className="w-full">
+                {searching ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Buscar
               </Button>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Lista de Ingredientes */}
+      {/* 5. Grid que muestre el resultado de la búsqueda */}
       <Card>
         <CardHeader>
           <CardTitle>Ingredientes Registrados</CardTitle>
           <CardDescription>
-            {filteredIngredientes.length} ingrediente(s) encontrado(s)
-            {searchTerm && ` para "${searchTerm}"`}
+            {totalCount} ingrediente(s) encontrado(s) - Página {currentPage} de {totalPages}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {loading ? (
+          {searching ? (
             <div className="flex justify-center items-center py-8">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <span className="ml-2">Cargando ingredientes...</span>
+              <span className="ml-2">Buscando ingredientes...</span>
             </div>
-          ) : filteredIngredientes.length === 0 ? (
+          ) : ingredientes.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <Package className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p className="text-lg font-medium">No se encontraron ingredientes</p>
               <p className="text-sm">Intenta ajustar los filtros o crear un nuevo ingrediente</p>
-              <Button variant="outline" className="mt-4" asChild>
-                <Link href="/ingredientes/nuevo">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Crear Primer Ingrediente
-                </Link>
-              </Button>
             </div>
           ) : (
-            <div className="border rounded-md">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Código</TableHead>
-                    <TableHead>Descripción</TableHead>
-                    <TableHead>Restaurante</TableHead>
-                    <TableHead>Categoría</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Unidad</TableHead>
-                    <TableHead>Precio Unitario</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredIngredientes.map((ingrediente) => (
-                    <TableRow key={ingrediente.id}>
-                      <TableCell className="font-medium">{ingrediente.clave}</TableCell>
-                      <TableCell>
-                        <div className="max-w-[200px]">
-                          <div className="font-medium">{ingrediente.descripcion}</div>
-                          <div className="text-sm text-muted-foreground">
-                            {ingrediente.cantidad_por_presentacion} {ingrediente.unidad_medida}
+            <>
+              <div className="border rounded-md">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">ID</th>
+                      <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Código</th>
+                      <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Nombre</th>
+                      <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Hotel</th>
+                      <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Categoría</th>
+                      <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Costo</th>
+                      <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Unidad</th>
+                      <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Cambio</th>
+                      <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
+                        Fecha Creación
+                      </th>
+                      <th className="h-12 px-4 text-right align-middle font-medium text-muted-foreground">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ingredientes.map((ingrediente) => (
+                      <tr key={ingrediente.id} className="border-b transition-colors hover:bg-muted/50">
+                        <td className="p-4 align-middle font-mono text-sm">{ingrediente.id}</td>
+                        <td className="p-4 align-middle font-medium">{ingrediente.codigo || "Sin código"}</td>
+                        <td className="p-4 align-middle">
+                          <div className="max-w-[200px]">
+                            <div className="font-medium">{ingrediente.nombre || "Sin nombre"}</div>
+                            {ingrediente.imgurl && <div className="text-xs text-muted-foreground">Con imagen</div>}
                           </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{ingrediente.restaurante?.nombre}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">{ingrediente.categoria?.nombre}</Badge>
-                      </TableCell>
-                      <TableCell>{ingrediente.tipo}</TableCell>
-                      <TableCell>
-                        <div className="text-sm">
-                          <div>{ingrediente.unidad_medida}</div>
-                          <div className="text-muted-foreground">→ {ingrediente.conversion}</div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {ingrediente.precio_actual ? (
+                        </td>
+                        <td className="p-4 align-middle">
+                          <Badge variant="outline">{ingrediente.hotel?.nombre || "Sin hotel"}</Badge>
+                        </td>
+                        <td className="p-4 align-middle">
+                          <Badge variant="secondary">{ingrediente.categoria?.descripcion || "Sin categoría"}</Badge>
+                        </td>
+                        <td className="p-4 align-middle">
                           <Badge variant="default" className="bg-green-600">
-                            {formatCurrency(ingrediente.precio_actual.precio)}
+                            {formatCurrency(ingrediente.costo || 0)}
                           </Badge>
-                        ) : (
-                          <Badge variant="destructive">Sin precio</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={ingrediente.status === "activo" ? "default" : "secondary"}>
-                          {ingrediente.status === "activo" ? "Activo" : "Inactivo"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button variant="ghost" size="sm" asChild>
-                            <Link href={`/ingredientes/${ingrediente.id}/editar`}>
-                              <Edit className="h-4 w-4" />
-                            </Link>
-                          </Button>
+                        </td>
+                        <td className="p-4 align-middle">
+                          <div className="text-sm">{ingrediente.unidadmedida?.descripcion || "Sin unidad"}</div>
+                        </td>
+                        <td className="p-4 align-middle">
+                          <Badge variant={ingrediente.cambio ? "default" : "secondary"}>
+                            {ingrediente.cambio || 0}
+                          </Badge>
+                        </td>
+                        <td className="p-4 align-middle">
+                          <div className="flex items-center gap-1 text-sm">
+                            <Calendar className="h-3 w-3" />
+                            {formatDate(ingrediente.fechacreacion)}
+                          </div>
+                          {ingrediente.fechamodificacion &&
+                            ingrediente.fechamodificacion !== ingrediente.fechacreacion && (
+                              <div className="text-xs text-muted-foreground">
+                                Mod: {formatDate(ingrediente.fechamodificacion)}
+                              </div>
+                            )}
+                        </td>
+                        <td className="p-4 align-middle text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button variant="ghost" size="sm" asChild>
+                              <Link href={`/ingredientes/${ingrediente.id}`}>
+                                <Eye className="h-4 w-4" />
+                              </Link>
+                            </Button>
+                            <Button variant="ghost" size="sm" asChild>
+                              <Link href={`/ingredientes/${ingrediente.id}/editar`}>
+                                <Edit className="h-4 w-4" />
+                              </Link>
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEliminarIngrediente(ingrediente.id, ingrediente.nombre || "")}
+                              className="text-red-500 hover:text-red-700"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Paginación */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between space-x-2 py-4">
+                  <div className="text-sm text-muted-foreground">
+                    Mostrando {(currentPage - 1) * itemsPerPage + 1} a{" "}
+                    {Math.min(currentPage * itemsPerPage, totalCount)} de {totalCount} ingredientes
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => ejecutarBusqueda(currentPage - 1)}
+                      disabled={currentPage <= 1 || searching}
+                    >
+                      Anterior
+                    </Button>
+                    <div className="flex items-center space-x-1">
+                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                        const pageNum = Math.max(1, currentPage - 2) + i
+                        if (pageNum > totalPages) return null
+                        return (
                           <Button
-                            variant="ghost"
+                            key={pageNum}
+                            variant={pageNum === currentPage ? "default" : "outline"}
                             size="sm"
-                            onClick={() => handleEliminarIngrediente(ingrediente.id, ingrediente.descripcion)}
-                            className="text-red-500 hover:text-red-700"
+                            onClick={() => ejecutarBusqueda(pageNum)}
+                            disabled={searching}
                           >
-                            <Trash2 className="h-4 w-4" />
+                            {pageNum}
                           </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                        )
+                      })}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => ejecutarBusqueda(currentPage + 1)}
+                      disabled={currentPage >= totalPages || searching}
+                    >
+                      Siguiente
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
