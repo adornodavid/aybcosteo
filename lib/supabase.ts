@@ -1,5 +1,4 @@
-import { createClientComponentClient, createServerComponentClient } from "@supabase/auth-helpers-nextjs"
-import { cookies } from "next/headers"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import type { Database } from "@/lib/types-sistema-costeo" // Asegúrate de que esta ruta sea correcta
 
 // Define the database schema types
@@ -47,16 +46,10 @@ export type Enums<PublicEnumNameOrOptions extends keyof PublicSchema["Enums"] | 
       ? PublicSchema["Enums"][PublicEnumNameOrOptions]
       : never
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-
 // Client-side Supabase client
 export const createClient = () => createClientComponentClient<Database>()
 
-// Server-side Supabase client wrapper
-export const createServerSupabaseClientWrapper = () => createServerComponentClient<Database>({ cookies })
-
-// Instancia principal de Supabase (para uso en cliente si es necesario, aunque se prefiere createClient)
+// Instancia principal de Supabase (para uso en cliente)
 export const supabase = createClient()
 
 // Exportación por defecto

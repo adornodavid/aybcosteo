@@ -5,13 +5,9 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { SearchIcon } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import {
-  ChartTooltip,
-  ChartLegend,
-} from "@/components/ui/chart"
-import { Line, LineChart, XAxis, YAxis, CartesianGrid, ResponsiveContainer,BarChart, Tooltip  } from "recharts"
+import { ChartLegend } from "@/components/ui/chart"
+import { Line, LineChart, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip } from "recharts"
 import {
   getMenusForAnalisis,
   getPlatillosForAnalisis,
@@ -23,12 +19,10 @@ import {
   type PlatilloTooltipDetail,
 } from "@/app/actions/analisis-costos-actions"
 import { format } from "date-fns"
-import { es } from "date-fns/locale" // Importar el locale español
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
-import { CalendarIcon, SearchIcon, CheckIcon } from "lucide-react"
+import { CalendarIcon, SearchIcon } from "lucide-react" // Se eliminó la importación duplicada de SearchIcon
 import { cn } from "@/lib/utils"
-import Image from "next/image" // Importar Image de next/image
 
 export default function AnalisisCostosPage() {
   const [menus, setMenus] = useState<MenuItem[]>([])
@@ -45,14 +39,13 @@ export default function AnalisisCostosPage() {
   // Cargar menús al inicio
   useEffect(() => {
     const loadMenus = async () => {
-     
-        const fetchedMenus = await getMenusForAnalisis()
-        
-          setMenus(fetchedMenus) 
-          setLoading(false)
-      }
+      const fetchedMenus = await getMenusForAnalisis()
+
+      setMenus(fetchedMenus)
+      setLoading(false)
+    }
     loadMenus()
-  }, []) 
+  }, [])
 
   // Cargar platillos cuando cambia el menú seleccionado o el término de búsqueda
   useEffect(() => {
@@ -65,15 +58,11 @@ export default function AnalisisCostosPage() {
     loadPlatillos()
   }, [selectedMenu, searchTermPlatillo])
 
-     console.log("handleSearch triggered with:", {
-      selectedPlatillo,
-      fechaInicial: fechaInicial ? format(fechaInicial, "yyyy-MM-dd") : undefined,
-      fechaFinal: fechaFinal ? format(fechaFinal, "yyyy-MM-dd") : undefined,
-    })
-
-
-
-
+  console.log("handleSearch triggered with:", {
+    selectedPlatillo,
+    fechaInicial: fechaInicial ? format(fechaInicial, "yyyy-MM-dd") : undefined,
+    fechaFinal: fechaFinal ? format(fechaFinal, "yyyy-MM-dd") : undefined,
+  })
 
   // Función para manejar la búsqueda
   const handleSearch = useCallback(async () => {
@@ -81,19 +70,19 @@ export default function AnalisisCostosPage() {
       alert("Por favor, selecciona un platillo y un rango de fechas.")
       return
     }
-    
-   
+
     const platilloIdNum = Number.parseInt(selectedPlatillo)
-    const history = await getPlatilloCostHistory(platilloIdNum, format(fechaInicial, "yyyy-MM-dd"), format(fechaFinal, "yyyy-MM-dd"),)
+    const history = await getPlatilloCostHistory(
+      platilloIdNum,
+      format(fechaInicial, "yyyy-MM-dd"),
+      format(fechaFinal, "yyyy-MM-dd"),
+    )
     setChartData(history)
 
     const details = await getPlatilloDetailsForTooltip(platilloIdNum)
     setPlatilloDetails(details)
-  
   }, [selectedPlatillo, fechaInicial, fechaFinal])
 
-
-  
   // Formatear datos para el gráfico
   const formattedChartData = useMemo(() => {
     return chartData.map((item) => ({
@@ -101,7 +90,6 @@ export default function AnalisisCostosPage() {
       fechacreacion: format(new Date(item.fechacreacion), "dd/MM/yyyy"), // Formatear fecha para el eje X
     }))
   }, [chartData])
-
 
   const chartConfig = {
     costo: {
@@ -113,9 +101,6 @@ export default function AnalisisCostosPage() {
   }
 
   return (
-
-
-  
     <div className="flex flex-col gap-6 p-6">
       <h1 className="text-3xl font-bold">Análisis de Costos</h1>
 
@@ -172,7 +157,7 @@ export default function AnalisisCostosPage() {
               /> */}
             </div>
 
-              <div className="flex flex-col space-y-2">
+            <div className="flex flex-col space-y-2">
               <Label htmlFor="txtFechaInicialCosto">Fecha Inicial</Label>
               <Popover>
                 <PopoverTrigger asChild>
@@ -248,50 +233,34 @@ export default function AnalisisCostosPage() {
         <p>Cargando datos del gráfico...</p>
       ) : chartData.length > 0 ? (
         <Card className="w-full">
-        {console.log("Datos consulta:", chartData)}
+          {console.log("Datos consulta:", chartData)}
           <CardHeader>
             <CardTitle>Variación de Costos y Precios de Venta</CardTitle>
           </CardHeader>
           <CardContent>
-          <div className="h-[400px] w-full border border-gray-200 rounded-lg p-2">
-            <ResponsiveContainer  width="100%"
-                height="100%"
-                key={JSON.stringify(formattedChartData)}>
-              <LineChart
-                data={formattedChartData}
-                accessibilityLayer
-                width={700}
-                height={300}
-              >
-             
-
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="fechacreacion" minTickGap={20} />
-                <YAxis
-                  domain={[0, 700]} // Rango fijo de $0.00 a $700
-                  tickMargin={8}
-                  tickFormatter={(value) => `$${value.toFixed(2)}`}
-                />
-                <Tooltip formatter={(value: number) => [`$${value.toFixed(2)}`, "Costo p"]} />
-                <Line
-                  dataKey="costo"
-                  type="monotone"
-                  stroke="#56a8b3"
-                  strokeWidth={2}
-                  dot={true}
-                  name="Costo"
-                />
-                <Line
-                  dataKey="precioventa"
-                  type="monotone"
-                  stroke="#46914c"
-                  strokeWidth={2}
-                  dot={true}
-                  name="Precio Venta"
-                />
-                <ChartLegend content={<ChartLegend />} />
-              </LineChart>
-            </ResponsiveContainer>
+            <div className="h-[400px] w-full border border-gray-200 rounded-lg p-2">
+              <ResponsiveContainer width="100%" height="100%" key={JSON.stringify(formattedChartData)}>
+                <LineChart data={formattedChartData} accessibilityLayer width={700} height={300}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="fechacreacion" minTickGap={20} />
+                  <YAxis
+                    domain={[0, 700]} // Rango fijo de $0.00 a $700
+                    tickMargin={8}
+                    tickFormatter={(value) => `$${value.toFixed(2)}`}
+                  />
+                  <Tooltip formatter={(value: number) => [`$${value.toFixed(2)}`, "Costo p"]} />
+                  <Line dataKey="costo" type="monotone" stroke="#56a8b3" strokeWidth={2} dot={true} name="Costo" />
+                  <Line
+                    dataKey="precioventa"
+                    type="monotone"
+                    stroke="#46914c"
+                    strokeWidth={2}
+                    dot={true}
+                    name="Precio Venta"
+                  />
+                  <ChartLegend content={<ChartLegend />} />
+                </LineChart>
+              </ResponsiveContainer>
             </div>
             {platilloDetails && (
               <div className="mt-4 p-4 border rounded-md bg-gray-50 dark:bg-gray-800">

@@ -13,13 +13,12 @@ import { getSession } from "@/app/actions/session-actions"
 import { supabase } from "@/lib/supabase"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog" // Eliminado DialogClose de aquí
-import * as DialogPrimitive from "@radix-ui/react-dialog" // Importado DialogPrimitive
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import * as DialogPrimitive from "@radix-ui/react-dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { AspectRatio } from "@/components/ui/aspect-ratio"
-import Image from "next/image"
+import Image from "next/image" // Se eliminó la importación duplicada de Image
 import { getRecetaDetails } from "@/app/actions/recetas-details-actions"
-import Image from "next/image" // Importar Image de next/image
 
 interface SessionData {
   UsuarioId: string | null
@@ -455,8 +454,8 @@ export default function RecetasPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-         <div className="flex flex-col items-center justify-center p-8">
-            <div className="relative w-24 h-24 mb-4">
+        <div className="flex flex-col items-center justify-center p-8">
+          <div className="relative w-24 h-24 mb-4">
             <Image
               src="https://nxtrsibnomdqmzcrwedc.supabase.co/storage/v1/object/public/imagenes/AnimationGif/CargarPage.gif"
               alt="Procesando..."
@@ -465,9 +464,8 @@ export default function RecetasPage() {
               unoptimized // Importante para GIFs externos
               className="absolute inset-0 animate-bounce-slow"
             />
-            </div>
-            <p className="text-lg font-semibold text-gray-800">Cargando Pagina...</p>
-           
+          </div>
+          <p className="text-lg font-semibold text-gray-800">Cargando Pagina...</p>
         </div>
       </div>
     )
