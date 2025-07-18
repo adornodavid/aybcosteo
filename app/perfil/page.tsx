@@ -8,7 +8,7 @@ import { useAuth } from "@/contexts/auth-context"
 import { useRouter } from "next/navigation"
 
 export default function PerfilPage() {
-  const { profile, loading } = useUserSession()
+  const { profile, user, loading } = useUserSession() // Destructuramos 'user' también
   const { signOut } = useAuth()
   const router = useRouter()
 
@@ -30,7 +30,9 @@ export default function PerfilPage() {
         </Button>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        {" "}
+        {/* Ajustado para 3 columnas */}
         <Card>
           <CardHeader>
             <CardTitle>Información del Usuario</CardTitle>
@@ -40,11 +42,10 @@ export default function PerfilPage() {
             <UserInfo />
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader>
-            <CardTitle>Variables de Sesión</CardTitle>
-            <CardDescription>Información técnica de la sesión actual</CardDescription>
+            <CardTitle>Variables de Sesión (Perfil Enriquecido)</CardTitle>
+            <CardDescription>Información técnica de la sesión actual (con datos de BD si existen)</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-2 text-sm">
@@ -66,7 +67,26 @@ export default function PerfilPage() {
               <div>
                 <strong>Hotel:</strong> {profile?.hotel_nombre || "No asignado"}
               </div>
+              <div>
+                <strong>Permisos:</strong> {profile?.permisos ? profile.permisos.join(", ") : "No asignado"}
+              </div>
+              {/* Asumiendo que SesionActiva podría ser parte del perfil enriquecido si se añade */}
+              {/* <div>
+                <strong>Sesión Activa:</strong> {profile?.SesionActiva ? "Sí" : "No"}
+              </div> */}
             </div>
+          </CardContent>
+        </Card>
+        {/* Nueva tarjeta para mostrar los valores directos de la cookie de sesión */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Valores de la Cookie de Sesión (Raw)</CardTitle>
+            <CardDescription>Datos directamente de la sesión de autenticación (cookie)</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <pre className="text-xs overflow-auto max-h-60 bg-gray-50 p-2 rounded-md">
+              {JSON.stringify(user, null, 2)}
+            </pre>
           </CardContent>
         </Card>
       </div>
