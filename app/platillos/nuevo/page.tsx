@@ -1,716 +1,1134 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import type React from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
+import { Loader2, ArrowLeft, UploadCloud } from "lucide-react"
+import { toast } from "sonner"
+import { Suspense } from "react"
+import Loading from "./loading"
+import Image from "next/image" // Importar Image de next/image
+
+import * as actions from "@/app/actions/platillos-wizard-actions"
+import { useNavigationGuard } from "@/contexts/navigation-guard-context" // Importar el hook del contexto
+
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Progress } from "@/components/ui/progress"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { supabase } from "@/lib/supabase"
-import { useToast } from "@/hooks/use-toast"
-import { obtenerVariablesSesion } from "@/app/actions/session-actions"
-import { ArrowLeft, Plus, Save } from "lucide-react"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
+// Interfaces para los datos cargados
 interface Hotel {
   id: number
   nombre: string
 }
-
 interface Restaurante {
   id: number
   nombre: string
 }
-
 interface Menu {
   id: number
   nombre: string
 }
-
 interface Ingrediente {
   id: number
   nombre: string
-  costo: number
+  costo: number | null
 }
-
-interface IngredientePlatillo {
+interface Receta {
+  id: number
+  nombre: string
+  costo: number | null
+}
+interface UnidadMedida {
+  id: number
+  descripcion: string
+  calculoconversion: number | null // Necesario para el cálculo en el cliente
+}
+interface IngredienteAgregado {
   id: number
   nombre: string
   cantidad: number
   ingredientecostoparcial: number
+  unidad: string // Añadir esta línea
 }
+interface RecetaAgregada {
+  id: number
+  nombre: string
+  recetacostoparcial: number
+}
+
+const MAX_IMAGE_SIZE_MB = 10
+const MAX_IMAGE_DIMENSION = 500
 
 export default function NuevoPlatilloPage() {
   const router = useRouter()
-  const { toast } = useToast()
+  const { setGuard } = useNavigationGuard() // Obtener setGuard del contexto
 
-  // Estados de sesión
-  const [sesionValida, setSesionValida] = useState(false)
-  const [hotelIdSesion, setHotelIdSesion] = useState<string>("")
-  const [rolIdSesion, setRolIdSesion] = useState<string>("")
+  // --- ESTADO GENERAL ---
+  const [etapa, setEtapa] = useState(1)
+  const [loading, setLoading] = useState(true)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [showCookingAnimation, setShowCookingAnimation] = useState(false) // Nuevo estado para la animación
 
-  // Estados del formulario básico
-  const [nombrePlatillo, setNombrePlatillo] = useState("")
-  const [descripcionPlatillo, setDescripcionPlatillo] = useState("")
-  const [instruccionesPlatillo, setInstruccionesPlatillo] = useState("")
-  const [tiempoPlatillo, setTiempoPlatillo] = useState("")
-  const [platilloRegistrado, setPlatilloRegistrado] = useState(false)
+  // --- ESTADO DE DATOS Y PROCESO ---
   const [platilloId, setPlatilloId] = useState<number | null>(null)
-  const [inputsBloqueados, setInputsBloqueados] = useState(false)
+  const [validaRegistroId, setValidaRegistroId] = useState(0)
+  const [menuNom, setMenuNom] = useState("")
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false)
+  const [showSuccessModal, setShowSuccessModal] = useState(false) // Nuevo estado para el modal de éxito
+  const [showDuplicateRecetaModal, setShowDuplicateRecetaModal] = useState(false) // Nuevo estado para el modal de duplicidad de receta
+  const [showDuplicateIngredienteModal, setShowDuplicateIngredienteModal] = useState(false) // Nuevo estado para el modal de duplicidad de ingrediente
+  const nextPath = useRef("")
+  const resolveNavigationRef = useRef<((value: boolean) => void) | null>(null) // Para resolver la promesa de navegación
+  const [countdown, setCountdown] = useState(10) // Nuevo estado para el contador
 
-  // Estados de dropdowns
+  // --- ETAPA 1: INFO BÁSICA ---
+  const [nombre, setNombre] = useState("")
+  const [descripcion, setDescripcion] = useState("")
+  const [instrucciones, setInstrucciones] = useState("")
+  const [tiempo, setTiempo] = useState("")
+  const [imagenFile, setImagenFile] = useState<File | null>(null)
+  const [imagenPreview, setImagenPreview] = useState<string | null>(null)
+
+  // --- ETAPA 2: MENÚ ---
   const [hoteles, setHoteles] = useState<Hotel[]>([])
   const [restaurantes, setRestaurantes] = useState<Restaurante[]>([])
   const [menus, setMenus] = useState<Menu[]>([])
+  const [hotelId, setHotelId] = useState<string>("")
+  const [restauranteId, setRestauranteId] = useState<string>("")
+  const [menuId, setMenuId] = useState<string>("")
+
+  // --- ETAPA 3: CONTENIDO ---
   const [ingredientes, setIngredientes] = useState<Ingrediente[]>([])
+  const [recetas, setRecetas] = useState<Receta[]>([])
+  const [unidades, setUnidades] = useState<UnidadMedida[]>([]) // Ahora se carga dinámicamente
+  const [ingredientesAgregados, setIngredientesAgregados] = useState<IngredienteAgregado[]>([])
+  const [recetasAgregadas, setRecetasAgregadas] = useState<RecetaAgregada[]>([])
 
-  // Estados de selección
-  const [hotelSeleccionado, setHotelSeleccionado] = useState("")
-  const [restauranteSeleccionado, setRestauranteSeleccionado] = useState("")
-  const [menuSeleccionado, setMenuSeleccionado] = useState("")
-  const [ingredienteSeleccionado, setIngredienteSeleccionado] = useState("")
-  const [cantidadIngrediente, setCantidadIngrediente] = useState("")
-  const [costoIngrediente, setCostoIngrediente] = useState("")
+  // Formulario de ingredientes
+  const [selIngredienteId, setSelIngredienteId] = useState("")
+  const [selIngredienteCantidad, setSelIngredienteCantidad] = useState("")
+  const [selIngredienteUnidad, setSelIngredienteUnidad] = useState("")
+  const [selIngredienteCosto, setSelIngredienteCosto] = useState("")
 
-  // Estado de ingredientes agregados
-  const [ingredientesAgregados, setIngredientesAgregados] = useState<IngredientePlatillo[]>([])
+  // Formulario de recetas
+  const [selRecetaId, setSelRecetaId] = useState("")
+  const [selRecetaCosto, setSelRecetaCosto] = useState("")
 
-  // Validar sesión al cargar
+  // --- ETAPA 4: RESUMEN ---
+  const [totalCostoPlatillo, setTotalCostoPlatillo] = useState<number | null>(null) // Nuevo estado para el costo total
+
+  // --- EFECTOS ---
+
+  // 1. Verificar sesión y cargar datos iniciales (hoteles, ingredientes, recetas)
   useEffect(() => {
-    validarSesion()
-  }, [])
+    const initialize = async () => {
+      try {
+        const sessionData = await actions.obtenerVariablesSesion()
+        if (sessionData.SesionActiva !== "true" || !sessionData.RolId || sessionData.RolId === "0") {
+          router.push("/login")
+          return
+        }
 
-  // Cargar hoteles cuando la sesión es válida
-  useEffect(() => {
-    if (sesionValida) {
-      cargarHoteles()
-    }
-  }, [sesionValida, rolIdSesion, hotelIdSesion])
+        const auxHotelid = [1, 2, 3, 4].includes(Number(sessionData.RolId)) ? -1 : Number(sessionData.HotelId)
+        const [hotelesData] = await Promise.all([
+          actions.getHoteles(auxHotelid),
+          // actions.getUnidadesMedida(), // Ya no se carga aquí, ahora es dinámico
+        ])
 
-  // Cargar restaurantes cuando cambia el hotel
-  useEffect(() => {
-    if (hotelSeleccionado) {
-      cargarRestaurantes()
-      cargarIngredientes()
-    }
-  }, [hotelSeleccionado])
+        setHoteles(hotelesData)
+        // setUnidades(unidadesData) // Ya no se carga aquí
 
-  // Cargar menús cuando cambia el restaurante
-  useEffect(() => {
-    if (restauranteSeleccionado && hotelSeleccionado) {
-      cargarMenus()
-    }
-  }, [restauranteSeleccionado, hotelSeleccionado])
-
-  // Actualizar costo cuando cambia el ingrediente
-  useEffect(() => {
-    if (ingredienteSeleccionado) {
-      actualizarCostoIngrediente()
-    }
-  }, [ingredienteSeleccionado])
-
-  const validarSesion = async () => {
-    try {
-      const sesion = await obtenerVariablesSesion()
-
-      if (sesion.SesionActiva !== "true" || !sesion.RolId || sesion.RolId === "0") {
+        if (hotelesData.length > 0) {
+          setHotelId(hotelesData[0].id.toString())
+        }
+      } catch (error) {
+        console.error("Error verificando sesión o cargando datos:", error)
+        toast.error("Error al inicializar la página. Redirigiendo al login.")
         router.push("/login")
-        return
+      } finally {
+        setLoading(false)
       }
-
-      setSesionValida(true)
-      setHotelIdSesion(sesion.HotelId || "")
-      setRolIdSesion(sesion.RolId || "")
-    } catch (error) {
-      console.error("Error validando sesión:", error)
-      router.push("/login")
     }
-  }
+    initialize()
+  }, [router])
 
-  const cargarHoteles = async () => {
-    try {
-      // Determinar auxHotelid según el rol
-      let auxHotelid = -1
-      if (!["1", "2", "3", "4"].includes(rolIdSesion)) {
-        auxHotelid = Number.parseInt(hotelIdSesion) || -1
-      }
+  // 2. Cargar dropdowns dependientes (restaurantes, menus, ingredientes, recetas)
+  useEffect(() => {
+    if (!hotelId) return
+    const hotelNum = Number.parseInt(hotelId, 10)
 
-      let query = supabase.from("hoteles").select("id, nombre").eq("activo", true).order("nombre")
+    actions.getRestaurantes(hotelNum).then((data) => {
+      setRestaurantes(data)
+      setRestauranteId(data[0]?.id.toString() || "")
+    })
 
-      // Si auxHotelid no es -1, filtrar por hotel específico
-      if (auxHotelid !== -1) {
-        query = query.eq("id", auxHotelid)
-      }
+    actions.getIngredientes(hotelNum).then(setIngredientes)
+    actions.getRecetas(hotelNum).then(setRecetas)
+  }, [hotelId])
 
-      const { data, error } = await query
+  useEffect(() => {
+    if (!restauranteId) return
+    actions.getMenus(Number.parseInt(restauranteId, 10), Number.parseInt(hotelId, 10)).then((data) => {
+      setMenus(data)
+      setMenuId(data[0]?.id.toString() || "")
+    })
+  }, [restauranteId, hotelId]) // Depende de hotelId también
 
-      if (error) throw error
+  // 3. Actualizar costos de inputs bloqueados
+  useEffect(() => {
+    const ingrediente = ingredientes.find((i) => i.id.toString() === selIngredienteId)
+    setSelIngredienteCosto(ingrediente?.costo?.toString() || "0")
+  }, [selIngredienteId, ingredientes])
 
-      setHoteles(data || [])
+  useEffect(() => {
+    const receta = recetas.find((r) => r.id.toString() === selRecetaId)
+    setSelRecetaCosto(receta?.costo?.toString() || "0")
+  }, [selRecetaId, recetas])
 
-      // Seleccionar el primer hotel automáticamente
-      if (data && data.length > 0) {
-        setHotelSeleccionado(data[0].id.toString())
-      }
-    } catch (error) {
-      console.error("Error cargando hoteles:", error)
-      toast({
-        title: "Error",
-        description: "Error al cargar hoteles",
-        variant: "destructive",
-      })
-    }
-  }
-
-  const cargarRestaurantes = async () => {
-    if (!hotelSeleccionado) return
-
-    try {
-      const { data, error } = await supabase
-        .from("restaurantes")
-        .select("id, nombre")
-        .eq("hotelid", Number.parseInt(hotelSeleccionado))
-        .order("nombre")
-
-      if (error) throw error
-
-      setRestaurantes(data || [])
-
-      // Seleccionar el primer restaurante automáticamente
-      if (data && data.length > 0) {
-        setRestauranteSeleccionado(data[0].id.toString())
-      } else {
-        setRestauranteSeleccionado("")
-      }
-    } catch (error) {
-      console.error("Error cargando restaurantes:", error)
-      toast({
-        title: "Error",
-        description: "Error al cargar restaurantes",
-        variant: "destructive",
-      })
-    }
-  }
-
-  const cargarMenus = async () => {
-    if (!restauranteSeleccionado || !hotelSeleccionado) return
-
-    try {
-      const { data, error } = await supabase
-        .from("menus")
-        .select(`
-          id, 
-          nombre,
-          restaurantes!inner(
-            id,
-            hoteles!inner(id)
-          )
-        `)
-        .eq("restauranteid", Number.parseInt(restauranteSeleccionado))
-        .eq("restaurantes.hotelid", Number.parseInt(hotelSeleccionado))
-        .order("nombre")
-
-      if (error) throw error
-
-      const menusData =
-        data?.map((menu) => ({
-          id: menu.id,
-          nombre: menu.nombre,
-        })) || []
-
-      setMenus(menusData)
-
-      // Seleccionar el primer menú automáticamente
-      if (menusData.length > 0) {
-        setMenuSeleccionado(menusData[0].id.toString())
-      } else {
-        setMenuSeleccionado("")
-      }
-    } catch (error) {
-      console.error("Error cargando menús:", error)
-      toast({
-        title: "Error",
-        description: "Error al cargar menús",
-        variant: "destructive",
-      })
-    }
-  }
-
-  const cargarIngredientes = async () => {
-    if (!hotelSeleccionado) return
-
-    try {
-      const { data, error } = await supabase
-        .from("ingredientes")
-        .select("id, nombre, costo")
-        .eq("hotelid", Number.parseInt(hotelSeleccionado))
-        .order("nombre")
-
-      if (error) throw error
-
-      setIngredientes(data || [])
-    } catch (error) {
-      console.error("Error cargando ingredientes:", error)
-      toast({
-        title: "Error",
-        description: "Error al cargar ingredientes",
-        variant: "destructive",
-      })
-    }
-  }
-
-  const actualizarCostoIngrediente = () => {
-    const ingrediente = ingredientes.find((ing) => ing.id.toString() === ingredienteSeleccionado)
-    if (ingrediente) {
-      setCostoIngrediente(ingrediente.costo.toString())
-    }
-  }
-
-  const registrarPlatillo = async () => {
-    // Validar campos
-    if (!nombrePlatillo || !descripcionPlatillo || !instruccionesPlatillo || !tiempoPlatillo) {
-      toast({
-        title: "Error",
-        description: "Favor de llenar la información faltante",
-        variant: "destructive",
-      })
+  // NUEVO EFECTO: Cargar unidades de medida basadas en el ingrediente seleccionado
+  useEffect(() => {
+    if (!selIngredienteId) {
+      setUnidades([]) // Limpiar unidades si no hay ingrediente seleccionado
+      setSelIngredienteUnidad("") // Limpiar unidad seleccionada
       return
     }
+    const loadUnits = async () => {
+      const data = await actions.getUnidadesMedidaByIngrediente(Number(selIngredienteId))
+      setUnidades(data)
+      if (data.length > 0) {
+        setSelIngredienteUnidad(data[0].id.toString()) // Auto-seleccionar la única unidad
+      } else {
+        setSelIngredienteUnidad("")
+      }
+    }
+    loadUnits()
+  }, [selIngredienteId])
 
-    try {
-      // Insertar platillo
-      const { data, error } = await supabase
-        .from("platillos")
-        .insert({
-          nombre: nombrePlatillo,
-          descripcion: descripcionPlatillo,
-          instruccionespreparacion: instruccionesPlatillo,
-          tiempopreparacion: tiempoPlatillo,
-          costototal: null,
-          imgurl: null,
-          activo: true,
-          fechacreacion: null,
+  // NUEVO EFECTO: Cargar costo total del platillo en la etapa de resumen
+  useEffect(() => {
+    if (etapa === 4 && platilloId !== null) {
+      const fetchTotalCost = async () => {
+        const cost = await actions.getPlatilloTotalCost(platilloId)
+        setTotalCostoPlatillo(cost)
+      }
+      fetchTotalCost()
+    }
+  }, [etapa, platilloId])
+
+  // NUEVO EFECTO: Contador de tiempo para la Etapa 5 y redirección automática
+  useEffect(() => {
+    let timer: NodeJS.Timeout
+    if (etapa === 5) {
+      setCountdown(10) // Reiniciar contador al entrar a la etapa 5
+      timer = setInterval(() => {
+        setCountdown((prev) => {
+          if (prev === 1) {
+            clearInterval(timer)
+            router.push("/platillos") // Redirigir al llegar a 0
+            return 0
+          }
+          return prev - 1
         })
-        .select()
-
-      if (error) throw error
-
-      // Obtener el ID del platillo recién creado
-      const { data: platilloData, error: platilloError } = await supabase
-        .from("platillos")
-        .select("id")
-        .eq("nombre", nombrePlatillo)
-        .single()
-
-      if (platilloError) throw platilloError
-
-      setPlatilloId(platilloData.id)
-      setPlatilloRegistrado(true)
-      setInputsBloqueados(true)
-
-      toast({
-        title: "Éxito",
-        description: "Platillo registrado correctamente",
-      })
-    } catch (error) {
-      console.error("Error registrando platillo:", error)
-      toast({
-        title: "Error",
-        description: "Error al registrar el platillo",
-        variant: "destructive",
-      })
+      }, 1000)
     }
-  }
+    return () => clearInterval(timer) // Limpiar el intervalo al salir de la etapa o desmontar
+  }, [etapa, router])
 
-  const agregarIngrediente = async () => {
-    // Validar campos
-    if (!ingredienteSeleccionado || !cantidadIngrediente) {
-      toast({
-        title: "Error",
-        description: "Favor de llenar la información faltante",
-        variant: "destructive",
-      })
-      return
-    }
-
-    try {
-      const cantidad = Number.parseFloat(cantidadIngrediente)
-      const costo = Number.parseFloat(costoIngrediente)
-      const costoParcial = cantidad * costo
-
-      // Insertar ingrediente del platillo
-      const { error } = await supabase.from("ingredientesxplatillo").insert({
-        platilloid: platilloId,
-        ingredienteid: Number.parseInt(ingredienteSeleccionado),
-        cantidad: cantidad,
-        ingredientecostoparcial: costoParcial,
-        activo: true,
-        fechacreacion: null,
-        fechamodificacion: null,
-      })
-
-      if (error) throw error
-
-      // Actualizar tabla de ingredientes
-      await cargarIngredientesAgregados()
-
-      // Limpiar campos
-      setIngredienteSeleccionado("")
-      setCantidadIngrediente("")
-      setCostoIngrediente("")
-
-      toast({
-        title: "Éxito",
-        description: "Ingrediente agregado correctamente",
-      })
-    } catch (error) {
-      console.error("Error agregando ingrediente:", error)
-      toast({
-        title: "Error",
-        description: "Error al agregar el ingrediente",
-        variant: "destructive",
-      })
-    }
-  }
-
-  const cargarIngredientesAgregados = async () => {
-    if (!platilloId) return
-
-    try {
-      const { data, error } = await supabase
-        .from("ingredientesxplatillo")
-        .select(`
-          id,
-          cantidad,
-          ingredientecostoparcial,
-          ingredientes!inner(nombre)
-        `)
-        .eq("platilloid", platilloId)
-
-      if (error) throw error
-
-      const ingredientesData =
-        data?.map((item) => ({
-          id: item.id,
-          nombre: item.ingredientes.nombre,
-          cantidad: item.cantidad,
-          ingredientecostoparcial: item.ingredientecostoparcial,
-        })) || []
-
-      setIngredientesAgregados(ingredientesData)
-    } catch (error) {
-      console.error("Error cargando ingredientes agregados:", error)
-    }
-  }
-
-  const registroCompleto = async () => {
-    // Validar que se haya seleccionado un menú
-    if (!menuSeleccionado) {
-      toast({
-        title: "Error",
-        description: "El platillo no se encuentra asignado a ningun Menu, favor de llenar la informacion",
-        variant: "destructive",
-      })
-      return
-    }
-
-    try {
-      // Insertar en platillosxmenu
-      const { error } = await supabase.from("platillosxmenu").insert({
-        menuid: Number.parseInt(menuSeleccionado),
-        platilloid: platilloId,
-        precioventa: null,
-        margenutilidad: null,
-        activo: true,
-        fechacreacion: null,
-      })
-
-      if (error) throw error
-
-      toast({
-        title: "Éxito",
-        description: "Platillo registrado completamente",
-      })
-
-      // Redirigir a la página de platillos
-      router.push("/platillos")
-    } catch (error) {
-      console.error("Error en registro completo:", error)
-
-      // Eliminar platillo si hay error
-      if (platilloId) {
-        await supabase.from("platillos").delete().eq("id", platilloId)
+  // 4. Lógica para evitar abandono de página (para F5 y cierre de pestaña)
+  const handleBeforeUnload = useCallback(
+    (e: BeforeUnloadEvent) => {
+      if (platilloId && validaRegistroId === 0) {
+        e.preventDefault()
+        e.returnValue = ""
       }
+    },
+    [platilloId, validaRegistroId],
+  )
 
-      toast({
-        title: "Error",
-        description: "Error al completar el registro del platillo",
-        variant: "destructive",
-      })
+  useEffect(() => {
+    window.addEventListener("beforeunload", handleBeforeUnload)
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload)
+  }, [handleBeforeUnload])
+
+  // --- MANEJADORES DE EVENTOS ---
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) {
+      setImagenFile(null)
+      setImagenPreview(null)
+      return
+    }
+
+    if (file.type !== "image/jpeg") {
+      toast.error("Formato no válido. Solo se permiten imágenes .jpg")
+      setImagenFile(null)
+      setImagenPreview(null)
+      return
+    }
+
+    if (file.size > MAX_IMAGE_SIZE_MB * 1024 * 1024) {
+      toast.error(`La imagen es muy pesada. El máximo es ${MAX_IMAGE_SIZE_MB}MB.`)
+      setImagenFile(null)
+      setImagenPreview(null)
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      const img = new Image()
+      img.onload = () => {
+        if (img.width > MAX_IMAGE_DIMENSION || img.height > MAX_IMAGE_DIMENSION) {
+          toast.error(`La resolución es muy alta. Máximo ${MAX_IMAGE_DIMENSION}x${MAX_IMAGE_DIMENSION}px.`)
+          setImagenFile(null)
+          setImagenPreview(null)
+        } else {
+          setImagenFile(file)
+          setImagenPreview(event.target?.result as string)
+          toast.success("Imagen cargada con éxito.")
+        }
+      }
+      img.src = event.target?.result as string
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleRegistrarPlatillo = async () => {
+    if (!nombre || !descripcion) {
+      toast.error("Favor de llenar la información faltante (Nombre y Descripción son obligatorios).")
+      return
+    }
+
+    setIsSubmitting(true)
+    const formData = new FormData()
+    formData.append("nombre", nombre)
+    formData.append("descripcion", descripcion)
+    formData.append("instruccionespreparacion", instrucciones || "") // Se envía vacío si no hay valor
+    formData.append("tiempopreparacion", tiempo || "") // Se envía vacío si no hay valor
+    if (imagenFile) {
+      formData.append("imagen", imagenFile)
+    }
+
+    const result = await actions.registrarPlatilloBasico(formData)
+    if (result.success && result.platilloId) {
+      setPlatilloId(result.platilloId)
+      toast.success("Información básica guardada. Continue con el siguiente paso.")
+      setEtapa(2)
+    } else {
+      toast.error(result.error || "Ocurrió un error al registrar la receta.")
+    }
+    setIsSubmitting(false)
+  }
+
+  const handleContinuarEtapa2 = () => {
+    if (!menuId) {
+      toast.error("Debe seleccionar un menú.")
+      return
+    }
+    const menu = menus.find((m) => m.id.toString() === menuId)
+    setMenuNom(menu?.nombre || "")
+    setEtapa(3)
+  }
+
+  const handleAgregarIngrediente = async () => {
+    if (!selIngredienteId || !selIngredienteCantidad || !selIngredienteUnidad) {
+      toast.error("Favor de llenar la información faltante del ingrediente.")
+      return
+    }
+
+    setIsSubmitting(true)
+    const result = await actions.agregarIngrediente(
+      platilloId!,
+      Number(selIngredienteId),
+      Number(selIngredienteCantidad),
+      Number(selIngredienteUnidad),
+    )
+
+    if (result.success && result.ingredientes) {
+      setIngredientesAgregados(result.ingredientes)
+      toast.success("Ingrediente agregado.")
+      // Limpiar inputs
+      setSelIngredienteId("")
+      setSelIngredienteCantidad("")
+      setSelIngredienteUnidad("")
+      setSelIngredienteCosto("")
+    } else {
+      // Si el error es el de duplicidad, mostrar el AlertDialog
+      if (result.error === "No es posible agregar este ingrediente, puesto que ya se encuentra agregado a la receta.") {
+        setShowDuplicateIngredienteModal(true)
+      } else {
+        toast.error(result.error || "No se pudo agregar el ingrediente.")
+      }
+    }
+    setIsSubmitting(false)
+  }
+
+  const handleAgregarReceta = async () => {
+    if (!selRecetaId) {
+      toast.error("Favor de seleccionar una sub-receta.")
+      return
+    }
+
+    setIsSubmitting(true)
+    const result = await actions.agregarReceta(platilloId!, Number(selRecetaId))
+
+    if (result.success && result.recetas) {
+      setRecetasAgregadas(result.recetas)
+      toast.success("Sub-Receta agregada.")
+      setSelRecetaId("")
+      setSelRecetaCosto("")
+    } else {
+      // Si el error es el de duplicidad, mostrar el AlertDialog
+      if (result.error === "No es posible agregar esta Sub-Receta, puesto que ya se encuentra agregada a la receta.") {
+        setShowDuplicateRecetaModal(true)
+      } else {
+        toast.error(result.error || "No se pudo agregar la sub-receta.")
+      }
+    }
+    setIsSubmitting(false)
+  }
+
+  const handleEliminarIngrediente = async (ingredienteXPlatilloId: number) => {
+    setIsSubmitting(true)
+    const result = await actions.eliminarIngredienteDePlatillo(platilloId!, ingredienteXPlatilloId)
+
+    if (result.success) {
+      setIngredientesAgregados((prev) => prev.filter((i) => i.id !== ingredienteXPlatilloId))
+      toast.success("Ingrediente eliminado de la receta.")
+    } else {
+      toast.error(result.error || "No se pudo eliminar el ingrediente de la receta.")
+    }
+    setIsSubmitting(false)
+  }
+
+  const handleEliminarReceta = async (IdToDelete: number) => {
+    setIsSubmitting(true)
+    const result = await actions.eliminarRecetaDePlatillo(platilloId!, IdToDelete)
+
+    if (result.success) {
+      console.log("Se elimino la subreceta")
+      setRecetasAgregadas((prev) => prev.filter((r) => r.id !== IdToDelete))
+      toast.success("Sub-Receta eliminada de la receta.")
+    } else {
+      toast.error(result.error || "No se pudo eliminar la sub-receta de la receta.")
+      console.log(result.error)
+    }
+    setIsSubmitting(false)
+  }
+
+  const handleRegistroCompleto = async () => {
+    if (!menuNom) {
+      toast.error("La receta no se encuentra asignada a ningun Menu, favor de llenar la informacion.")
+      return
+    }
+
+    setIsSubmitting(true)
+    setShowCookingAnimation(true) // Mostrar la animación de cocinando
+
+    try {
+      // Ejecutar la acción y el temporizador de 6 segundos en paralelo
+      const [result] = await Promise.all([
+        actions.finalizarRegistro(platilloId!, Number(menuId)),
+        new Promise((resolve) => setTimeout(resolve, 6000)), // Mínimo 6 segundos de animación
+      ])
+
+      if (result.success) {
+        setValidaRegistroId(1)
+        setEtapa(5) // Cambiar a la nueva Etapa 5
+      } else {
+        toast.error(result.error || "Error al finalizar el registro.")
+      }
+    } catch (error) {
+      console.error("Error al finalizar el registro:", error)
+      toast.error("Ocurrió un error inesperado al finalizar el registro.")
+    } finally {
+      setShowCookingAnimation(false) // Ocultar la animación
+      setIsSubmitting(false)
     }
   }
 
-  if (!sesionValida) {
-    return <div>Validando sesión...</div>
+  // Esta función es llamada por el AlertDialog y resuelve la promesa de navegación
+  const handleLeavePage = useCallback(
+    async (confirm: boolean) => {
+      setShowLeaveConfirm(false) // Cerrar el modal
+      if (confirm) {
+        if (platilloId) {
+          const result = await actions.cancelarRegistro(platilloId)
+          if (result.success) {
+            toast.info("Registro cancelado y datos depurados.")
+          } else {
+            toast.error(result.error || "Error al cancelar el registro y depurar datos.")
+          }
+        }
+        resolveNavigationRef.current?.(true) // Resolver la promesa con true (proceder)
+      } else {
+        resolveNavigationRef.current?.(false) // Resolver la promesa con false (cancelar)
+      }
+      resolveNavigationRef.current = null // Limpiar la referencia
+    },
+    [platilloId],
+  )
+
+  // Esta es la función que se registra en el NavigationGuardContext
+  const checkLeaveAndConfirm = useCallback(
+    async (targetPath: string): Promise<boolean> => {
+      if (platilloId && validaRegistroId === 0) {
+        return new Promise<boolean>((resolve) => {
+          resolveNavigationRef.current = resolve // Almacenar la función resolve de la promesa
+          setShowLeaveConfirm(true) // Mostrar el modal
+          nextPath.current = targetPath // Guardar la ruta a la que se intenta navegar
+        })
+      }
+      return true // No hay proceso incompleto, se puede navegar libremente
+    },
+    [platilloId, validaRegistroId],
+  )
+
+  // Efecto para registrar/desregistrar la guardia de navegación en el contexto
+  useEffect(() => {
+    if (platilloId !== null && validaRegistroId === 0) {
+      // Si hay un platillo en proceso y no está validado como completo
+      setGuard(checkLeaveAndConfirm)
+    } else {
+      // Si no hay proceso o ya está completo, desregistrar la guardia
+      setGuard(null)
+    }
+    // Limpiar al desmontar el componente
+    return () => {
+      setGuard(null)
+    }
+  }, [platilloId, validaRegistroId, setGuard, checkLeaveAndConfirm])
+
+  // --- RENDERIZADO ---
+
+  if (loading) {
+    return <Loading />
   }
+
+  const progressValue = (etapa / 5) * 100 // Ajustar el cálculo del progreso para 5 etapas
 
   return (
-    <div className="container py-6 space-y-6">
-      {/* Título */}
-      <div>
-        <h1 className="text-3xl font-bold">Registrar Platillo</h1>
-      </div>
+    <Suspense fallback={<Loading />}>
+      <div className="container mx-auto max-w-5xl p-6">
+        {/* Modal de confirmación de abandono */}
+        <AlertDialog open={showLeaveConfirm} onOpenChange={setShowLeaveConfirm}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>¿Estás seguro que deseas abandonar el registro de receta?</AlertDialogTitle>
+              <AlertDialogDescription>Se perderá la información cargada previamente.</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => handleLeavePage(false)}>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={() => handleLeavePage(true)}>Aceptar</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
-      {/* Botón Regresar */}
-      <div>
-        <Button
-          type="button"
-          id="btnRegresar"
-          name="btnRegresar"
-          variant="outline"
-          onClick={() => router.push("/platillos")}
-          className="flex items-center gap-2"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Regresar
-        </Button>
-      </div>
+        {/* Modal de éxito de registro (Mantenido según la solicitud) */}
+        <AlertDialog open={showSuccessModal} onOpenChange={setShowSuccessModal}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>¡Registro Exitoso!</AlertDialogTitle>
+              <AlertDialogDescription>Receta registrada exitosamente.</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogAction onClick={() => router.push("/platillos")}>Aceptar</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
-      {/* Sección 1: Información básica del platillo */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Información Básica del Platillo</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="txtNombrePlatilloNuevo">Nombre Platillo</Label>
-              <Input
-                type="text"
-                id="txtNombrePlatilloNuevo"
-                name="txtNombrePlatilloNuevo"
-                maxLength={150}
-                value={nombrePlatillo}
-                onChange={(e) => setNombrePlatillo(e.target.value)}
-                disabled={inputsBloqueados}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="txtDescripcionPlatillo">Descripción</Label>
-              <Input
-                type="text"
-                id="txtDescripcionPlatillo"
-                name="txtDescripcionPlatillo"
-                maxLength={150}
-                value={descripcionPlatillo}
-                onChange={(e) => setDescripcionPlatillo(e.target.value)}
-                disabled={inputsBloqueados}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="txtPlatilloInstrucciones">Instrucciones de Elaboración</Label>
-              <Input
-                type="text"
-                id="txtPlatilloInstrucciones"
-                name="txtPlatilloInstrucciones"
-                maxLength={150}
-                value={instruccionesPlatillo}
-                onChange={(e) => setInstruccionesPlatillo(e.target.value)}
-                disabled={inputsBloqueados}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="txtPlatilloTiempo">Tiempo Preparación</Label>
-              <Input
-                type="text"
-                id="txtPlatilloTiempo"
-                name="txtPlatilloTiempo"
-                maxLength={150}
-                value={tiempoPlatillo}
-                onChange={(e) => setTiempoPlatillo(e.target.value)}
-                disabled={inputsBloqueados}
-              />
+        {/* Modal de duplicidad de sub-receta */}
+        <AlertDialog open={showDuplicateRecetaModal} onOpenChange={setShowDuplicateRecetaModal}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Error al agregar Sub-Receta</AlertDialogTitle>
+              <AlertDialogDescription>
+                No es posible agregar esta Sub-Receta, puesto que ya se encuentra agregada a la receta.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogAction onClick={() => setShowDuplicateRecetaModal(false)}>Aceptar</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Nuevo Modal de duplicidad de ingrediente */}
+        <AlertDialog open={showDuplicateIngredienteModal} onOpenChange={setShowDuplicateIngredienteModal}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Error al agregar Ingrediente</AlertDialogTitle>
+              <AlertDialogDescription>
+                No es posible agregar este ingrediente, puesto que ya se encuentra agregado a la receta.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogAction onClick={() => setShowDuplicateIngredienteModal(false)}>Aceptar</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Animación de cocinando */}
+        {showCookingAnimation && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <div className="flex flex-col items-center justify-center p-8 bg-white rounded-lg shadow-xl">
+              <div className="relative w-24 h-24 mb-4">
+                <Image
+                  src="https://nxtrsibnomdqmzcrwedc.supabase.co/storage/v1/object/public/imagenes//12817462.gif"
+                  alt="Cocinando"
+                  width={200}
+                  height={200}
+                  className="absolute inset-0 animate-bounce-slow" // Animación de rebote lento
+                />
+                {/*
+                <Loader2 className="absolute inset-0 m-auto h-12 w-12 animate-spin text-[#58e0be]" />{" "}
+                */}
+                {/* Icono giratorio */}
+              </div>
+              <p className="text-lg font-semibold text-gray-800">Cocinando tu receta...</p>
+              <p className="text-sm text-gray-600">Esto puede tomar unos segundos.</p>
             </div>
           </div>
-          <div className="flex justify-end">
-            <Button
-              type="button"
-              id="btnRegistrarPlatillo"
-              name="btnRegistrarPlatillo"
-              onClick={registrarPlatillo}
-              disabled={platilloRegistrado}
-              className="flex items-center gap-2"
-            >
-              <Save className="h-4 w-4" />
-              Registrar
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+        )}
 
-      {/* Sección 2: Registrar a un Menú (solo visible después de registrar platillo) */}
-      {platilloRegistrado && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Asignar a Menú</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="ddlHotel">Hotel</Label>
-                <Select value={hotelSeleccionado} onValueChange={setHotelSeleccionado}>
-                  <SelectTrigger id="ddlHotel" name="ddlHotel">
-                    <SelectValue placeholder="Seleccionar hotel" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {hoteles.map((hotel) => (
-                      <SelectItem key={hotel.id} value={hotel.id.toString()}>
-                        {hotel.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="ddlRestaurante">Restaurante</Label>
-                <Select value={restauranteSeleccionado} onValueChange={setRestauranteSeleccionado}>
-                  <SelectTrigger id="ddlRestaurante" name="ddlRestaurante">
-                    <SelectValue placeholder="Seleccionar restaurante" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {restaurantes.map((restaurante) => (
-                      <SelectItem key={restaurante.id} value={restaurante.id.toString()}>
-                        {restaurante.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="ddlMenu">Menú</Label>
-                <Select value={menuSeleccionado} onValueChange={setMenuSeleccionado}>
-                  <SelectTrigger id="ddlMenu" name="ddlMenu">
-                    <SelectValue placeholder="Seleccionar menú" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {menus.map((menu) => (
-                      <SelectItem key={menu.id} value={menu.id.toString()}>
-                        {menu.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Sección 3: Registrar ingredientes (solo visible después de registrar platillo) */}
-      {platilloRegistrado && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Ingredientes del Platillo</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="ddlIngredientes">Ingrediente</Label>
-                <Select value={ingredienteSeleccionado} onValueChange={setIngredienteSeleccionado}>
-                  <SelectTrigger id="ddlIngredientes" name="ddlIngredientes">
-                    <SelectValue placeholder="Seleccionar ingrediente" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ingredientes.map((ingrediente) => (
-                      <SelectItem key={ingrediente.id} value={ingrediente.id.toString()}>
-                        {ingrediente.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="txtCantidadIngrediente">Cantidad</Label>
-                <Input
-                  type="number"
-                  id="txtCantidadIngrediente"
-                  name="txtCantidadIngrediente"
-                  step="0.01"
-                  value={cantidadIngrediente}
-                  onChange={(e) => setCantidadIngrediente(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="txtCostoIngrediente">Costo</Label>
-                <Input
-                  type="text"
-                  id="txtCostoIngrediente"
-                  name="txtCostoIngrediente"
-                  value={costoIngrediente}
-                  disabled
-                />
-              </div>
-              <div className="flex items-end">
-                <Button
-                  type="button"
-                  id="btnAgregarIngrediente"
-                  name="btnAgregarIngrediente"
-                  onClick={agregarIngrediente}
-                  className="flex items-center gap-2"
-                >
-                  <Plus className="h-4 w-4" />
-                  Agregar ingrediente
-                </Button>
-              </div>
-            </div>
-
-            {/* Tabla de ingredientes agregados */}
-            {ingredientesAgregados.length > 0 && (
-              <div className="mt-6">
-                <h4 className="text-lg font-medium mb-3">Ingredientes Agregados</h4>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>ID</TableHead>
-                      <TableHead>Nombre</TableHead>
-                      <TableHead>Cantidad</TableHead>
-                      <TableHead>Costo Parcial</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {ingredientesAgregados.map((ingrediente) => (
-                      <TableRow key={ingrediente.id}>
-                        <TableCell>{ingrediente.id}</TableCell>
-                        <TableCell>{ingrediente.nombre}</TableCell>
-                        <TableCell>{ingrediente.cantidad}</TableCell>
-                        <TableCell>${ingrediente.ingredientecostoparcial.toFixed(2)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Sección 4: Botón de registro completo (solo visible después de registrar platillo) */}
-      {platilloRegistrado && (
-        <div className="flex justify-end">
-          <Button
-            type="button"
-            id="btnRegistroCompleto"
-            name="btnRegistroCompleto"
-            onClick={registroCompleto}
-            className="flex items-center gap-2"
-            size="lg"
-          >
-            <Save className="h-5 w-5" />
-            Registrar Platillo
-          </Button>
+        <div className="mb-6 flex items-center justify-between">
+          <h1 className="text-3xl font-bold">Registro de nueva receta</h1>
+          {/* El botón "Regresar" ahora simplemente llama a router.push,
+              la intercepción la manejará el NavigationGuardProvider */}
+          {/*<Button id="btnRegresar" name="btnRegresar" variant="outline" onClick={() => router.push("/platillos")}>
+            <ArrowLeft className="mr-2 h-4 w-4" /> Regresar
+          </Button>*/}
         </div>
-      )}
-    </div>
+
+        <div className="mb-8">
+          <Progress value={progressValue} className="h-2 [&>*]:bg-[#58e0be]" />
+          <div className="mt-2 grid grid-cols-5 text-center text-sm">
+            {" "}
+            {/* Ajustado a 5 columnas */}
+            <div className={etapa >= 1 ? "font-bold text-[#58e0be]" : "text-muted-foreground"}>Info. Básica</div>
+            <div className={etapa >= 2 ? "font-bold text-[#58e0be]" : "text-muted-foreground"}>Asignar Menú</div>
+            <div className={etapa >= 3 ? "font-bold text-[#58e0be]" : "text-muted-foreground"}>Contenido</div>
+            <div className={etapa >= 4 ? "font-bold text-[#58e0be]" : "text-muted-foreground"}>Resumen</div>
+            <div className={etapa >= 5 ? "font-bold text-[#58e0be]" : "text-muted-foreground"}>Finalizado</div>{" "}
+            {/* Nueva etapa */}
+          </div>
+        </div>
+
+        {/* --- ETAPA 1: INFORMACIÓN BÁSICA --- */}
+        {etapa === 1 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Etapa 1: Información Básica de la Receta</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="txtNombrePlatilloNuevo">Nombre Receta *</Label>
+                    <Input
+                      id="txtNombrePlatilloNuevo"
+                      name="txtNombrePlatilloNuevo"
+                      value={nombre}
+                      onChange={(e) => setNombre(e.target.value)}
+                      maxLength={150}
+                      disabled={platilloId !== null}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="txtDescripcionPlatillo">Descripción *</Label>
+                    <Textarea
+                      id="txtDescripcionPlatillo"
+                      name="txtDescripcionPlatillo"
+                      value={descripcion}
+                      onChange={(e) => setDescripcion(e.target.value)}
+                      maxLength={150}
+                      rows={4}
+                      disabled={platilloId !== null}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="txtPlatilloInstrucciones">Instrucciones de Elaboración</Label>
+                    <Textarea
+                      id="txtPlatilloInstrucciones"
+                      name="txtPlatilloInstrucciones"
+                      value={instrucciones}
+                      onChange={(e) => setInstrucciones(e.target.value)}
+                      rows={4}
+                      disabled={platilloId !== null}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="txtPlatilloTiempo">Tiempo Preparación (minutos)</Label>
+                    <Input
+                      id="txtPlatilloTiempo"
+                      name="txtPlatilloTiempo"
+                      type="number"
+                      value={tiempo}
+                      onChange={(e) => setTiempo(e.target.value)}
+                      disabled={platilloId !== null}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="ImagenFile">Cargar Imagen (Opcional: .jpg, &lt;10MB, 500x500px)</Label>
+                  <div className="flex h-64 w-full items-center justify-center rounded-md border-2 border-dashed">
+                    {imagenPreview ? (
+                      <img
+                        src={imagenPreview || "/placeholder.svg"}
+                        alt="Vista previa"
+                        className="h-full w-full object-contain"
+                      />
+                    ) : (
+                      <div className="text-center">
+                        <UploadCloud className="mx-auto h-12 w-12 text-gray-400" />
+                        <p>Arrastra o selecciona una imagen</p>
+                      </div>
+                    )}
+                  </div>
+                  <Input
+                    id="ImagenFile"
+                    name="ImagenFile"
+                    type="file"
+                    accept="image/jpeg"
+                    onChange={handleImageChange}
+                    className="mt-2"
+                    disabled={platilloId !== null}
+                  />
+                </div>
+              </div>
+            </CardContent>
+            <CardFooter className="justify-end">
+              <Button
+                id="btnRegistrarPlatillo"
+                name="btnRegistrarPlatillo"
+                onClick={handleRegistrarPlatillo}
+                disabled={isSubmitting || platilloId !== null}
+              >
+                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Registrar y Continuar
+              </Button>
+            </CardFooter>
+          </Card>
+        )}
+
+        {/* --- ETAPA 2: ASIGNAR A MENÚ --- */}
+        {etapa === 2 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Etapa 2: Asignar a un Menú</CardTitle>
+              <CardDescription>Es requerido asignar la receta a un Menú para su completo registro.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <div>
+                  <Label htmlFor="ddlHotel">Hotel</Label>
+                  <Select value={hotelId} onValueChange={setHotelId}>
+                    <SelectTrigger id="ddlHotel" name="ddlHotel">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {hoteles.map((h) => (
+                        <SelectItem key={h.id} value={h.id.toString()}>
+                          {h.nombre}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="ddlRestaurante">Restaurante</Label>
+                  <Select value={restauranteId} onValueChange={setRestauranteId} disabled={!hotelId}>
+                    <SelectTrigger id="ddlRestaurante" name="ddlRestaurante">
+                      <SelectValue placeholder="Seleccione..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {restaurantes.map((r) => (
+                        <SelectItem key={r.id} value={r.id.toString()}>
+                          {r.nombre}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="ddlMenu">Menú</Label>
+                  <Select value={menuId} onValueChange={setMenuId} disabled={!restauranteId}>
+                    <SelectTrigger id="ddlMenu" name="ddlMenu">
+                      <SelectValue placeholder="Seleccione..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {menus.map((m) => (
+                        <SelectItem key={m.id} value={m.id.toString()}>
+                          {m.nombre}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardContent>
+            <CardFooter className="flex justify-between">
+              {/*<Button variant="outline" onClick={() => setEtapa(1)}>
+                Anterior
+              </Button>*/}
+              <Button id="btnContinuar" name="btnContinuar" onClick={handleContinuarEtapa2} disabled={!menuId}>
+                Continuar
+              </Button>
+            </CardFooter>
+          </Card>
+        )}
+
+        {/* --- ETAPA 3: CONTENIDO --- */}
+        {etapa === 3 && (
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Agregar Ingredientes</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                  <div className="md:col-span-2">
+                    <Label htmlFor="ddlIngredientes">Ingrediente</Label>
+                    <Select value={selIngredienteId} onValueChange={setSelIngredienteId}>
+                      <SelectTrigger id="ddlIngredientes" name="ddlIngredientes">
+                        <SelectValue placeholder="Seleccione..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ingredientes.map((i) => (
+                          <SelectItem key={i.id} value={i.id.toString()}>
+                            {i.nombre}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="txtCantidadIngrediente">Cantidad</Label>
+                    <Input
+                      id="txtCantidadIngrediente"
+                      name="txtCantidadIngrediente"
+                      type="number"
+                      value={selIngredienteCantidad}
+                      onChange={(e) => setSelIngredienteCantidad(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="ddlUnidadMedida">Unidad</Label>
+                    <Select
+                      value={selIngredienteUnidad}
+                      onValueChange={setSelIngredienteUnidad}
+                      disabled={!selIngredienteId || unidades.length === 0} // Deshabilitar si no hay ingrediente o unidades
+                    >
+                      <SelectTrigger id="ddlUnidadMedida" name="ddlUnidadMedida">
+                        <SelectValue placeholder="Seleccione..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {unidades.map((u) => (
+                          <SelectItem key={u.id} value={u.id.toString()}>
+                            {u.descripcion}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="txtCostoIngrediente">Costo Ingrediente</Label>
+                  <Input id="txtCostoIngrediente" name="txtCostoIngrediente" value={selIngredienteCosto} disabled />
+                </div>
+                <div className="flex justify-end">
+                  <Button
+                    id="btnAgregarIngrediente"
+                    name="btnAgregarIngrediente"
+                    onClick={handleAgregarIngrediente}
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Agregar Ingrediente
+                  </Button>
+                </div>
+                {ingredientesAgregados.length > 0 && (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Nombre</TableHead>
+                        <TableHead>Cantidad</TableHead>
+                        <TableHead>Unidad</TableHead>
+                        <TableHead className="text-right">Costo Parcial</TableHead>
+                        <TableHead>Acciones</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {ingredientesAgregados.map((i) => (
+                        <TableRow key={i.id}>
+                          <TableCell>{i.nombre}</TableCell>
+                          <TableCell>{i.cantidad}</TableCell>
+                          <TableCell>{i.unidad}</TableCell>
+                          <TableCell className="text-right">${i.ingredientecostoparcial.toFixed(2)}</TableCell>
+                          <TableCell>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => handleEliminarIngrediente(i.id)}
+                              disabled={isSubmitting}
+                            >
+                              Eliminar
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Agregar Sub-Recetas</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div>
+                    <Label htmlFor="ddlReceta">Sub-Receta</Label>
+                    <Select value={selRecetaId} onValueChange={setSelRecetaId}>
+                      <SelectTrigger id="ddlReceta" name="ddlReceta">
+                        <SelectValue placeholder="Seleccione..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {recetas.map((r) => (
+                          <SelectItem key={r.id} value={r.id.toString()}>
+                            {r.nombre} {/* Revertido para mostrar el nombre de la receta */}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="txtCostoReceta">Costo Sub-Receta</Label>
+                    <Input id="txtCostoReceta" name="txtCostoReceta" value={selRecetaCosto} disabled />
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <Button
+                    id="btnAgregarReceta"
+                    name="btnAgregarReceta"
+                    onClick={handleAgregarReceta}
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Agregar Receta
+                  </Button>
+                </div>
+                {recetasAgregadas.length > 0 && (
+                  <Table className="mt-4">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Nombre</TableHead>
+                        <TableHead className="text-right">Costo Parcial</TableHead>
+                        <TableHead className="text-right">Acciones</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {recetasAgregadas.map((r) => (
+                        <TableRow key={r.id}>
+                          <TableCell>{r.nombre}</TableCell>
+                          <TableCell className="text-right">${r.recetacostoparcial.toFixed(2)}</TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => handleEliminarReceta(r.id)}
+                              disabled={isSubmitting}
+                            >
+                              Eliminar
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+
+            <div className="flex justify-between">
+              <Button variant="outline" onClick={() => setEtapa(2)}>
+                Anterior
+              </Button>
+              <Button
+                id="btnContinuarIngrediente"
+                name="btnContinuarIngrediente"
+                onClick={() => setEtapa(4)}
+                disabled={ingredientesAgregados.length === 0 && recetasAgregadas.length === 0} // Habilitar si hay ingredientes O recetas
+              >
+                Continuar
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* --- ETAPA 4: RESUMEN --- */}
+        {etapa === 4 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Etapa 4: Resumen y Confirmación</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <div>
+                  <h3 className="mb-2 font-semibold">Información de la Receta</h3>
+                  <div className="space-y-1 text-sm">
+                    <p>
+                      <strong>Nombre:</strong> {nombre}
+                    </p>
+                    <p>
+                      <strong>Descripción:</strong> {descripcion}
+                    </p>
+                    {instrucciones && (
+                      <p>
+                        <strong>Instrucciones:</strong> {instrucciones}
+                      </p>
+                    )}
+                    {tiempo && (
+                      <p>
+                        <strong>Tiempo:</strong> {tiempo} minutos
+                      </p>
+                    )}
+                    {imagenPreview && (
+                      <div className="mt-2">
+                        <strong>Imagen:</strong>
+                        <img
+                          src={imagenPreview || "/placeholder.svg"}
+                          alt="Vista previa"
+                          className="mt-1 h-24 w-24 object-cover rounded-md"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <h3 className="mb-2 font-semibold">Asignación</h3>
+                  <div className="space-y-1 text-sm">
+                    <p>
+                      <strong>Hotel:</strong> {hoteles.find((h) => h.id.toString() === hotelId)?.nombre}
+                    </p>
+                    <p>
+                      <strong>Restaurante:</strong>{" "}
+                      {restaurantes.find((r) => r.id.toString() === restauranteId)?.nombre}
+                    </p>
+                    <p>
+                      <strong>Menú:</strong> {menuNom}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <h3 className="mb-2 font-semibold">Contenido de la Receta</h3>
+                {ingredientesAgregados.length > 0 && (
+                  <>
+                    <h4 className="mb-1 font-medium">Ingredientes:</h4>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Nombre</TableHead>
+                          <TableHead>Cantidad</TableHead>
+                          <TableHead className="text-right">Costo Parcial</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {ingredientesAgregados.map((i) => (
+                          <TableRow key={i.id}>
+                            <TableCell>{i.nombre}</TableCell>
+                            <TableCell>{i.cantidad}</TableCell>
+                            <TableCell className="text-right">${i.ingredientecostoparcial.toFixed(2)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </>
+                )}
+                {recetasAgregadas.length > 0 && (
+                  <>
+                    <h4 className="mt-4 mb-1 font-medium">Sub-Recetas:</h4>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Nombre</TableHead>
+                          <TableHead className="text-right">Costo Parcial</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {recetasAgregadas.map((r) => (
+                          <TableRow key={r.id}>
+                            <TableCell>{r.nombre}</TableCell>
+                            <TableCell className="text-right">${r.recetacostoparcial.toFixed(2)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </>
+                )}
+                {ingredientesAgregados.length === 0 && recetasAgregadas.length === 0 && (
+                  <p className="text-muted-foreground">No se han agregado ingredientes ni sub-recetas.</p>
+                )}
+              </div>
+              {totalCostoPlatillo !== null && (
+                <div className="mt-6 text-right text-2xl font-bold">
+                  Costo Total de la Receta: ${totalCostoPlatillo.toFixed(2)}
+                </div>
+              )}
+            </CardContent>
+            <CardFooter className="flex justify-between">
+              <Button variant="outline" onClick={() => setEtapa(3)}>
+                Anterior
+              </Button>
+              <Button
+                id="btnRegistroCompleto"
+                name="btnRegistroCompleto"
+                onClick={handleRegistroCompleto}
+                disabled={isSubmitting}
+              >
+                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Registro Completo de Platillo
+              </Button>
+            </CardFooter>
+          </Card>
+        )}
+
+        {/* --- ETAPA 5: REGISTRO COMPLETADO --- */}
+        {etapa === 5 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>¡Registro Completado!</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 text-center">
+              <p className="text-lg font-semibold text-green-600">
+                El registro del platillo/receta se realizó correctamente y sin errores.
+              </p>
+              <p className="text-md text-gray-700">En {countdown} segundos serás dirigido a la página de platillos.</p>
+              <Button onClick={() => router.push("/platillos")}>Regresar a Platillos</Button>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    </Suspense>
   )
 }

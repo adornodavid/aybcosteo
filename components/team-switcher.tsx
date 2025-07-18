@@ -1,76 +1,206 @@
 "use client"
 
 import * as React from "react"
-import { ChevronsUpDown, Plus } from "lucide-react"
+import { Check, ChevronsUpDown, PlusCircle } from "lucide-react"
 
+import { cn } from "@/lib/utils"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Button } from "@/components/ui/button"
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuShortcut,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar"
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from "@/components/ui/command"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
+import { useAuth } from "@/contexts/auth-context"
+import { Loader2 } from "./ui/loader2"
+import { useToast } from "@/components/ui/use-toast"
+import { createClient } from "@/lib/supabase"
+import type { Hotel } from "@/lib/types-sistema-costeo"
 
-export function TeamSwitcher({
-  teams,
-}: {
-  teams: {
-    name: string
-    logo: React.ElementType
-    plan: string
-  }[]
-}) {
-  const { isMobile } = useSidebar()
-  const [activeTeam, setActiveTeam] = React.useState(teams[0])
+interface TeamSwitcherProps {
+  hotels: Hotel[]
+  selectedHotel: Hotel | null
+  onSelectHotel: (hotel: Hotel) => void
+}
+
+export function TeamSwitcher({ hotels, selectedHotel, onSelectHotel }: TeamSwitcherProps) {
+  const [open, setOpen] = React.useState(false)
+  const [showNewTeamDialog, setShowNewTeamDialog] = React.useState(false)
+  const [newHotelName, setNewHotelName] = React.useState("")
+  const [isCreatingHotel, setIsCreatingHotel] = React.useState(false)
+  const { refreshSession } = useAuth()
+  const { toast } = useToast()
+
+  const supabase = createClient() // Client-side Supabase client
+
+  const handleCreateHotel = async () => {
+    if (!newHotelName.trim()) {
+      toast({
+        title: "Error",
+        description: "El nombre del hotel no puede estar vacío.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsCreatingHotel(true)
+    try {
+      const { data, error } = await supabase.from("hoteles").insert({ nombre: newHotelName }).select().single()
+
+      if (error) {
+        throw error
+      }
+
+      toast({
+        title: "Éxito",
+        description: `Hotel "${data.nombre}" creado exitosamente.`,
+      })
+      setNewHotelName("")
+      setShowNewTeamDialog(false)
+      setOpen(false)
+      await refreshSession() // Refresh session to get updated hotel list
+    } catch (error: any) {
+      console.error("Error creating hotel:", error)
+      toast({
+        title: "Error",
+        description: `No se pudo crear el hotel: ${error.message}`,
+        variant: "destructive",
+      })
+    } finally {
+      setIsCreatingHotel(false)
+    }
+  }
 
   return (
-    <SidebarMenu>
-      <SidebarMenuItem>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <SidebarMenuButton
-              size="lg"
-              className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
-            >
-              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                <activeTeam.logo className="size-4" />
-              </div>
-              <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-semibold">{activeTeam.name}</span>
-                <span className="truncate text-xs">{activeTeam.plan}</span>
-              </div>
-              <ChevronsUpDown className="ml-auto" />
-            </SidebarMenuButton>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            className="w-[--radix-dropdown-menu-trigger-width] min-w-56 rounded-lg"
-            align="start"
-            side={isMobile ? "bottom" : "right"}
-            sideOffset={4}
+    <Dialog open={showNewTeamDialog} onOpenChange={setShowNewTeamDialog}>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            role="combobox"
+            aria-expanded={open}
+            aria-label="Seleccionar hotel"
+            className={cn("w-[200px] justify-between", !selectedHotel && "text-muted-foreground")}
           >
-            <DropdownMenuLabel className="text-xs text-muted-foreground">Teams</DropdownMenuLabel>
-            {teams.map((team, index) => (
-              <DropdownMenuItem key={team.name} onClick={() => setActiveTeam(team)} className="gap-2 p-2">
-                <div className="flex size-6 items-center justify-center rounded-sm border">
-                  <team.logo className="size-4 shrink-0" />
-                </div>
-                {team.name}
-                <DropdownMenuShortcut>⌘{index + 1}</DropdownMenuShortcut>
-              </DropdownMenuItem>
-            ))}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem className="gap-2 p-2">
-              <div className="flex size-6 items-center justify-center rounded-md border bg-background">
-                <Plus className="size-4" />
-              </div>
-              <div className="font-medium text-muted-foreground">Add team</div>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </SidebarMenuItem>
-    </SidebarMenu>
+            {selectedHotel ? (
+              <>
+                <Avatar className="mr-2 h-5 w-5">
+                  <AvatarImage
+                    src={`https://avatar.vercel.sh/${selectedHotel.id}.png`}
+                    alt={selectedHotel.nombre}
+                    className="grayscale"
+                  />
+                  <AvatarFallback>{selectedHotel.nombre.charAt(0)}</AvatarFallback>
+                </Avatar>
+                {selectedHotel.nombre}
+              </>
+            ) : (
+              "Seleccionar hotel..."
+            )}
+            <ChevronsUpDown className="ml-auto h-4 w-4 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[200px] p-0">
+          <Command>
+            <CommandList>
+              <CommandInput placeholder="Buscar hotel..." />
+              <CommandEmpty>No se encontraron hoteles.</CommandEmpty>
+              <CommandGroup heading="Hoteles">
+                {hotels.map((hotel) => (
+                  <CommandItem
+                    key={hotel.id}
+                    onSelect={() => {
+                      onSelectHotel(hotel)
+                      setOpen(false)
+                    }}
+                    className="text-sm"
+                  >
+                    <Avatar className="mr-2 h-5 w-5">
+                      <AvatarImage
+                        src={`https://avatar.vercel.sh/${hotel.id}.png`}
+                        alt={hotel.nombre}
+                        className="grayscale"
+                      />
+                      <AvatarFallback>{hotel.nombre.charAt(0)}</AvatarFallback>
+                    </Avatar>
+                    {hotel.nombre}
+                    <Check
+                      className={cn("ml-auto h-4 w-4", selectedHotel?.id === hotel.id ? "opacity-100" : "opacity-0")}
+                    />
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+            <CommandSeparator />
+            <CommandList>
+              <CommandGroup>
+                <DialogTrigger asChild>
+                  <CommandItem
+                    onSelect={() => {
+                      setOpen(false)
+                      setShowNewTeamDialog(true)
+                    }}
+                  >
+                    <PlusCircle className="mr-2 h-5 w-5" />
+                    Crear nuevo hotel
+                  </CommandItem>
+                </DialogTrigger>
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Crear hotel</DialogTitle>
+          <DialogDescription>Añade un nuevo hotel a tu cuenta.</DialogDescription>
+        </DialogHeader>
+        <div>
+          <div className="space-y-4 py-2 pb-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Nombre del hotel</Label>
+              <Input
+                id="name"
+                placeholder="Hotel Ejemplo"
+                value={newHotelName}
+                onChange={(e) => setNewHotelName(e.target.value)}
+                disabled={isCreatingHotel}
+              />
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setShowNewTeamDialog(false)} disabled={isCreatingHotel}>
+            Cancelar
+          </Button>
+          <Button type="submit" onClick={handleCreateHotel} disabled={isCreatingHotel}>
+            {isCreatingHotel ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Creando...
+              </>
+            ) : (
+              "Crear"
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

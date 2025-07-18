@@ -110,7 +110,7 @@ const data = {
       ],
     },
     {
-      title: "Reporte y Análisis",
+      title: "Reporte y An��lisis",
       url: "#",
       icon: BarChart3,
       items: [
@@ -154,7 +154,7 @@ const data = {
           icon: User,
         },
         {
-          title: "Cerrar Sesión",
+          title: "Cerrar Sesiónp",
           url: "/cerrar-sesion",
           icon: LogOut,
         },

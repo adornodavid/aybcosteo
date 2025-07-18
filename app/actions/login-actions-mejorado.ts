@@ -1,148 +1,109 @@
-"use server"
-
-import { supabase } from "@/lib/supabase"
+import { createServerComponentClient } from "@supabase/auth-helpers-nextjs"
 import { cookies } from "next/headers"
+import { type SessionData, setSessionCookies, clearSession } from "./session-actions"
+import type { Database } from "@/lib/types-sistema-costeo"
 
-export interface LoginResult {
-  success: boolean
-  message: string
-  userData?: any
-}
+export async function obtenerVariablesSesion(): Promise<SessionData> {
+  const supabase = createServerComponentClient<Database>({ cookies })
 
-export async function procesarInicioSesionMejorado(email: string, password: string): Promise<LoginResult> {
   try {
-    console.log("Iniciando proceso de login para:", email)
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
 
-    // 1. Validar credenciales del usuario
-    const { data: usuarios, error: errorValidacion } = await supabase
-      .from("usuarios")
-      .select("*")
-      .eq("email", email)
-      .eq("password", password)
-      .eq("activo", true)
-
-    if (errorValidacion) {
-      console.error("Error en validación:", errorValidacion)
-      return {
-        success: false,
-        message: "Error de conexión con la base de datos",
-      }
+    if (sessionError) {
+      console.error("Error obteniendo sesión de Supabase:", sessionError.message)
+      return { SesionActiva: "false", RolId: "0", HotelId: "0", UsuarioId: "0" }
     }
 
-    // Si no hay resultados, credenciales incorrectas
-    if (!usuarios || usuarios.length === 0) {
-      return {
-        success: false,
-        message: "El correo o el password está incorrecto, favor de verificar.",
-      }
+    if (!sessionData?.session) {
+      console.log("No hay sesión activa.")
+      return { SesionActiva: "false", RolId: "0", HotelId: "0", UsuarioId: "0" }
     }
 
-    // 2. Obtener datos completos del usuario
-    const { data: datosCompletos, error: errorDatos } = await supabase
+    const user = sessionData.session.user
+    const usuarioId = user.id
+
+    // Obtener rol_id y hotel_id del perfil del usuario
+    const { data: profileData, error: profileError } = await supabase
       .from("usuarios")
-      .select("id, email, nombrecompleto, hotelid, rolid")
-      .eq("email", email)
+      .select("rol_id, usuario_hoteles(hotel_id)")
+      .eq("id", usuarioId)
       .single()
 
-    if (errorDatos || !datosCompletos) {
-      console.error("Error obteniendo datos completos:", errorDatos)
-      return {
-        success: false,
-        message: "Error obteniendo datos del usuario",
+    if (profileError) {
+      console.error("Error obteniendo perfil del usuario:", profileError.message)
+      return { SesionActiva: "false", RolId: "0", HotelId: "0", UsuarioId: "0" }
+    }
+
+    const rolId = profileData?.rol_id?.toString() || "0"
+    const hotelId = profileData?.usuario_hoteles?.[0]?.hotel_id?.toString() || "0"
+
+    return {
+      SesionActiva: "true",
+      RolId: rolId,
+      HotelId: hotelId,
+      UsuarioId: usuarioId,
+    }
+  } catch (error: any) {
+    console.error("Error inesperado en obtenerVariablesSesion:", error.message)
+    return { SesionActiva: "false", RolId: "0", HotelId: "0", UsuarioId: "0" }
+  }
+}
+
+export async function procesarInicioSesion(formData: FormData) {
+  const email = formData.get("email") as string
+  const password = formData.get("password") as string
+  const supabase = createServerComponentClient<Database>({ cookies })
+
+  try {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+
+    if (error) {
+      console.error("Error de inicio de sesión:", error.message)
+      return { success: false, message: error.message }
+    }
+
+    if (data.user) {
+      // Obtener rol_id y hotel_id del perfil del usuario
+      const { data: profileData, error: profileError } = await supabase
+        .from("usuarios")
+        .select("rol_id, usuario_hoteles(hotel_id)")
+        .eq("id", data.user.id)
+        .single()
+
+      if (profileError) {
+        console.error("Error obteniendo perfil del usuario después del login:", profileError.message)
+        return { success: false, message: "Error al obtener información del usuario." }
       }
+
+      const sessionData: SessionData = {
+        SesionActiva: "true",
+        RolId: profileData?.rol_id?.toString() || "0",
+        HotelId: profileData?.usuario_hoteles?.[0]?.hotel_id?.toString() || "0",
+        UsuarioId: data.user.id,
+      }
+
+      await setSessionCookies(sessionData)
+      return { success: true, message: "Inicio de sesión exitoso." }
+    } else {
+      return { success: false, message: "Credenciales inválidas." }
     }
+  } catch (e: any) {
+    console.error("Excepción en procesarInicioSesion:", e)
+    return { success: false, message: e.message || "Error desconocido al iniciar sesión." }
+  }
+}
 
-    // 3. Obtener permisos del rol
-    const { data: permisos, error: errorPermisos } = await supabase
-      .from("permisosxrol")
-      .select("permisoid")
-      .eq("rolid", datosCompletos.rolid)
-      .eq("activo", true)
-
-    if (errorPermisos) {
-      console.error("Error obteniendo permisos:", errorPermisos)
-    }
-
-    // 4. Crear variables de sesión usando cookies
-    const cookieStore = cookies()
-
-    // Configurar cookies de sesión
-    cookieStore.set("UsuarioId", datosCompletos.id.toString(), {
-      httpOnly: false, // Permitir acceso desde JavaScript para debugging
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 7, // 7 días
-      path: "/",
-    })
-
-    cookieStore.set("Email", datosCompletos.email || "", {
-      httpOnly: false,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 7,
-      path: "/",
-    })
-
-    cookieStore.set("NombreCompleto", datosCompletos.nombrecompleto || "", {
-      httpOnly: false,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 7,
-      path: "/",
-    })
-
-    cookieStore.set("HotelId", datosCompletos.hotelid?.toString() || "", {
-      httpOnly: false,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 7,
-      path: "/",
-    })
-
-    cookieStore.set("RolId", datosCompletos.rolid?.toString() || "", {
-      httpOnly: false,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 7,
-      path: "/",
-    })
-
-    cookieStore.set("Permisos", JSON.stringify(permisos?.map((p) => p.permisoid) || []), {
-      httpOnly: false,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 7,
-      path: "/",
-    })
-
-    cookieStore.set("SesionActiva", "true", {
-      httpOnly: false,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 7,
-      path: "/",
-    })
-
-    console.log("Variables de sesión creadas exitosamente en cookies")
-
-    return {
-      success: true,
-      message: "Validación correcta en un momento serás dirigido a la página inicial de la aplicación.",
-      userData: {
-        UsuarioId: datosCompletos.id,
-        Email: datosCompletos.email,
-        NombreCompleto: datosCompletos.nombrecompleto,
-        HotelId: datosCompletos.hotelid,
-        RolId: datosCompletos.rolid,
-        Permisos: permisos?.map((p) => p.permisoid) || [],
-        SesionActiva: true,
-      },
-    }
-  } catch (error) {
-    console.error("Error en procesarInicioSesionMejorado:", error)
-    return {
-      success: false,
-      message: "Error interno del servidor",
-    }
+export async function logout() {
+  const supabase = createServerComponentClient<Database>({ cookies })
+  try {
+    await supabase.auth.signOut()
+    await clearSession()
+    return { success: true, message: "Sesión cerrada correctamente." }
+  } catch (error: any) {
+    console.error("Error al cerrar sesión:", error.message)
+    return { success: false, message: "Error al cerrar sesión." }
   }
 }

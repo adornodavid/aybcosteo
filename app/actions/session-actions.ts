@@ -3,68 +3,87 @@
 import { cookies } from "next/headers"
 
 export interface SessionData {
-  UsuarioId: string | null
-  Email: string | null
-  NombreCompleto: string | null
-  HotelId: string | null
-  RolId: string | null
-  Permisos: string[] | null
-  SesionActiva: string | null
+  UsuarioId: number
+  Email: string
+  NombreCompleto: string
+  HotelId: number
+  RolId: number
+  Permisos: string
+  SesionActiva: boolean
 }
 
-export async function obtenerVariablesSesion(): Promise<SessionData> {
+export async function getSession(): Promise<SessionData | null> {
   try {
     const cookieStore = cookies()
 
-    // Obtener todas las variables de sesión de las cookies
-    const UsuarioId = cookieStore.get("UsuarioId")?.value || null
-    const Email = cookieStore.get("Email")?.value || null
-    const NombreCompleto = cookieStore.get("NombreCompleto")?.value || null
-    const HotelId = cookieStore.get("HotelId")?.value || null
-    const RolId = cookieStore.get("RolId")?.value || null
-    const PermisosRaw = cookieStore.get("Permisos")?.value || null
-    const SesionActiva = cookieStore.get("SesionActiva")?.value || null
+    const usuarioId = cookieStore.get("UsuarioId")?.value
+    const email = cookieStore.get("Email")?.value
+    const nombreCompleto = cookieStore.get("NombreCompleto")?.value
+    const hotelId = cookieStore.get("HotelId")?.value
+    const rolId = cookieStore.get("RolId")?.value
+    const permisos = cookieStore.get("Permisos")?.value
+    const sesionActiva = cookieStore.get("SesionActiva")?.value
 
-    // Parsear permisos si existen
-    let Permisos: string[] | null = null
-    if (PermisosRaw) {
-      try {
-        Permisos = JSON.parse(PermisosRaw)
-      } catch (error) {
-        console.error("Error parsing permisos:", error)
-        Permisos = []
-      }
+    if (!usuarioId || !email || sesionActiva !== "true") {
+      return null
     }
 
-    console.log("Variables de sesión obtenidas:", {
-      UsuarioId,
-      Email,
-      NombreCompleto,
-      HotelId,
-      RolId,
-      Permisos,
-      SesionActiva,
-    })
-
     return {
-      UsuarioId,
-      Email,
-      NombreCompleto,
-      HotelId,
-      RolId,
-      Permisos,
-      SesionActiva,
+      UsuarioId: Number.parseInt(usuarioId),
+      Email: email,
+      NombreCompleto: nombreCompleto || "",
+      HotelId: Number.parseInt(hotelId || "0"),
+      RolId: Number.parseInt(rolId || "0"),
+      Permisos: permisos || "",
+      SesionActiva: sesionActiva === "true",
     }
   } catch (error) {
-    console.error("Error obteniendo variables de sesión:", error)
-    return {
-      UsuarioId: null,
-      Email: null,
-      NombreCompleto: null,
-      HotelId: null,
-      RolId: null,
-      Permisos: null,
-      SesionActiva: null,
-    }
+    console.error("Error getting session:", error)
+    return null
   }
+}
+
+export async function getUserSessionData(): Promise<SessionData | null> {
+  return await getSession()
+}
+
+export async function getSessionCookies(): Promise<SessionData | null> {
+  return await getSession()
+}
+
+export async function clearSession(): Promise<void> {
+  const cookieStore = cookies()
+
+  cookieStore.delete("UsuarioId")
+  cookieStore.delete("Email")
+  cookieStore.delete("NombreCompleto")
+  cookieStore.delete("HotelId")
+  cookieStore.delete("RolId")
+  cookieStore.delete("Permisos")
+  cookieStore.delete("SesionActiva")
+}
+
+export async function validateSession(): Promise<boolean> {
+  const session = await getSession()
+  return session !== null && session.SesionActiva === true
+}
+
+export async function setSessionCookies(sessionData: SessionData): Promise<void> {
+  const cookieStore = cookies()
+
+  // Configurar cookies con duración de 20 días
+  const cookieOptions = {
+    maxAge: 20 * 24 * 60 * 60, // 20 días en segundos
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+  }
+
+  cookieStore.set("UsuarioId", sessionData.UsuarioId.toString(), cookieOptions)
+  cookieStore.set("Email", sessionData.Email, cookieOptions)
+  cookieStore.set("NombreCompleto", sessionData.NombreCompleto, cookieOptions)
+  cookieStore.set("HotelId", sessionData.HotelId.toString(), cookieOptions)
+  cookieStore.set("RolId", sessionData.RolId.toString(), cookieOptions)
+  cookieStore.set("Permisos", sessionData.Permisos, cookieOptions)
+  cookieStore.set("SesionActiva", sessionData.SesionActiva.toString(), cookieOptions)
 }

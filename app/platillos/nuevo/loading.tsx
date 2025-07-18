@@ -1,15 +1,10 @@
+import { Loader2 } from "lucide-react"
+
 export default function Loading() {
   return (
-    <div className="container py-6 space-y-6">
-      <div className="animate-pulse">
-        <div className="h-8 bg-gray-200 rounded w-1/4 mb-2"></div>
-        <div className="h-4 bg-gray-200 rounded w-1/3"></div>
-      </div>
-      <div className="animate-pulse space-y-4">
-        <div className="h-10 bg-gray-200 rounded"></div>
-        <div className="h-32 bg-gray-200 rounded"></div>
-        <div className="h-10 bg-gray-200 rounded"></div>
-      </div>
+    <div className="flex items-center justify-center min-h-screen">
+      <Loader2 className="h-10 w-10 animate-spin text-primary" />
+      <span className="ml-2 text-lg text-muted-foreground">Cargando formulario de nuevo platillo...</span>
     </div>
   )
 }

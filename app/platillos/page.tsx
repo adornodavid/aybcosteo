@@ -1,45 +1,46 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import type React from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import { useAuth } from "@/contexts/auth-context"
+import { supabase } from "@/lib/supabase"
+import { toast } from "sonner"
+import Image from "next/image" // Importar Image de next/image
+
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
-  ChefHat,
-  Search,
-  RotateCcw,
-  Clock,
-  DollarSign,
-  TrendingUp,
-  Hash,
-  Eye,
-  Edit,
-  Power,
-  PowerOff,
-  UtensilsCrossed,
-} from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
-import { obtenerVariablesSesion } from "@/app/actions/session-actions"
-import { supabase } from "@/lib/supabase"
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog" // Importar componentes de Dialog
+import * as DialogPrimitive from "@radix-ui/react-dialog" // Importar DialogPrimitive directamente
+import { Eraser, Search, Eye, Edit, ToggleLeft, ToggleRight, Loader2, PlusCircle, Trash2 } from "lucide-react"
+import { getPlatilloDetailsForModal } from "@/app/actions/platillo-details-actions" // Importar la nueva acción
 
-interface Hotel {
-  HotelId: number
-  HotelNombre: string
-}
-
-interface Restaurante {
-  RestauranteId: number
-  RestauranteNombre: string
-}
-
-interface Menu {
-  MenuId: number
-  MenuNombre: string
+// --- Interfaces ---
+interface DropdownItem {
+  id: number
+  nombre: string
 }
 
 interface PlatilloListado {
@@ -49,6 +50,7 @@ interface PlatilloListado {
   PlatilloTiempo: string
   PlatilloCosto: number
   PlatilloActivo: boolean
+  PlatilloImagenUrl: string | null // Añadido para la URL de la imagen
   HotelId: number
   HotelNombre: string
   RestauranteId: number
@@ -64,1021 +66,768 @@ interface EstadisticasPlatillos {
   tiempoPromedio: string
 }
 
+// Nueva interfaz para los detalles del platillo en el modal
+interface PlatilloDetail {
+  id: number
+  Hotel: string
+  Restaurante: string
+  Menu: string
+  Platillo: string
+  descripcion: string
+  instruccionespreparacion: string | null
+  tiempopreparacion: string | null
+  imgurl: string | null
+  CostoElaboracion: number
+  precioventa: number | null
+  margenutilidad: number | null
+}
+
+// --- Componente Principal ---
 export default function PlatillosPage() {
   const router = useRouter()
-  const { toast } = useToast()
+  const { user, isLoading: authLoading } = useAuth()
 
-  // Estados
-  const [loading, setLoading] = useState(true)
-  const [sessionData, setSessionData] = useState<any>(null)
-  const [platillos, setPlatillos] = useState<PlatilloListado[]>([])
-  const [hoteles, setHoteles] = useState<Hotel[]>([])
-  const [restaurantes, setRestaurantes] = useState<Restaurante[]>([])
-  const [menus, setMenus] = useState<Menu[]>([])
+  // --- Estados ---
+  const [platillos, setPlatillos] = useState<PlatilloListado[]>([]) // Usar PlatilloListado
   const [estadisticas, setEstadisticas] = useState<EstadisticasPlatillos>({
     totalPlatillos: 0,
     costoPromedio: 0,
     costoTotal: 0,
-    tiempoPromedio: "0 min",
+    tiempoPromedio: "N/A",
   })
+  const [hoteles, setHoteles] = useState<DropdownItem[]>([])
+  const [restaurantes, setRestaurantes] = useState<DropdownItem[]>([])
+  const [menus, setMenus] = useState<DropdownItem[]>([])
+  const [pageLoading, setPageLoading] = useState(true)
+  const [isSearching, setIsSearching] = useState(false)
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false)
+  const [platilloToToggle, setPlatilloToToggle] = useState<{ id: number; activo: boolean } | null>(null)
+  const [searchTerm, setSearchTerm] = useState("") // Mantener searchTerm para el filtro de nombre
+  const [platilloToDelete, setPlatilloToDelete] = useState<number | null>(null)
 
-  // Estados de filtros
+  // Estados para el modal de detalles
+  const [showPlatilloDetailsModal, setShowPlatilloDetailsModal] = useState(false)
+  const [selectedPlatilloDetails, setSelectedPlatilloDetails] = useState<PlatilloDetail[] | null>(null)
+  const [isDetailsLoading, setIsDetailsLoading] = useState(false)
+
+  // Filtros
   const [filtroNombre, setFiltroNombre] = useState("")
-  const [filtroHotel, setFiltroHotel] = useState("")
-  const [filtroRestaurante, setFiltroRestaurante] = useState("")
-  const [filtroMenu, setFiltroMenu] = useState("")
-
-  // Variable auxiliar
-  const [auxHotelid, setAuxHotelid] = useState<number>(-1)
+  const [filtroHotel, setFiltroHotel] = useState("-1")
+  const [filtroRestaurante, setFiltroRestaurante] = useState("-1")
+  const [filtroMenu, setFiltroMenu] = useState("-1")
 
   // Paginación
   const [paginaActual, setPaginaActual] = useState(1)
   const resultadosPorPagina = 20
 
-  useEffect(() => {
-    validarSesionYCargarDatos()
-  }, [])
+  const esAdmin = useMemo(() => user && [1, 2, 3, 4].includes(user.RolId), [user])
 
-  const validarSesionYCargarDatos = async () => {
+  // --- Función de búsqueda SIN dependencias automáticas ---
+  const ejecutarBusqueda = async (nombre: string, hotelId: number, restauranteId: number, menuId: number) => {
+    if (!user) return
+    setIsSearching(true)
+    setPaginaActual(1)
+
     try {
-      const session = await obtenerVariablesSesion()
-
-      // Validación de seguridad
-      if (!session.SesionActiva || session.SesionActiva !== "true") {
-        router.push("/login")
-        return
-      }
-
-      if (!session.RolId || session.RolId === "0" || session.RolId === "") {
-        router.push("/login")
-        return
-      }
-
-      setSessionData(session)
-
-      // Configurar variable auxiliar auxHotelid
-      let auxHotelidValue: number
-      if (!["1", "2", "3", "4"].includes(session.RolId)) {
-        auxHotelidValue = Number.parseInt(session.HotelId || "0")
-      } else {
-        auxHotelidValue = -1
-      }
-      setAuxHotelid(auxHotelidValue)
-
-      await cargarHoteles(session.RolId, session.HotelId)
-      await cargarPlatillosListado(auxHotelidValue)
-      await cargarEstadisticas()
-    } catch (error) {
-      console.error("Error validando sesión:", error)
-      router.push("/login")
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const cargarPlatillosListado = async (auxHotelidValue: number) => {
-    try {
-      // Usar consultas nativas de Supabase para simular el JOIN complejo
-      let query = supabase
-        .from("platillos")
-        .select(`
-          id,
-          nombre,
-          descripcion,
-          tiempopreparacion,
-          costototal,
-          activo,
+      // Usar consulta directa con JOINs
+      let query = supabase.from("platillos").select(`
+          id, nombre, descripcion, tiempopreparacion, costototal, activo, imgurl,
           platillosxmenu!inner(
-            menuid,
             menus!inner(
-              id,
-              nombre,
-              restauranteid,
+              id, nombre,
               restaurantes!inner(
-                id,
-                nombre,
-                hotelid,
-                hoteles!inner(
-                  id,
-                  nombre
-                )
+                id, nombre,
+                hoteles!inner(id, nombre)
               )
             )
           )
         `)
-        .eq("activo", true)
 
-      // Aplicar filtro de hotel si no es administrador
-      if (auxHotelidValue !== -1) {
-        query = query.eq("platillosxmenu.menus.restaurantes.hotelid", auxHotelidValue)
-      }
+      if (nombre) query = query.like("nombre", `%${nombre}%`)
+      if (hotelId !== -1) query = query.eq("platillosxmenu.menus.restaurantes.hoteles.id", hotelId)
+      if (restauranteId !== -1) query = query.eq("platillosxmenu.menus.restaurantes.id", restauranteId)
+      if (menuId !== -1) query = query.eq("platillosxmenu.menus.id", menuId)
 
-      const { data, error } = await query.order("nombre", { ascending: true })
+      const { data: queryData, error: queryError } = await query.order("nombre", { ascending: true })
 
-      if (error) {
-        console.error("Error cargando platillos listado:", error)
-        // Fallback: cargar platillos básicos si falla la consulta compleja
-        await cargarPlatillosBasicos()
+      if (queryError) {
+        console.error("Error en búsqueda:", queryError)
+        toast.error("Error al buscar recetas.")
+        setPlatillos([])
         return
       }
 
-      // Transformar los datos al formato esperado
-      const platillosTransformados: PlatilloListado[] = []
-
-      data?.forEach((platillo: any) => {
-        platillo.platillosxmenu?.forEach((relacion: any) => {
-          const menu = relacion.menus
-          const restaurante = menu?.restaurantes
-          const hotel = restaurante?.hoteles
-
-          platillosTransformados.push({
-            PlatilloId: platillo.id,
-            PlatilloNombre: platillo.nombre,
-            PlatilloDescripcion: platillo.descripcion,
-            PlatilloTiempo: platillo.tiempopreparacion,
-            PlatilloCosto: platillo.costototal,
-            PlatilloActivo: platillo.activo,
-            HotelId: hotel?.id || 0,
-            HotelNombre: hotel?.nombre || "N/A",
-            RestauranteId: restaurante?.id || 0,
-            RestauranteNombre: restaurante?.nombre || "N/A",
-            MenuId: menu?.id || 0,
-            MenuNombre: menu?.nombre || "N/A",
-          })
-        })
-      })
-
-      setPlatillos(platillosTransformados)
+      // Transformar datos de la consulta
+      const flattenedData = queryData.flatMap((p: any) =>
+        p.platillosxmenu.map((x: any) => ({
+          PlatilloId: p.id,
+          PlatilloNombre: p.nombre,
+          PlatilloDescripcion: p.descripcion,
+          PlatilloTiempo: p.tiempopreparacion,
+          PlatilloCosto: p.costototal,
+          PlatilloActivo: p.activo,
+          PlatilloImagenUrl: p.imgurl, // Mapear la URL de la imagen
+          HotelId: x.menus.restaurantes.hoteles.id,
+          HotelNombre: x.menus.restaurantes.hoteles.nombre,
+          RestauranteId: x.menus.restaurantes.id,
+          RestauranteNombre: x.menus.restaurantes.nombre,
+          MenuId: x.menus.id,
+          MenuNombre: x.menus.nombre,
+        })),
+      )
+      setPlatillos(flattenedData)
+      toast.success(`Búsqueda completada. Se encontraron ${flattenedData.length} resultados.`)
     } catch (error) {
-      console.error("Error ejecutando consulta de platillos:", error)
-      // Fallback: cargar platillos básicos
-      await cargarPlatillosBasicos()
+      console.error("Error inesperado al buscar recetas:", error)
+      toast.error("Error inesperado al buscar recetas")
+      setPlatillos([])
+    } finally {
+      setIsSearching(false)
     }
   }
 
-  const cargarPlatillosBasicos = async () => {
+  // --- Carga inicial de datos ---
+  const cargarDatosIniciales = async () => {
+    if (!user) return
+
     try {
-      const { data, error } = await supabase
-        .from("platillos")
-        .select("id, nombre, descripcion, tiempopreparacion, costototal, activo")
+      // Cargar estadísticas
+      const {
+        data: statsData,
+        error: statsError,
+        count,
+      } = await supabase.from("platillos").select("costototal, tiempopreparacion", { count: "exact" })
+
+      if (!statsError && statsData && statsData.length > 0) {
+        const costoTotal = statsData.reduce((sum, p) => sum + (p.costototal || 0), 0)
+        const costoPromedio = count ? costoTotal / count : 0
+        setEstadisticas({
+          totalPlatillos: count || 0,
+          costoPromedio,
+          costoTotal,
+          tiempoPromedio: "25 min",
+        })
+      }
+
+      // Cargar hoteles
+      if (esAdmin) {
+        const { data: hotelesData, error: hotelesError } = await supabase
+          .from("hoteles")
+          .select("id, nombre")
+          .order("nombre")
+
+        if (!hotelesError) {
+          const hotelesConTodos = [
+            { id: -1, nombre: "Todos" },
+            ...(hotelesData || []).map((h: any) => ({ id: h.id, nombre: h.nombre })),
+          ]
+          setHoteles(hotelesConTodos)
+          setFiltroHotel("-1")
+        }
+      } else {
+        const { data: hotelData, error: hotelError } = await supabase
+          .from("hoteles")
+          .select("id, nombre")
+          .eq("id", user.HotelId)
+          .order("nombre")
+
+        if (!hotelError) {
+          const hotelesData = (hotelData || []).map((h: any) => ({ id: h.id, nombre: h.nombre }))
+          setHoteles(hotelesData)
+          if (hotelesData.length > 0) {
+            setFiltroHotel(hotelesData[0].id.toString())
+          }
+        }
+      }
+
+      // Cargar restaurantes iniciales
+      const initialHotelId = esAdmin ? -1 : user.HotelId
+      let restaurantesQuery = supabase.from("restaurantes").select("id, nombre").order("nombre")
+
+      if (!esAdmin) {
+        restaurantesQuery = restaurantesQuery.eq("hotelid", user.HotelId)
+      }
+
+      const { data: restaurantesData, error: restaurantesError } = await restaurantesQuery
+
+      if (!restaurantesError) {
+        const restaurantesConTodos = [
+          { id: -1, nombre: "Todos" },
+          ...(restaurantesData || []).map((r: any) => ({ id: r.id, nombre: r.nombre })),
+        ]
+        setRestaurantes(restaurantesConTodos)
+        setFiltroRestaurante("-1")
+      }
+
+      // Cargar menús iniciales
+      let menusQuery = supabase
+        .from("menus")
+        .select(`
+          id, nombre,
+          restaurantes!inner(
+            id,
+            hoteles!inner(id)
+          )
+        `)
         .eq("activo", true)
         .order("nombre")
 
-      if (error) {
-        console.error("Error cargando platillos básicos:", error)
-        return
+      if (!esAdmin) {
+        menusQuery = menusQuery.eq("restaurantes.hoteles.id", user.HotelId)
       }
 
-      // Mapear a la estructura esperada
-      const platillosBasicos = (data || []).map((p) => ({
-        PlatilloId: p.id,
-        PlatilloNombre: p.nombre,
-        PlatilloDescripcion: p.descripcion,
-        PlatilloTiempo: p.tiempopreparacion,
-        PlatilloCosto: p.costototal,
-        PlatilloActivo: p.activo,
-        HotelId: 0,
-        HotelNombre: "N/A",
-        RestauranteId: 0,
-        RestauranteNombre: "N/A",
-        MenuId: 0,
-        MenuNombre: "N/A",
-      }))
+      const { data: menusData, error: menusError } = await menusQuery
 
-      setPlatillos(platillosBasicos)
+      if (!menusError) {
+        const menusConTodos = [
+          { id: -1, nombre: "Todos" },
+          ...(menusData || []).map((m: any) => ({ id: m.id, nombre: m.nombre })),
+        ]
+        setMenus(menusConTodos)
+        setFiltroMenu("-1")
+      }
+
+      // Ejecutar búsqueda inicial
+      await ejecutarBusqueda("", initialHotelId, -1, -1)
     } catch (error) {
-      console.error("Error cargando platillos básicos:", error)
+      console.error("Error al cargar datos iniciales:", error)
+      toast.error("Error al cargar datos iniciales")
     }
   }
 
-  const cargarHoteles = async (rolId: string, hotelId: string) => {
+  // --- Carga Inicial y Seguridad ---
+  useEffect(() => {
+    if (!authLoading) {
+      if (!user || user.RolId === 0) {
+        router.push("/login")
+        return
+      }
+
+      const inicializar = async () => {
+        setPageLoading(true)
+        await cargarDatosIniciales()
+        setPageLoading(false)
+      }
+      inicializar()
+    }
+  }, [authLoading, user, router, esAdmin])
+
+  // --- Handlers de Eventos ---
+  const handleHotelChange = async (value: string) => {
+    setFiltroHotel(value)
+    setFiltroRestaurante("-1")
+    setFiltroMenu("-1")
+
+    // SOLO actualizar cascada de dropdowns, NO ejecutar búsqueda
     try {
-      let hotelesData: Hotel[] = []
+      const hotelIdNum = Number.parseInt(value, 10)
+      let query = supabase.from("restaurantes").select("id, nombre").order("nombre")
 
-      // Si RolId no es 1, 2, 3 o 4 - solo su hotel
-      if (!["1", "2", "3", "4"].includes(rolId)) {
-        const { data, error } = await supabase
-          .from("hoteles")
-          .select("id, nombre")
-          .eq("id", Number.parseInt(hotelId))
-          .order("nombre", { ascending: true })
-
-        if (error) {
-          console.error("Error cargando hotel específico:", error)
-          return
-        }
-
-        hotelesData = (data || []).map((h) => ({
-          HotelId: h.id,
-          HotelNombre: h.nombre,
-        }))
-
-        // Seleccionar automáticamente el único hotel
-        if (hotelesData.length > 0) {
-          setFiltroHotel(hotelesData[0].HotelId.toString())
+      if (hotelIdNum === -1) {
+        if (!esAdmin) {
+          query = query.eq("hotelid", user.HotelId)
         }
       } else {
-        // Si RolId es 1, 2, 3 o 4 - todos los hoteles
-        const { data, error } = await supabase
-          .from("hoteles")
-          .select("id, nombre")
-          .eq("activo", true)
-          .order("nombre", { ascending: true })
+        query = query.eq("hotelid", hotelIdNum)
+      }
 
-        if (error) {
-          console.error("Error cargando todos los hoteles:", error)
-          return
-        }
+      const { data, error } = await query
 
-        // Agregar opción "Todos" al inicio
-        hotelesData = [
-          { HotelId: -1, HotelNombre: "Todos" },
-          ...(data || []).map((h) => ({
-            HotelId: h.id,
-            HotelNombre: h.nombre,
-          })),
+      if (!error) {
+        const restaurantesConTodos = [
+          { id: -1, nombre: "Todos" },
+          ...(data || []).map((r: any) => ({ id: r.id, nombre: r.nombre })),
         ]
-
-        // Seleccionar "Todos" por defecto
-        setFiltroHotel("-1")
-      }
-
-      setHoteles(hotelesData)
-
-      // Cargar restaurantes iniciales
-      await cargarRestaurantes(rolId, hotelId, hotelesData.length > 0 ? hotelesData[0].HotelId.toString() : "-1")
-    } catch (error) {
-      console.error("Error cargando hoteles:", error)
-    }
-  }
-
-  const cargarRestaurantes = async (rolId: string, hotelId: string, selectedHotelId = "") => {
-    try {
-      let restaurantesData: Restaurante[] = []
-      const hotelIdToUse = selectedHotelId || filtroHotel
-
-      // Si RolId no es 1, 2, 3 o 4
-      if (!["1", "2", "3", "4"].includes(rolId)) {
-        const { data, error } = await supabase
-          .from("restaurantes")
-          .select("id, nombre")
-          .eq("hotelid", Number.parseInt(hotelId))
-          .eq("activo", true)
-          .order("nombre", { ascending: true })
-
-        if (error) {
-          console.error("Error cargando restaurantes:", error)
-          return
-        }
-
-        restaurantesData = [
-          { RestauranteId: -1, RestauranteNombre: "Todos" },
-          ...(data || []).map((r) => ({
-            RestauranteId: r.id,
-            RestauranteNombre: r.nombre,
-          })),
-        ]
-      } else {
-        // Si RolId es 1, 2, 3 o 4
-        let query = supabase.from("restaurantes").select("id, nombre").eq("activo", true)
-
-        if (hotelIdToUse !== "-1") {
-          query = query.eq("hotelid", Number.parseInt(hotelIdToUse))
-        }
-
-        const { data, error } = await query.order("nombre", { ascending: true })
-
-        if (error) {
-          console.error("Error cargando restaurantes:", error)
-          return
-        }
-
-        restaurantesData = [
-          { RestauranteId: -1, RestauranteNombre: "Todos" },
-          ...(data || []).map((r) => ({
-            RestauranteId: r.id,
-            RestauranteNombre: r.nombre,
-          })),
-        ]
-      }
-
-      setRestaurantes(restaurantesData)
-      setFiltroRestaurante("-1")
-
-      // Cargar menús iniciales
-      await cargarMenus(rolId, hotelId, hotelIdToUse, "-1")
-    } catch (error) {
-      console.error("Error cargando restaurantes:", error)
-    }
-  }
-
-  const cargarMenus = async (
-    rolId: string,
-    hotelId: string,
-    selectedHotelId: string,
-    selectedRestauranteId: string,
-  ) => {
-    try {
-      let menusData: Menu[] = []
-
-      // Si se seleccionó un restaurante específico
-      if (selectedRestauranteId !== "-1") {
-        const { data, error } = await supabase
-          .from("menus")
-          .select("id, nombre")
-          .eq("restauranteid", Number.parseInt(selectedRestauranteId))
-          .eq("activo", true)
-          .order("nombre", { ascending: true })
-
-        if (error) {
-          console.error("Error cargando menús por restaurante:", error)
-          return
-        }
-
-        menusData = [
-          { MenuId: -1, MenuNombre: "Todos" },
-          ...(data || []).map((m) => ({
-            MenuId: m.id,
-            MenuNombre: m.nombre,
-          })),
-        ]
-      } else if (selectedHotelId !== "-1") {
-        // Si se seleccionó un hotel específico, obtener menús a través de restaurantes
-        const { data: restaurantesData, error: restaurantesError } = await supabase
-          .from("restaurantes")
-          .select("id")
-          .eq("hotelid", Number.parseInt(selectedHotelId))
-          .eq("activo", true)
-
-        if (restaurantesError) {
-          console.error("Error obteniendo restaurantes del hotel:", restaurantesError)
-          return
-        }
-
-        if (restaurantesData && restaurantesData.length > 0) {
-          const restauranteIds = restaurantesData.map((r) => r.id)
-
-          const { data, error } = await supabase
-            .from("menus")
-            .select("id, nombre")
-            .in("restauranteid", restauranteIds)
-            .eq("activo", true)
-            .order("nombre", { ascending: true })
-
-          if (error) {
-            console.error("Error cargando menús por hotel:", error)
-            return
-          }
-
-          menusData = [
-            { MenuId: -1, MenuNombre: "Todos" },
-            ...(data || []).map((m) => ({
-              MenuId: m.id,
-              MenuNombre: m.nombre,
-            })),
-          ]
-        } else {
-          // No hay restaurantes en este hotel
-          menusData = [{ MenuId: -1, MenuNombre: "Todos" }]
-        }
-      } else {
-        // Mostrar todos los menús
-        const { data, error } = await supabase
-          .from("menus")
-          .select("id, nombre")
-          .eq("activo", true)
-          .order("nombre", { ascending: true })
-
-        if (error) {
-          console.error("Error cargando todos los menús:", error)
-          return
-        }
-
-        menusData = [
-          { MenuId: -1, MenuNombre: "Todos" },
-          ...(data || []).map((m) => ({
-            MenuId: m.id,
-            MenuNombre: m.nombre,
-          })),
-        ]
-      }
-
-      setMenus(menusData)
-      setFiltroMenu("-1")
-    } catch (error) {
-      console.error("Error cargando menús:", error)
-    }
-  }
-
-  const cargarEstadisticas = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("platillos")
-        .select("costototal, tiempopreparacion")
-        .eq("activo", true)
-
-      if (error) {
-        console.error("Error cargando estadísticas:", error)
-        return
-      }
-
-      if (data && data.length > 0) {
-        const total = data.length
-        const costoTotal = data.reduce((sum, p) => sum + (p.costototal || 0), 0)
-        const costoPromedio = costoTotal / total
-
-        setEstadisticas({
-          totalPlatillos: total,
-          costoPromedio,
-          costoTotal,
-          tiempoPromedio: "20 min",
-        })
+        setRestaurantes(restaurantesConTodos)
       }
     } catch (error) {
-      console.error("Error cargando estadísticas:", error)
+      console.error("Error al cambiar hotel:", error)
     }
+
+    // Resetear menús a solo "Todos"
+    setMenus([{ id: -1, nombre: "Todos" }])
   }
 
-  // Función para cambiar estado activo/inactivo
-  const cambiarEstadoPlatillo = async (platilloId: number, nuevoEstado: boolean, nombrePlatillo: string) => {
-    const accion = nuevoEstado ? "activar" : "inactivar"
-    const confirmacion = confirm(`¿Estás seguro de que deseas ${accion} el platillo "${nombrePlatillo}"?`)
+  const handleRestauranteChange = async (value: string) => {
+    setFiltroRestaurante(value)
+    setFiltroMenu("-1")
 
-    if (!confirmacion) {
-      return
-    }
-
+    // SOLO actualizar cascada de menús, NO ejecutar búsqueda
     try {
-      const { error } = await supabase.from("platillos").update({ activo: nuevoEstado }).eq("id", platilloId)
+      const restauranteIdNum = Number.parseInt(value, 10)
+      const hotelIdNum = Number.parseInt(filtroHotel, 10)
 
-      if (error) {
-        console.error(`Error al ${accion} platillo:`, error)
-        toast({
-          title: "Error",
-          description: `No se pudo ${accion} el platillo`,
-          variant: "destructive",
-        })
-        return
-      }
-
-      // Actualizar el estado local
-      setPlatillos(platillos.map((p) => (p.PlatilloId === platilloId ? { ...p, PlatilloActivo: nuevoEstado } : p)))
-
-      toast({
-        title: "Éxito",
-        description: `Platillo ${nuevoEstado ? "activado" : "inactivado"} correctamente`,
-      })
-    } catch (error) {
-      console.error(`Error al ${accion} platillo:`, error)
-      toast({
-        title: "Error",
-        description: `No se pudo ${accion} el platillo`,
-        variant: "destructive",
-      })
-    }
-  }
-
-  // Función JavaScript clearPlatillosBusqueda
-  const clearPlatillosBusqueda = async () => {
-    // Limpiar input de texto
-    setFiltroNombre("")
-
-    // Restablecer dropdowns como al cargar la página
-    if (sessionData) {
-      await cargarHoteles(sessionData.RolId, sessionData.HotelId)
-    }
-
-    setPaginaActual(1)
-
-    toast({
-      title: "Filtros limpiados",
-      description: "Se han restablecido todos los filtros",
-    })
-  }
-
-  // Función de búsqueda con SQL personalizado
-  const buscarPlatillos = async () => {
-    try {
-      // Construir la consulta SQL con los filtros
-      const sqlQuery = `
-        SELECT p.id as PlatilloId, p.nombre as PlatilloNombre, p.descripcion as PlatilloDescripcion, 
-               p.tiempopreparacion as PlatilloTiempo, p.costototal as PlatilloCosto, p.activo as PlatilloActivo,
-               h.id as HotelId, h.nombre as HotelNombre, r.id as RestauranteId, r.nombre as RestauranteNombre, 
-               m.id as MenuId, m.nombre as MenuNombre
-        FROM platillos as p
-        INNER JOIN platillosxmenu as x ON x.platilloid = p.id
-        INNER JOIN Menus as m ON m.id = x.menuid
-        INNER JOIN Restaurantes as r ON r.id = m.restauranteid
-        INNER JOIN Hoteles as h ON h.id = r.hotelid
-        WHERE (p.nombre like '%' || $1 || '%' or $1 = '')
-        AND (m.id = $2 or $2 = -1)
-        AND (m.restauranteid = $3 or $3 = -1)
-        AND (r.hotelid = $4 or $4 = -1)
-        AND (p.activo = true or true = TRUE)
-        ORDER BY PlatilloNombre ASC
-      `
-
-      // Preparar los parámetros
-      const params = [
-        filtroNombre || "",
-        filtroMenu === "-1" ? -1 : Number.parseInt(filtroMenu),
-        filtroRestaurante === "-1" ? -1 : Number.parseInt(filtroRestaurante),
-        filtroHotel === "-1" ? -1 : Number.parseInt(filtroHotel),
-      ]
-
-      console.log("Ejecutando búsqueda con parámetros:", params)
-
-      // Ejecutar la consulta SQL usando rpc
-      const { data, error } = await supabase.rpc("ejecutar_busqueda_platillos", {
-        p_nombre: params[0],
-        p_menu_id: params[1],
-        p_restaurante_id: params[2],
-        p_hotel_id: params[3],
-      })
-
-      if (error) {
-        console.error("Error ejecutando búsqueda SQL:", error)
-
-        // Fallback: usar método alternativo con consultas nativas de Supabase
-        await ejecutarBusquedaAlternativa()
-        return
-      }
-
-      // Transformar los resultados al formato esperado
-      const platillosEncontrados: PlatilloListado[] = (data || []).map((row: any) => ({
-        PlatilloId: row.platilloid,
-        PlatilloNombre: row.platillonombre,
-        PlatilloDescripcion: row.platillodescripcion,
-        PlatilloTiempo: row.platillotiempo,
-        PlatilloCosto: row.platillocosto,
-        PlatilloActivo: row.platilloactivo,
-        HotelId: row.hotelid,
-        HotelNombre: row.hotelnombre,
-        RestauranteId: row.restauranteid,
-        RestauranteNombre: row.restaurantenombre,
-        MenuId: row.menuid,
-        MenuNombre: row.menunombre,
-      }))
-
-      // Actualizar el estado con los resultados de la búsqueda
-      setPlatillos(platillosEncontrados)
-      setPaginaActual(1) // Resetear a la primera página
-
-      toast({
-        title: "Búsqueda completada",
-        description: `Se encontraron ${platillosEncontrados.length} platillos`,
-      })
-    } catch (error) {
-      console.error("Error en búsqueda de platillos:", error)
-
-      // Fallback: usar método alternativo
-      await ejecutarBusquedaAlternativa()
-    }
-  }
-
-  // Método alternativo de búsqueda usando consultas nativas de Supabase
-  const ejecutarBusquedaAlternativa = async () => {
-    try {
-      console.log("Ejecutando búsqueda alternativa...")
-
-      // Construir consulta base
       let query = supabase
-        .from("platillos")
+        .from("menus")
         .select(`
-          id,
-          nombre,
-          descripcion,
-          tiempopreparacion,
-          costototal,
-          activo,
-          platillosxmenu!inner(
-            menuid,
-            menus!inner(
-              id,
-              nombre,
-              restauranteid,
-              restaurantes!inner(
-                id,
-                nombre,
-                hotelid,
-                hoteles!inner(
-                  id,
-                  nombre
-                )
-              )
-            )
+          id, nombre,
+          restaurantes!inner(
+            id,
+            hoteles!inner(id)
           )
         `)
         .eq("activo", true)
+        .order("nombre")
 
-      // Aplicar filtro de nombre si existe
-      if (filtroNombre && filtroNombre.trim() !== "") {
-        query = query.ilike("nombre", `%${filtroNombre}%`)
+      if (restauranteIdNum !== -1) {
+        query = query.eq("restauranteid", restauranteIdNum)
       }
 
-      // Aplicar filtro de hotel si no es "Todos"
-      if (filtroHotel !== "-1") {
-        query = query.eq("platillosxmenu.menus.restaurantes.hotelid", Number.parseInt(filtroHotel))
+      if (hotelIdNum !== -1) {
+        query = query.eq("restaurantes.hoteles.id", hotelIdNum)
+      } else if (!esAdmin) {
+        query = query.eq("restaurantes.hoteles.id", user.HotelId)
       }
 
-      // Aplicar filtro de restaurante si no es "Todos"
-      if (filtroRestaurante !== "-1") {
-        query = query.eq("platillosxmenu.menus.restauranteid", Number.parseInt(filtroRestaurante))
-      }
+      const { data, error } = await query
 
-      // Aplicar filtro de menú si no es "Todos"
-      if (filtroMenu !== "-1") {
-        query = query.eq("platillosxmenu.menuid", Number.parseInt(filtroMenu))
+      if (!error) {
+        const menusConTodos = [
+          { id: -1, nombre: "Todos" },
+          ...(data || []).map((m: any) => ({ id: m.id, nombre: m.nombre })),
+        ]
+        setMenus(menusConTodos)
       }
+    } catch (error) {
+      console.error("Error al cambiar restaurante:", error)
+    }
+  }
 
-      const { data, error } = await query.order("nombre", { ascending: true })
+  // ESTE ES EL ÚNICO LUGAR DONDE SE EJECUTA LA BÚSQUEDA
+  const handleFormSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    const hotelId = Number.parseInt(filtroHotel, 10)
+    const restauranteId = Number.parseInt(filtroRestaurante, 10)
+    const menuId = Number.parseInt(filtroMenu, 10)
+    ejecutarBusqueda(filtroNombre, hotelId, restauranteId, menuId)
+  }
+
+  const clearPlatillosBusqueda = () => {
+    setFiltroNombre("")
+    const initialHotelId = esAdmin ? "-1" : user.HotelId.toString()
+    setFiltroHotel(initialHotelId)
+    handleHotelChange(initialHotelId)
+    toast.info("Filtros limpiados.")
+  }
+
+  const handleToggleStatusClick = (id: number, activo: boolean) => {
+    setPlatilloToToggle({ id, activo })
+    setShowConfirmDialog(true)
+  }
+
+  const cambiarEstadoPlatillo = async () => {
+    if (!platilloToToggle) return
+
+    try {
+      const { id, activo } = platilloToToggle
+      const nuevoEstado = !activo
+      const { error } = await supabase.from("platillos").update({ activo: nuevoEstado }).eq("id", id)
 
       if (error) {
-        console.error("Error en búsqueda alternativa:", error)
-        toast({
-          title: "Error",
-          description: "No se pudo ejecutar la búsqueda",
-          variant: "destructive",
-        })
-        return
+        console.error("Error al cambiar estado:", error)
+        toast.error(`Error al cambiar estado de la recetas.`)
+      } else {
+        setPlatillos((prev) => prev.map((p) => (p.PlatilloId === id ? { ...p, PlatilloActivo: nuevoEstado } : p)))
+        toast.success(`Receta ${nuevoEstado ? "activado" : "inactivado"} correctamente.`)
       }
-
-      // Transformar los datos al formato esperado
-      const platillosTransformados: PlatilloListado[] = []
-
-      data?.forEach((platillo: any) => {
-        platillo.platillosxmenu?.forEach((relacion: any) => {
-          const menu = relacion.menus
-          const restaurante = menu?.restaurantes
-          const hotel = restaurante?.hoteles
-
-          platillosTransformados.push({
-            PlatilloId: platillo.id,
-            PlatilloNombre: platillo.nombre,
-            PlatilloDescripcion: platillo.descripcion,
-            PlatilloTiempo: platillo.tiempopreparacion,
-            PlatilloCosto: platillo.costototal,
-            PlatilloActivo: platillo.activo,
-            HotelId: hotel?.id || 0,
-            HotelNombre: hotel?.nombre || "N/A",
-            RestauranteId: restaurante?.id || 0,
-            RestauranteNombre: restaurante?.nombre || "N/A",
-            MenuId: menu?.id || 0,
-            MenuNombre: menu?.nombre || "N/A",
-          })
-        })
-      })
-
-      // Actualizar el estado con los resultados
-      setPlatillos(platillosTransformados)
-      setPaginaActual(1)
-
-      toast({
-        title: "Búsqueda completada",
-        description: `Se encontraron ${platillosTransformados.length} platillos`,
-      })
     } catch (error) {
-      console.error("Error en búsqueda alternativa:", error)
-      toast({
-        title: "Error",
-        description: "No se pudo ejecutar la búsqueda",
-        variant: "destructive",
-      })
+      console.error("Error inesperado al cambiar estado:", error)
+      toast.error("Error inesperado al cambiar estado")
     }
+
+    setShowConfirmDialog(false)
+    setPlatilloToToggle(null)
   }
 
-  // Manejar cambio de Hotel
-  const handleHotelChange = async (value: string) => {
-    setFiltroHotel(value)
+  const handleDeletePlatillo = async () => {
+    if (platilloToDelete === null) return
 
-    // Cargar restaurantes según el hotel seleccionado
-    if (sessionData) {
-      await cargarRestaurantes(sessionData.RolId, sessionData.HotelId, value)
+    setPageLoading(true)
+    const { error } = await supabase.from("platillos").update({ activo: false }).eq("id", platilloToDelete)
+
+    if (error) {
+      toast.error("Error al eliminar receta: " + error.message)
+    } else {
+      toast.success("Receta eliminada correctamente.")
+      setPlatilloToDelete(null)
+      // Recargar la lista de platillos después de la eliminación
+      const hotelId = Number.parseInt(filtroHotel, 10)
+      const restauranteId = Number.parseInt(filtroRestaurante, 10)
+      const menuId = Number.parseInt(filtroMenu, 10)
+      await ejecutarBusqueda(filtroNombre, hotelId, restauranteId, menuId)
     }
+    setPageLoading(false)
   }
 
-  // Manejar cambio de Restaurante
-  const handleRestauranteChange = async (value: string) => {
-    setFiltroRestaurante(value)
+  // Handler para abrir el modal de detalles del platillo
+  const handleViewPlatilloDetails = async (platilloId: number) => {
+    setIsDetailsLoading(true)
+    setShowPlatilloDetailsModal(true) // Abrir modal inmediatamente con estado de carga
+    setSelectedPlatilloDetails(null) // Limpiar detalles anteriores
 
-    // Cargar menús según hotel y restaurante seleccionados
-    if (sessionData) {
-      await cargarMenus(sessionData.RolId, sessionData.HotelId, filtroHotel, value)
+    const { success, data, error } = await getPlatilloDetailsForModal(platilloId)
+
+    // INICIO DE LA MODIFICACIÓN
+    console.log(`getPlatilloDetailsForModal - Success: ${success}, Error: ${error ? error : "No error"}`)
+    // FIN DE LA MODIFICACIÓN
+
+    if (success && data) {
+      setSelectedPlatilloDetails(data)
+    } else {
+      toast.error(`Error al cargar detalles de la receta: ${error}`)
+      setSelectedPlatilloDetails([]) // Indicar que no se encontraron datos
     }
+    setIsDetailsLoading(false)
   }
 
-  const formatCurrency = (amount: number): string => {
-    return new Intl.NumberFormat("es-MX", {
-      style: "currency",
-      currency: "MXN",
-    }).format(amount)
-  }
+  // --- Paginación ---
+  const platillosPaginados = useMemo(() => {
+    const indiceInicio = (paginaActual - 1) * resultadosPorPagina
+    return platillos.slice(indiceInicio, indiceInicio + resultadosPorPagina)
+  }, [platillos, paginaActual])
 
-  const formatDate = (dateString: string): string => {
-    return new Date(dateString).toLocaleDateString("es-MX")
-  }
+  const totalPaginas = Math.ceil(platillos.length / resultadosPorPagina)
 
-  // Filtrar platillos
-  const platillosFiltrados = platillos.filter((platillo) => {
-    return platillo.PlatilloNombre.toLowerCase().includes(filtroNombre.toLowerCase())
-  })
+  // Corrección aquí: usar PlatilloNombre para el filtro
+  const filteredPlatillos = platillos.filter((platillo) =>
+    platillo.PlatilloNombre.toLowerCase().includes(searchTerm.toLowerCase()),
+  )
 
-  // Paginación
-  const totalPaginas = Math.ceil(platillosFiltrados.length / resultadosPorPagina)
-  const indiceInicio = (paginaActual - 1) * resultadosPorPagina
-  const indiceFin = indiceInicio + resultadosPorPagina
-  const platillosPaginados = platillosFiltrados.slice(indiceInicio, indiceFin)
+  const formatCurrency = (amount: number | null) =>
+    new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(amount || 0)
 
-  if (loading) {
+  // --- Renderizado ---
+  if (pageLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <ChefHat className="h-12 w-12 mx-auto mb-4 animate-spin" />
-          <p>Cargando platillos...</p>
+      <div className="flex h-screen w-full items-center justify-center">
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="flex flex-col items-center justify-center p-8">
+            <div className="relative w-24 h-24 mb-4">
+            <Image
+              src="https://nxtrsibnomdqmzcrwedc.supabase.co/storage/v1/object/public/imagenes/AnimationGif/CargarPage.gif"
+              alt="Procesando..."
+              width={300} // Ajusta el tamaño según sea necesario
+              height={300} // Ajusta el tamaño según sea necesario
+              unoptimized // Importante para GIFs externos
+              className="absolute inset-0 animate-bounce-slow"
+            />
+            </div>
+            <p className="text-lg font-semibold text-gray-800">Cargando Pagina...</p>
+           
         </div>
+      </div>
       </div>
     )
   }
 
+
+
+
   return (
-    <div className="space-y-6">
-      {/* 1. Título de la página */}
-      <div className="flex justify-between items-center">
+    <div className="container mx-auto p-4 md:p-6 lg:p-8 space-y-6">
+      {/* 1. Título y Botón */}
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-bold">Platillos</h1>
-          <p className="text-xl text-muted-foreground mt-2">Gestión completa de Platillos</p>
+          <h1 className="text-3xl font-bold tracking-tight">Recetas</h1>
+          <p className="text-muted-foreground">Gestión completa de Recetas</p>
         </div>
-        <button
-          type="button"
-          id="btnPlatilloNuevo"
-          name="btnPlatilloNuevo"
-          className="text-white font-semibold shadow-lg border-0 px-6 py-3 rounded-lg transition-all duration-200 hover:shadow-xl inline-flex items-center justify-center"
-          style={{ backgroundColor: "#559b79", ":hover": { backgroundColor: "#4a8a6b" } }}
-          onMouseEnter={(e) => (e.target.style.backgroundColor = "#4a8a6b")}
-          onMouseLeave={(e) => (e.target.style.backgroundColor = "#559b79")}
-          onClick={() => router.push("/platillos/nuevo")}
-        >
-          <UtensilsCrossed className="h-5 w-5 mr-2" />
-          Nuevo Platillo
-        </button>
+        <Link href="/platillos/nuevo" passHref>
+          <Button id="btnPlatilloNuevo" name="btnPlatilloNuevo" className="bg-green-800 hover:bg-green-900 text-white">
+            <PlusCircle className="mr-2 h-4 w-4" />
+            Crear Nueva Receta
+          </Button>
+        </Link>
       </div>
 
-      {/* 3. Resúmenes de estadísticas generales */}
-      <div className="grid gap-4 md:grid-cols-4">
+      {/* 2. Estadísticas */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2">
-              <Hash className="h-5 w-5 text-blue-500" />
-              <div>
-                <p className="text-sm text-muted-foreground">Total Platillos</p>
-                <p className="text-2xl font-bold">{estadisticas.totalPlatillos}</p>
-              </div>
-            </div>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total de Recetas</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{estadisticas.totalPlatillos}</div>
           </CardContent>
         </Card>
-
         <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-green-500" />
-              <div>
-                <p className="text-sm text-muted-foreground">Costo Promedio</p>
-                <p className="text-2xl font-bold">{formatCurrency(estadisticas.costoPromedio)}</p>
-              </div>
-            </div>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Costo Promedio</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatCurrency(estadisticas.costoPromedio)}</div>
           </CardContent>
         </Card>
-
         <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2">
-              <DollarSign className="h-5 w-5 text-orange-500" />
-              <div>
-                <p className="text-sm text-muted-foreground">Costo Total</p>
-                <p className="text-2xl font-bold">{formatCurrency(estadisticas.costoTotal)}</p>
-              </div>
-            </div>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Costo Total</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatCurrency(estadisticas.costoTotal)}</div>
           </CardContent>
         </Card>
-
         <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2">
-              <Clock className="h-5 w-5 text-purple-500" />
-              <div>
-                <p className="text-sm text-muted-foreground">Tiempo Promedio</p>
-                <p className="text-2xl font-bold">{estadisticas.tiempoPromedio}</p>
-              </div>
-            </div>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Tiempo Promedio Prep.</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{estadisticas.tiempoPromedio}</div>
           </CardContent>
         </Card>
       </div>
 
-      {/* 4. Filtros de búsqueda */}
+      {/* 3. Filtros */}
       <Card>
-        <CardContent className="p-4">
-          <form id="frmPlatillosBuscar" className="flex gap-4 items-end">
-            <div className="flex-1">
-              <label className="text-sm font-medium">Nombre</label>
+        <CardHeader>
+          <CardTitle>Filtros de Búsqueda</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form
+            id="frmPlatillosBuscar"
+            name="frmPlatillosBuscar"
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 items-end"
+            onSubmit={handleFormSubmit}
+          >
+            <div className="lg:col-span-2">
+              <label htmlFor="txtPlatilloNombre" className="text-sm font-medium">
+                Nombre
+              </label>
               <Input
-                type="text"
                 id="txtPlatilloNombre"
                 name="txtPlatilloNombre"
+                type="text"
+                placeholder="Buscar por nombre..."
                 maxLength={150}
                 value={filtroNombre}
                 onChange={(e) => setFiltroNombre(e.target.value)}
-                placeholder="Buscar por nombre..."
               />
             </div>
-
-            <div className="flex-1">
-              <label className="text-sm font-medium">Hotel</label>
-              <Select value={filtroHotel} onValueChange={handleHotelChange}>
-                <SelectTrigger id="ddlHotel" name="ddlHotel">
-                  <SelectValue placeholder="Seleccionar hotel" />
+            <div>
+              <label htmlFor="ddlHotel" className="text-sm font-medium">
+                Hotel
+              </label>
+              <Select name="ddlHotel" value={filtroHotel} onValueChange={handleHotelChange} disabled={!esAdmin}>
+                <SelectTrigger id="ddlHotel">
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {hoteles.map((hotel) => (
-                    <SelectItem key={hotel.HotelId} value={hotel.HotelId.toString()}>
-                      {hotel.HotelNombre}
+                  {hoteles.map((h) => (
+                    <SelectItem key={h.id} value={h.id.toString()}>
+                      {h.nombre}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-
-            <div className="flex-1">
-              <label className="text-sm font-medium">Restaurante</label>
-              <Select value={filtroRestaurante} onValueChange={handleRestauranteChange}>
-                <SelectTrigger id="ddlRestaurante" name="ddlRestaurante">
-                  <SelectValue placeholder="Seleccionar restaurante" />
+            <div>
+              <label htmlFor="ddlRestaurante" className="text-sm font-medium">
+                Restaurante
+              </label>
+              <Select name="ddlRestaurante" value={filtroRestaurante} onValueChange={handleRestauranteChange}>
+                <SelectTrigger id="ddlRestaurante">
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {restaurantes.map((restaurante) => (
-                    <SelectItem key={restaurante.RestauranteId} value={restaurante.RestauranteId.toString()}>
-                      {restaurante.RestauranteNombre}
+                  {restaurantes.map((r) => (
+                    <SelectItem key={r.id} value={r.id.toString()}>
+                      {r.nombre}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-
-            <div className="flex-1">
-              <label className="text-sm font-medium">Menú</label>
-              <Select value={filtroMenu} onValueChange={setFiltroMenu}>
-                <SelectTrigger id="ddlMenu" name="ddlMenu">
-                  <SelectValue placeholder="Seleccionar menú" />
+            <div>
+              <label htmlFor="ddlMenu" className="text-sm font-medium">
+                Menú
+              </label>
+              <Select name="ddlMenu" value={filtroMenu} onValueChange={setFiltroMenu}>
+                <SelectTrigger id="ddlMenu">
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {menus.map((menu) => (
-                    <SelectItem key={menu.MenuId} value={menu.MenuId.toString()}>
-                      {menu.MenuNombre}
+                  {menus.map((m) => (
+                    <SelectItem key={m.id} value={m.id.toString()}>
+                      {m.nombre}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-
-            <Button
-              type="button"
-              id="btnPlatillosLimpiar"
-              name="btnPlatillosLimpiar"
-              variant="outline"
-              className="bg-black text-white hover:bg-gray-800"
-              style={{ fontSize: "12px" }}
-              onClick={clearPlatillosBusqueda}
-            >
-              <RotateCcw className="h-3 w-3 mr-1" />
-              Limpiar
-            </Button>
-
-            <Button
-              type="button"
-              id="btnPlatillosBuscar"
-              name="btnPlatillosBuscar"
-              className="bg-black text-white hover:bg-gray-800"
-              style={{ fontSize: "12px" }}
-              onClick={buscarPlatillos}
-            >
-              <Search className="h-3 w-3 mr-1" />
-              Buscar
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                id="btnPlatillosLimpiar"
+                name="btnPlatillosLimpiar"
+                type="button"
+                variant="outline"
+                className="w-full bg-black text-white hover:bg-gray-800"
+                style={{ fontSize: "12px" }}
+                onClick={clearPlatillosBusqueda}
+              >
+                <Eraser className="mr-2 h-3 w-3" /> Limpiar
+              </Button>
+              <Button
+                id="btnPlatillosBuscar"
+                name="btnPlatillosBuscar"
+                type="submit"
+                className="w-full bg-black text-white hover:bg-gray-800"
+                style={{ fontSize: "12px" }}
+                disabled={isSearching}
+              >
+                {isSearching ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <Search className="mr-2 h-3 w-3" />}{" "}
+                Buscar
+              </Button>
+            </div>
           </form>
         </CardContent>
       </Card>
 
-      {/* 5. Grid del listado */}
+      {/* 4. Grid de Resultados */}
       <Card>
         <CardHeader>
           <CardTitle>Resultados</CardTitle>
           <CardDescription>
-            Mostrando {platillosPaginados.length} de {platillosFiltrados.length} platillos
+            Mostrando {platillosPaginados.length} de {platillos.length} recetas encontradas.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Table id="tblPlatillosResultados">
-            <TableHeader>
-              <TableRow>
-                <TableHead>Platillo</TableHead>
-                <TableHead>Descripción</TableHead>
-                <TableHead>Tiempo</TableHead>
-                <TableHead>Costo</TableHead>
-                <TableHead>Hotel</TableHead>
-                <TableHead>Restaurante</TableHead>
-                <TableHead>Menú</TableHead>
-                <TableHead>Estado</TableHead>
-                <TableHead>Acciones</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {platillosPaginados.map((platillo) => (
-                <TableRow key={platillo.PlatilloId}>
-                  <TableCell>
-                    <div className="font-medium">{platillo.PlatilloNombre}</div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="max-w-xs truncate">{platillo.PlatilloDescripcion}</div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="flex items-center gap-1">
-                      <Clock className="h-3 w-3" />
-                      {platillo.PlatilloTiempo}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="font-medium">
-                    <Badge variant="default" className="bg-green-600">
-                      {formatCurrency(platillo.PlatilloCosto)}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{platillo.HotelNombre}</TableCell>
-                  <TableCell>{platillo.RestauranteNombre}</TableCell>
-                  <TableCell>{platillo.MenuNombre}</TableCell>
-                  <TableCell>
-                    <Badge variant={platillo.PlatilloActivo ? "default" : "secondary"}>
-                      {platillo.PlatilloActivo ? "Activo" : "Inactivo"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-2">
-                      {/* Ver */}
-                      <Button variant="outline" size="sm" asChild>
-                        <Link href={`/platillos/${platillo.PlatilloId}?getPlatilloId=${platillo.PlatilloId}`}>
-                          <Eye className="h-4 w-4" />
-                        </Link>
-                      </Button>
-
-                      {/* Editar */}
-                      <Button variant="outline" size="sm" asChild>
-                        <Link href={`/platillos/${platillo.PlatilloId}/editar?getPlatilloId=${platillo.PlatilloId}`}>
-                          <Edit className="h-4 w-4" />
-                        </Link>
-                      </Button>
-
-                      {/* Activar/Inactivar */}
-                      {platillo.PlatilloActivo ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-red-500 hover:text-red-700 bg-transparent"
-                          onClick={() => cambiarEstadoPlatillo(platillo.PlatilloId, false, platillo.PlatilloNombre)}
-                        >
-                          <PowerOff className="h-4 w-4" />
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-green-500 hover:text-green-700 bg-transparent"
-                          onClick={() => cambiarEstadoPlatillo(platillo.PlatilloId, true, platillo.PlatilloNombre)}
-                        >
-                          <Power className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
+          <div className="rounded-md border">
+            <Table id="tblPlatillosResultados">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Receta</TableHead>
+                  <TableHead className="hidden md:table-cell">Hotel</TableHead>
+                  <TableHead className="hidden lg:table-cell">Restaurante</TableHead>
+                  <TableHead className="hidden lg:table-cell">Menú</TableHead>
+                  <TableHead>Costo</TableHead>
+                  <TableHead>Estado</TableHead>
+                  <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-
-          {/* Paginación */}
+              </TableHeader>
+              <TableBody>
+                {isSearching ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="h-24 text-center">
+                      <Loader2 className="mx-auto h-6 w-6 animate-spin" />
+                    </TableCell>
+                  </TableRow>
+                ) : filteredPlatillos.length > 0 ? (
+                  filteredPlatillos.map((p, index) => (
+                    <TableRow key={`${p.PlatilloId}-${p.MenuId}-${index}`}>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={p.PlatilloImagenUrl || "/placeholder.svg?height=40&width=40"} // Usar la URL de la imagen o el placeholder
+                            alt={p.PlatilloNombre}
+                            className="h-10 w-10 rounded-md object-cover"
+                          />
+                          <div>
+                            <div className="font-medium">{p.PlatilloNombre}</div>
+                            <div className="text-sm text-muted-foreground hidden sm:block">{p.PlatilloDescripcion}</div>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">{p.HotelNombre}</TableCell>
+                      <TableCell className="hidden lg:table-cell">{p.RestauranteNombre}</TableCell>
+                      <TableCell className="hidden lg:table-cell">{p.MenuNombre}</TableCell>
+                      <TableCell>{formatCurrency(p.PlatilloCosto)}</TableCell>
+                      <TableCell>
+                        <span
+                          className={`px-2 py-1 text-xs rounded-full ${p.PlatilloActivo ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}
+                        >
+                          {p.PlatilloActivo ? "Activo" : "Inactivo"}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          {/* Botón "Ver" para abrir el modal de detalles */}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Ver Detalles"
+                            onClick={() => handleViewPlatilloDetails(p.PlatilloId)}
+                            disabled={isDetailsLoading}
+                          >
+                            {isDetailsLoading ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Eye className="h-4 w-4" />
+                            )}
+                          </Button>
+                          <Link href={`/platillos/editar?getPlatilloId=${p.PlatilloId}`} passHref>
+                            <Button variant="ghost" size="icon" title="Editar">
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                          </Link>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title={p.PlatilloActivo ? "Inactivar" : "Activar"}
+                            onClick={() => handleToggleStatusClick(p.PlatilloId, p.PlatilloActivo)}
+                          >
+                            {p.PlatilloActivo ? (
+                              <ToggleRight className="h-4 w-4 text-red-500" />
+                            ) : (
+                              <ToggleLeft className="h-4 w-4 text-green-500" />
+                            )}
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              {/*
+                              <Button
+                                variant="destructive"
+                                size="icon"
+                                title="Eliminar Platillo"
+                                onClick={() => setPlatilloToDelete(p.PlatilloId)}
+                              >
+                              
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                              */}
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>¿Estás absolutamente seguro?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Esta acción desactivará la receta (el platillo). No se eliminará permanentemente de la base de
+                                  datos, pero ya no estará visible en la aplicación.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction onClick={handleDeletePlatillo}>Confirmar</AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={7} className="h-24 text-center">
+                      No se encontraron resultados.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
           {totalPaginas > 1 && (
-            <div className="flex justify-center gap-2 mt-4">
+            <div className="flex items-center justify-center space-x-2 pt-4">
               <Button
                 variant="outline"
-                onClick={() => setPaginaActual(Math.max(1, paginaActual - 1))}
+                size="sm"
+                onClick={() => setPaginaActual((p) => Math.max(1, p - 1))}
                 disabled={paginaActual === 1}
               >
                 Anterior
               </Button>
-
-              <span className="flex items-center px-4">
+              <span className="text-sm">
                 Página {paginaActual} de {totalPaginas}
               </span>
-
               <Button
                 variant="outline"
-                onClick={() => setPaginaActual(Math.min(totalPaginas, paginaActual + 1))}
+                size="sm"
+                onClick={() => setPaginaActual((p) => Math.min(totalPaginas, p + 1))}
                 disabled={paginaActual === totalPaginas}
               >
                 Siguiente
@@ -1087,6 +836,110 @@ export default function PlatillosPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Modal de Confirmación de Cambio de Estado */}
+      <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Confirmar cambio de estado?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esto cambiará el estado de la receta a '{platilloToToggle?.activo ? "Inactivo" : "Activo"}'. ¿Deseas
+              continuar?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPlatilloToToggle(null)}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={cambiarEstadoPlatillo}>Confirmar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Modal de Detalles del Platillo */}
+      <Dialog open={showPlatilloDetailsModal} onOpenChange={setShowPlatilloDetailsModal}>
+        <DialogContent className="max-w-4xl overflow-y-auto max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-bold">Detalles de la Receta</DialogTitle>
+            <DialogDescription>Información detallada de la receta seleccionada.</DialogDescription>
+          </DialogHeader>
+          {isDetailsLoading ? (
+            <div className="flex items-center justify-center h-48">
+              <Loader2 className="h-8 w-8 animate-spin" />
+              <span className="ml-2">Cargando detalles...</span>
+            </div>
+          ) : selectedPlatilloDetails && selectedPlatilloDetails.length > 0 ? (
+            <div className="grid gap-4 py-4">
+              {/* Mostrar información principal del platillo una vez */}
+              <div className="flex flex-col md:flex-row items-center gap-4">
+                {selectedPlatilloDetails[0].imgurl && (
+                  <img
+                    src={selectedPlatilloDetails[0].imgurl || "/placeholder.svg"}
+                    alt={selectedPlatilloDetails[0].Platillo}
+                    className="w-32 h-32 object-cover rounded-md"
+                  />
+                )}
+                <div className="grid gap-1">
+                  <h3 className="text-xl font-semibold">{selectedPlatilloDetails[0].Platillo}</h3>
+                  <p className="text-muted-foreground">{selectedPlatilloDetails[0].descripcion}</p>
+                  {selectedPlatilloDetails[0].instruccionespreparacion && (
+                    <p className="text-sm text-gray-600">
+                      <span className="font-medium">Instrucciones:</span>{" "}
+                      {selectedPlatilloDetails[0].instruccionespreparacion}
+                    </p>
+                  )}
+                  {selectedPlatilloDetails[0].tiempopreparacion && (
+                    <p className="text-sm text-gray-600">
+                      <span className="font-medium">Tiempo de Preparación:</span>{" "}
+                      {selectedPlatilloDetails[0].tiempopreparacion}
+                    </p>
+                  )}
+                  <p className="text-sm text-gray-600">
+                    <span className="font-medium">Costo de Elaboración:</span>{" "}
+                    {formatCurrency(selectedPlatilloDetails[0].CostoElaboracion)}
+                  </p>
+                </div>
+              </div>
+
+              {/* Mostrar detalles específicos de cada asociación con menú */}
+              {selectedPlatilloDetails.length > 0 && (
+                <div className="mt-4">
+                  <h4 className="text-lg font-semibold mb-2">Asociaciones con Menús:</h4>
+                  <div className="grid gap-3">
+                    {selectedPlatilloDetails.map((detail, idx) => (
+                      <Card key={idx} className="p-3">
+                        <p className="text-sm">
+                          <span className="font-medium">Hotel:</span> {detail.Hotel}
+                        </p>
+                        <p className="text-sm">
+                          <span className="font-medium">Restaurante:</span> {detail.Restaurante}
+                        </p>
+                        <p className="text-sm">
+                          <span className="font-medium">Menú:</span> {detail.Menu}
+                        </p>
+                        <p className="text-sm">
+                          <span className="font-medium">Precio de Venta:</span> {formatCurrency(detail.precioventa)}
+                        </p>
+                        <p className="text-sm">
+                          <span className="font-medium">Margen de Utilidad:</span>{" "}
+                          {detail.margenutilidad !== null ? `${detail.margenutilidad}%` : "N/A"}
+                        </p>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">No se encontraron detalles para esta receta.</div>
+          )}
+          <DialogFooter>
+            <DialogPrimitive.Close asChild>
+              <Button type="button" variant="secondary">
+                Cerrar
+              </Button>
+            </DialogPrimitive.Close>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

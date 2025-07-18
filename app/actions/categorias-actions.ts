@@ -1,175 +1,100 @@
 "use server"
 
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@supabase/supabase-js"
 import { revalidatePath } from "next/cache"
-import type { CategoriaIngrediente, CategoriaPlatillo } from "@/lib/supabase"
 
-// =============================================
-// Categorías de Ingredientes
-// =============================================
+// Inicializar el cliente Supabase con la clave de servicio para operaciones de administrador
+const supabaseAdmin = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
-export async function obtenerCategoriasIngredientes() {
+// Función para obtener todas las categorías de 'categoriaingredientes'
+export async function obtenerCategorias() {
   try {
-    const { data, error } = await supabase.from("CategoriaIngredientes").select("*").order("Nombre")
+    const { data, error } = await supabaseAdmin
+      .from("categoriaingredientes")
+      .select("*") // Seleccionar todas las columnas como solicitaste
+      .order("descripcion")
 
-    if (error) throw error
-    return { success: true, data: data as CategoriaIngrediente[] }
-  } catch (error: any) {
-    console.error("Error obteniendo categorías de ingredientes:", error)
-    return { success: false, error: error.message }
+    if (error) {
+      console.error("Error al obtener categorías:", error.message)
+      return { data: null, error: error.message }
+    }
+    return { data, error: null }
+  } catch (e: any) {
+    console.error("Excepción al obtener categorías:", e.message)
+    return { data: null, error: e.message }
   }
 }
 
-export async function crearCategoriaIngrediente(nombre: string) {
+// Función para crear una nueva categoría
+export async function crearCategoria(prevState: any, formData: FormData) {
   try {
-    const { data, error } = await supabase
-      .from("CategoriaIngredientes")
-      .insert([{ Nombre: nombre }])
-      .select()
-      .single()
+    const descripcion = formData.get("descripcion") as string
 
-    if (error) throw error
-
-    revalidatePath("/categorias")
-    return { success: true, data: data as CategoriaIngrediente }
-  } catch (error: any) {
-    console.error("Error creando categoría de ingrediente:", error)
-    return { success: false, error: error.message }
-  }
-}
-
-export async function actualizarCategoriaIngrediente(id: number, nombre: string) {
-  try {
-    const { data, error } = await supabase
-      .from("CategoriaIngredientes")
-      .update({
-        Nombre: nombre,
-        FechaActualizacion: new Date().toISOString().split("T")[0],
-      })
-      .eq("Categoria_Id", id)
-      .select()
-      .single()
-
-    if (error) throw error
-
-    revalidatePath("/categorias")
-    return { success: true, data: data as CategoriaIngrediente }
-  } catch (error: any) {
-    console.error("Error actualizando categoría de ingrediente:", error)
-    return { success: false, error: error.message }
-  }
-}
-
-export async function eliminarCategoriaIngrediente(id: number) {
-  try {
-    // Verificar si la categoría está siendo usada
-    const { count, error: countError } = await supabase
-      .from("Ingredientes")
-      .select("*", { count: "exact", head: true })
-      .eq("Categoria_id", id)
-
-    if (countError) throw countError
-
-    if (count && count > 0) {
-      return {
-        success: false,
-        error: `No se puede eliminar la categoría porque está siendo usada por ${count} ingrediente(s)`,
-      }
+    if (!descripcion || descripcion.trim() === "") {
+      return { success: false, error: "La descripción de la categoría es requerida." }
     }
 
-    const { error } = await supabase.from("CategoriaIngredientes").delete().eq("Categoria_Id", id)
-
-    if (error) throw error
-
-    revalidatePath("/categorias")
-    return { success: true }
-  } catch (error: any) {
-    console.error("Error eliminando categoría de ingrediente:", error)
-    return { success: false, error: error.message }
-  }
-}
-
-// =============================================
-// Categorías de Platillos
-// =============================================
-
-export async function obtenerCategoriasPlatillos() {
-  try {
-    const { data, error } = await supabase.from("CategoriaPlatillos").select("*").order("Descripcion")
-
-    if (error) throw error
-    return { success: true, data: data as CategoriaPlatillo[] }
-  } catch (error: any) {
-    console.error("Error obteniendo categorías de platillos:", error)
-    return { success: false, error: error.message }
-  }
-}
-
-export async function crearCategoriaPlatillo(descripcion: string) {
-  try {
-    const { data, error } = await supabase
-      .from("CategoriaPlatillos")
-      .insert([{ Descripcion: descripcion }])
+    const { data, error } = await supabaseAdmin
+      .from("categoriaingredientes")
+      .insert({ descripcion: descripcion.trim(), activo: true }) // Asumiendo 'activo' existe y se inicializa en true
       .select()
       .single()
 
-    if (error) throw error
-
-    revalidatePath("/categorias")
-    return { success: true, data: data as CategoriaPlatillo }
-  } catch (error: any) {
-    console.error("Error creando categoría de platillo:", error)
-    return { success: false, error: error.message }
-  }
-}
-
-export async function actualizarCategoriaPlatillo(id: number, descripcion: string) {
-  try {
-    const { data, error } = await supabase
-      .from("CategoriaPlatillos")
-      .update({
-        Descripcion: descripcion,
-        FechaActualizacion: new Date().toISOString().split("T")[0],
-      })
-      .eq("CategoriaPlatillos_Id", id)
-      .select()
-      .single()
-
-    if (error) throw error
-
-    revalidatePath("/categorias")
-    return { success: true, data: data as CategoriaPlatillo }
-  } catch (error: any) {
-    console.error("Error actualizando categoría de platillo:", error)
-    return { success: false, error: error.message }
-  }
-}
-
-export async function eliminarCategoriaPlatillo(id: number) {
-  try {
-    // Verificar si la categoría está siendo usada
-    const { count, error: countError } = await supabase
-      .from("Platillos")
-      .select("*", { count: "exact", head: true })
-      .eq("CategoriaPlatillo_Id", id)
-
-    if (countError) throw countError
-
-    if (count && count > 0) {
-      return {
-        success: false,
-        error: `No se puede eliminar la categoría porque está siendo usada por ${count} platillo(s)`,
-      }
+    if (error) {
+      console.error("Error al crear categoría:", error)
+      return { success: false, error: `Error de base de datos: ${error.message}` }
     }
 
-    const { error } = await supabase.from("CategoriaPlatillos").delete().eq("CategoriaPlatillos_Id", id)
+    revalidatePath("/categorias")
+    return { success: true, message: `Categoría "${descripcion}" creada exitosamente.`, data }
+  } catch (error: any) {
+    console.error("Error en crearCategoria:", error)
+    return { success: false, error: `Error al crear categoría: ${error.message}` }
+  }
+}
 
-    if (error) throw error
+// Función para actualizar una categoría existente
+export async function actualizarCategoria(id: number, prevState: any, formData: FormData) {
+  try {
+    const descripcion = formData.get("descripcion") as string
+
+    if (!descripcion || descripcion.trim() === "") {
+      return { success: false, error: "La descripción de la categoría es requerida." }
+    }
+
+    const { error } = await supabaseAdmin
+      .from("categoriaingredientes")
+      .update({ descripcion: descripcion.trim() })
+      .eq("id", id)
+
+    if (error) {
+      console.error("Error al actualizar categoría:", error)
+      return { success: false, error: `Error de base de datos: ${error.message}` }
+    }
 
     revalidatePath("/categorias")
-    return { success: true }
+    return { success: true, message: `Categoría "${descripcion}" actualizada exitosamente.` }
   } catch (error: any) {
-    console.error("Error eliminando categoría de platillo:", error)
-    return { success: false, error: error.message }
+    console.error("Error en actualizarCategoria:", error)
+    return { success: false, error: `Error al actualizar categoría: ${error.message}` }
+  }
+}
+
+// Función para eliminar una categoría (borrado lógico)
+export async function eliminarCategoria(id: number) {
+  try {
+    // Asumiendo que 'activo' es una columna para un borrado lógico
+    const { error } = await supabaseAdmin.from("categoriaingredientes").update({ activo: false }).eq("id", id)
+
+    if (error) {
+      console.error("Error al eliminar categoría:", error)
+      return { success: false, error: `Error de base de datos: ${error.message}` }
+    }
+
+    revalidatePath("/categorias")
+    return { success: true, message: "Categoría eliminada exitosamente." }
+  } catch (error: any) {
+    console.error("Error en eliminarCategoria:", error)
+    return { success: false, error: `Error al eliminar categoría: ${error.message}` }
   }
 }

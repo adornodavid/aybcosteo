@@ -2,143 +2,137 @@
 
 import type React from "react"
 
-import { useState, useRef } from "react"
+import { useState, useCallback, useRef, useEffect } from "react"
+import { UploadCloud, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { ImageIcon, X, Upload } from "lucide-react"
-import { supabase } from "@/lib/supabase"
-import { v4 as uuidv4 } from "uuid"
-import { useToast } from "@/components/ui/use-toast"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { toast } from "sonner"
 
 interface ImageUploadProps {
-  value?: string
-  onChange: (url: string) => void
-  onRemove: () => void
+  label?: string
+  value?: string | null // URL de la imagen existente
+  onChange: (file: File | null) => void
+  onRemove?: () => void
+  maxSizeMB?: number
+  maxWidth?: number
+  maxHeight?: number
+  disabled?: boolean
 }
 
-export function ImageUpload({ value, onChange, onRemove }: ImageUploadProps) {
-  const [loading, setLoading] = useState(false)
+const DEFAULT_MAX_SIZE_MB = 10
+const DEFAULT_MAX_DIMENSION = 500
+
+export function ImageUpload({
+  label = "Cargar Imagen",
+  value, // La URL pública de la imagen ya subida
+  onChange,
+  onRemove,
+  maxSizeMB = DEFAULT_MAX_SIZE_MB,
+  maxWidth = DEFAULT_MAX_DIMENSION,
+  maxHeight = DEFAULT_MAX_DIMENSION,
+  disabled = false,
+}: ImageUploadProps) {
+  const [previewUrl, setPreviewUrl] = useState<string | null>(value || null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const { toast } = useToast()
+  const currentFileRef = useRef<File | null>(null) // Para mantener el archivo seleccionado
 
-  const handleClick = () => {
-    if (fileInputRef.current) {
-      fileInputRef.current.click()
-    }
-  }
+  // Actualizar previewUrl si el valor externo cambia (ej. al cargar un platillo existente)
+  useEffect(() => {
+    setPreviewUrl(value || null)
+  }, [value])
 
-  const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-
-    // Validar tipo de archivo
-    if (!file.type.startsWith("image/")) {
-      toast({
-        title: "Tipo de archivo no válido",
-        description: "Por favor selecciona una imagen (JPG, PNG, etc.)",
-        variant: "destructive",
-      })
-      return
-    }
-
-    // Validar tamaño (máximo 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      toast({
-        title: "Archivo demasiado grande",
-        description: "La imagen no debe superar los 5MB",
-        variant: "destructive",
-      })
-      return
-    }
-
-    setLoading(true)
-
-    try {
-      // Generar nombre único para el archivo
-      const fileExt = file.name.split(".").pop()
-      const fileName = `${uuidv4()}.${fileExt}`
-      const filePath = `imagenes/${fileName}`
-
-      // Subir archivo a Supabase Storage
-      const { error: uploadError } = await supabase.storage.from("filescosteo").upload(filePath, file)
-
-      if (uploadError) throw uploadError
-
-      // Obtener URL pública
-      const { data } = supabase.storage.from("filescosteo").getPublicUrl(filePath)
-
-      // Llamar al callback con la URL
-      onChange(data.publicUrl)
-
-      toast({
-        title: "Imagen subida",
-        description: "La imagen se ha subido correctamente",
-      })
-    } catch (error: any) {
-      console.error("Error uploading image:", error)
-      toast({
-        title: "Error al subir la imagen",
-        description: error.message || "Ocurrió un error al subir la imagen",
-        variant: "destructive",
-      })
-    } finally {
-      setLoading(false)
-      // Limpiar input para permitir subir el mismo archivo nuevamente
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ""
+  const handleFileChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0]
+      if (!file) {
+        currentFileRef.current = null
+        setPreviewUrl(null)
+        onChange(null)
+        return
       }
+
+      if (file.type !== "image/jpeg") {
+        toast.error("Formato no válido. Solo se permiten imágenes .jpg")
+        currentFileRef.current = null
+        setPreviewUrl(null)
+        onChange(null)
+        return
+      }
+
+      if (file.size > maxSizeMB * 1024 * 1024) {
+        toast.error(`La imagen es muy pesada. El máximo es ${maxSizeMB}MB.`)
+        currentFileRef.current = null
+        setPreviewUrl(null)
+        onChange(null)
+        return
+      }
+
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        const img = new Image()
+        img.onload = () => {
+          if (img.width > maxWidth || img.height > maxHeight) {
+            toast.error(`La resolución es muy alta. Máximo ${maxWidth}x${maxHeight}px.`)
+            currentFileRef.current = null
+            setPreviewUrl(null)
+            onChange(null)
+          } else {
+            currentFileRef.current = file
+            setPreviewUrl(event.target?.result as string)
+            onChange(file) // Notificar al componente padre sobre el nuevo archivo
+            toast.success("Imagen cargada con éxito.")
+          }
+        }
+        img.src = event.target?.result as string
+      }
+      reader.readAsDataURL(file)
+    },
+    [onChange, maxSizeMB, maxWidth, maxHeight],
+  )
+
+  const handleRemoveImage = useCallback(() => {
+    currentFileRef.current = null
+    setPreviewUrl(null)
+    onChange(null) // Notificar al padre que no hay archivo
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "" // Limpiar el input de tipo file
     }
-  }
+    if (onRemove) {
+      onRemove() // Llamar a la función de eliminación si se proporciona
+    }
+    toast.info("Imagen eliminada.")
+  }, [onChange, onRemove])
 
   return (
-    <div className="space-y-4">
-      <input
-        type="file"
-        ref={fileInputRef}
-        onChange={handleUpload}
-        accept="image/*"
-        className="hidden"
-        disabled={loading}
-      />
-
-      {value ? (
-        <div className="relative aspect-video bg-muted rounded-md overflow-hidden">
-          <img src={value || "/placeholder.svg"} alt="Imagen del platillo" className="w-full h-full object-cover" />
-          <Button
-            variant="destructive"
-            size="icon"
-            className="absolute top-2 right-2"
-            onClick={onRemove}
-            disabled={loading}
-          >
+    <div className="space-y-2">
+      <Label htmlFor="image-upload-input">{label}</Label>
+      <div className="flex h-64 w-full items-center justify-center rounded-md border-2 border-dashed">
+        {previewUrl ? (
+          <img src={previewUrl || "/placeholder.svg"} alt="Vista previa" className="h-full w-full object-contain" />
+        ) : (
+          <div className="text-center">
+            <UploadCloud className="mx-auto h-12 w-12 text-gray-400" />
+            <p>Arrastra o selecciona una imagen</p>
+          </div>
+        )}
+      </div>
+      <div className="flex items-center gap-2">
+        <Input
+          id="image-upload-input"
+          type="file"
+          accept="image/jpeg"
+          onChange={handleFileChange}
+          className="flex-1"
+          ref={fileInputRef}
+          disabled={disabled}
+        />
+        {previewUrl && (
+          <Button type="button" variant="outline" size="icon" onClick={handleRemoveImage} disabled={disabled}>
             <X className="h-4 w-4" />
           </Button>
-        </div>
-      ) : (
-        <div
-          onClick={handleClick}
-          className="border-2 border-dashed border-muted-foreground/25 rounded-md aspect-video flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-muted-foreground/40 transition"
-        >
-          {loading ? (
-            <div className="flex flex-col items-center gap-2">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
-              <p className="text-sm text-muted-foreground">Subiendo imagen...</p>
-            </div>
-          ) : (
-            <>
-              <ImageIcon className="h-10 w-10 text-muted-foreground/50" />
-              <p className="text-sm text-muted-foreground">Haz clic para subir una imagen</p>
-              <p className="text-xs text-muted-foreground/70">JPG, PNG (máx. 5MB)</p>
-            </>
-          )}
-        </div>
-      )}
-
-      {!value && (
-        <Button type="button" variant="outline" onClick={handleClick} disabled={loading} className="w-full">
-          <Upload className="h-4 w-4 mr-2" />
-          {loading ? "Subiendo..." : "Subir Imagen"}
-        </Button>
-      )}
+        )}
+      </div>
     </div>
   )
 }

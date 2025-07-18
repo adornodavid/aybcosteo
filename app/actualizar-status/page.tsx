@@ -1,77 +1,56 @@
 "use client"
 
+import type React from "react"
+
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { supabase } from "@/lib/supabase"
-import { useToast } from "@/components/ui/use-toast"
-import { ArrowLeft, RefreshCw } from "lucide-react"
-import Link from "next/link"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { useToast } from "@/hooks/use-toast"
+import { Loader2 } from "lucide-react"
 
 export default function ActualizarStatusPage() {
+  const [tableName, setTableName] = useState("")
+  const [recordId, setRecordId] = useState("")
+  const [status, setStatus] = useState("true")
   const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<{
-    success: boolean
-    message: string
-    count?: number
-    error?: string
-  } | null>(null)
   const { toast } = useToast()
 
-  const actualizarStatus = async () => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
     try {
-      setLoading(true)
-      setResult(null)
+      const response = await fetch("/api/update-status", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          tableName,
+          recordId: Number.parseInt(recordId),
+          status: status === "true",
+        }),
+      })
 
-      // Verificar cuántos ingredientes hay con status inactivo
-      const { count: inactiveCount, error: countError } = await supabase
-        .from("ingredientes")
-        .select("*", { count: "exact", head: true })
-        .eq("status", "inactivo")
+      const result = await response.json()
 
-      if (countError) {
-        throw new Error(`Error al contar ingredientes inactivos: ${countError.message}`)
-      }
-
-      if (inactiveCount === 0) {
-        setResult({
-          success: true,
-          message: "No hay ingredientes con status 'inactivo' que actualizar.",
-          count: 0,
+      if (result.success) {
+        toast({
+          title: "Éxito",
+          description: `Estado actualizado para ${tableName} ID ${recordId}.`,
         })
-        return
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "No se pudo actualizar el estado.",
+          variant: "destructive",
+        })
       }
-
-      // Actualizar todos los ingredientes con status inactivo a activo
-      const { error: updateError } = await supabase
-        .from("ingredientes")
-        .update({ status: "activo" })
-        .eq("status", "inactivo")
-
-      if (updateError) {
-        throw new Error(`Error al actualizar ingredientes: ${updateError.message}`)
-      }
-
-      setResult({
-        success: true,
-        message: "Status de ingredientes actualizado correctamente",
-        count: inactiveCount,
-      })
-
-      toast({
-        title: "Actualización exitosa",
-        description: `Se actualizaron ${inactiveCount} ingredientes a status 'activo'`,
-      })
-    } catch (error: any) {
-      console.error("Error:", error)
-      setResult({
-        success: false,
-        message: "Error al actualizar status de ingredientes",
-        error: error.message,
-      })
+    } catch (error) {
+      console.error("Error updating status:", error)
       toast({
         title: "Error",
-        description: error.message || "Ocurrió un error al actualizar los ingredientes",
+        description: "Ocurrió un error inesperado.",
         variant: "destructive",
       })
     } finally {
@@ -80,62 +59,49 @@ export default function ActualizarStatusPage() {
   }
 
   return (
-    <div className="container py-6 space-y-6">
-      <div className="flex items-center gap-2">
-        <Button variant="outline" size="icon" asChild>
-          <Link href="/">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-        </Button>
-        <h1 className="text-2xl font-bold">Actualizar Status de Ingredientes</h1>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Actualizar todos los ingredientes a status "activo"</CardTitle>
-          <CardDescription>
-            Esta herramienta actualizará todos los ingredientes con status "inactivo" a "activo" para que puedan ser
-            utilizados en los platillos.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="mb-4">
-            Si has importado ingredientes pero no puedes verlos al crear platillos, es posible que tengan el status
-            "inactivo". Esta herramienta los actualizará a "activo".
-          </p>
-
-          {result && (
-            <div
-              className={`p-4 rounded-md mb-4 ${
-                result.success ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"
-              }`}
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-4">
+      <div className="w-full max-w-md bg-white p-8 rounded-lg shadow-md">
+        <h1 className="text-2xl font-bold mb-6 text-center">Actualizar Estado de Registro</h1>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <Label htmlFor="tableName">Nombre de la Tabla</Label>
+            <Input
+              id="tableName"
+              type="text"
+              value={tableName}
+              onChange={(e) => setTableName(e.target.value)}
+              placeholder="Ej: ingredientes, platillos, etc."
+              required
+            />
+          </div>
+          <div>
+            <Label htmlFor="recordId">ID del Registro</Label>
+            <Input
+              id="recordId"
+              type="number"
+              value={recordId}
+              onChange={(e) => setRecordId(e.target.value)}
+              placeholder="Ej: 1, 2, 3"
+              required
+            />
+          </div>
+          <div>
+            <Label htmlFor="status">Estado</Label>
+            <select
+              id="status"
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              className="block w-full p-2 border border-gray-300 rounded-md"
             >
-              <h3 className={`font-medium mb-2 ${result.success ? "text-green-800" : "text-red-800"}`}>
-                {result.success ? "Operación exitosa" : "Error"}
-              </h3>
-              <p className={result.success ? "text-green-700" : "text-red-700"}>{result.message}</p>
-              {result.count !== undefined && (
-                <p className="mt-1 text-sm text-green-700">
-                  Se actualizaron {result.count} ingredientes a status "activo".
-                </p>
-              )}
-              {result.error && <p className="mt-1 text-sm text-red-700">Error: {result.error}</p>}
-            </div>
-          )}
-        </CardContent>
-        <CardFooter>
-          <Button onClick={actualizarStatus} disabled={loading}>
-            {loading ? (
-              <>
-                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                Actualizando...
-              </>
-            ) : (
-              "Actualizar Status de Ingredientes"
-            )}
+              <option value="true">Activo</option>
+              <option value="false">Inactivo</option>
+            </select>
+          </div>
+          <Button type="submit" className="w-full" disabled={loading}>
+            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Actualizar Estado"}
           </Button>
-        </CardFooter>
-      </Card>
+        </form>
+      </div>
     </div>
   )
 }

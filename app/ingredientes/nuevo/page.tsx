@@ -1,263 +1,180 @@
 "use client"
 
-import type React from "react"
-
-import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useEffect, useState } from "react"
+import { useFormState } from "react-dom"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, Save, Loader2 } from "lucide-react"
-import { crearIngrediente, obtenerCategorias } from "@/app/actions/ingredientes-actions" // ✅ CORREGIDO
-import { obtenerHoteles } from "@/app/actions/hoteles-actions"
-import { useToast } from "@/hooks/use-toast" // ✅ CORREGIDO - usar hook local
-import Link from "next/link"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { useToast } from "@/hooks/use-toast"
+import { Loader2 } from "lucide-react"
+import { crearIngrediente } from "@/app/actions/ingredientes-actions-correcto"
+import { createClient } from "@/lib/supabase" // Import the correct client for server-side fetching
 
-interface Hotel {
-  id: string
+interface Categoria {
+  id: number
   nombre: string
 }
 
-interface Categoria {
-  id: string
+interface UnidadMedida {
+  id: number
   nombre: string
+}
+
+const initialState = {
+  success: false,
+  message: "",
+  error: "",
 }
 
 export default function NuevoIngredientePage() {
-  const router = useRouter()
-  const { toast } = useToast()
-  const [loading, setLoading] = useState(false)
-  const [loadingData, setLoadingData] = useState(true)
-  const [hoteles, setHoteles] = useState<Hotel[]>([])
   const [categorias, setCategorias] = useState<Categoria[]>([])
-
-  const [formData, setFormData] = useState({
-    clave: "",
-    restaurante_id: "",
-    descripcion: "",
-    categoria_id: "",
-    status: "activo",
-    tipo: "",
-    unidad_medida: "",
-    cantidad_por_presentacion: "1.0",
-    conversion: "",
-    precio_inicial: "",
-  })
+  const [unidadesMedida, setUnidadesMedida] = useState<UnidadMedida[]>([])
+  const [loadingDropdowns, setLoadingDropdowns] = useState(true)
+  const [state, formAction] = useFormState(crearIngrediente, initialState)
+  const { toast } = useToast()
 
   useEffect(() => {
-    fetchData()
-  }, [])
+    const fetchDropdownData = async () => {
+      setLoadingDropdowns(true)
+      const supabase = createClient() // Use the correct client for server-side fetching
 
-  const fetchData = async () => {
-    try {
-      setLoadingData(true)
+      const { data: categoriasData, error: categoriasError } = await supabase
+        .from("categorias")
+        .select("*")
+        .eq("activo", true)
+        .order("nombre")
 
-      // Obtener hoteles/restaurantes
-      const hotelesResult = await obtenerHoteles()
-      if (hotelesResult.success && hotelesResult.data) {
-        const hotelesFormateados = hotelesResult.data.map((hotel: any) => ({
-          id: hotel.id || hotel.Id || hotel.ID,
-          nombre: hotel.nombre || hotel.Nombre || hotel.name || "Sin nombre",
-        }))
-        setHoteles(hotelesFormateados)
-      } else {
-        setHoteles([])
-      }
-
-      // Obtener categorías
-      const categoriasResult = await obtenerCategorias()
-      if (categoriasResult.success && categoriasResult.data) {
-        const categoriasFormateadas = categoriasResult.data.map((categoria: any) => ({
-          id: categoria.id || categoria.Id || categoria.ID,
-          nombre: categoria.nombre || categoria.Nombre || categoria.name || "Sin nombre",
-        }))
-        setCategorias(categoriasFormateadas)
-      } else {
-        setCategorias([])
-      }
-    } catch (error) {
-      console.error("Error fetching data:", error)
-      toast({
-        title: "Error",
-        description: "No se pudieron cargar los datos necesarios",
-        variant: "destructive",
-      })
-    } finally {
-      setLoadingData(false)
-    }
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-
-    if (!formData.clave || !formData.descripcion || !formData.restaurante_id) {
-      toast({
-        title: "Error",
-        description: "Por favor completa los campos obligatorios",
-        variant: "destructive",
-      })
-      return
-    }
-
-    setLoading(true)
-
-    try {
-      const ingredienteData = {
-        clave: formData.clave,
-        descripcion: formData.descripcion,
-        categoria_id: formData.categoria_id || null,
-        status: formData.status,
-        tipo: formData.tipo || null,
-        unidad_medida: formData.unidad_medida || null,
-        cantidad_por_presentacion: Number.parseFloat(formData.cantidad_por_presentacion) || 1.0,
-        conversion: formData.conversion || null,
-        restaurante_id: formData.restaurante_id,
-        precio_inicial: Number.parseFloat(formData.precio_inicial) || 0,
-      }
-
-      const result = await crearIngrediente(ingredienteData)
-
-      if (result.success) {
-        toast({
-          title: "Ingrediente creado",
-          description: `El ingrediente ${formData.descripcion} ha sido creado correctamente`,
-        })
-        router.push("/ingredientes")
-      } else {
+      if (categoriasError) {
+        console.error("Error fetching categorias:", categoriasError)
         toast({
           title: "Error",
-          description: result.error || "No se pudo crear el ingrediente",
+          description: "No se pudieron cargar las categorías.",
           variant: "destructive",
         })
+      } else {
+        setCategorias(categoriasData || [])
       }
-    } catch (error) {
-      console.error("Error creating ingrediente:", error)
+
+      const { data: unidadesData, error: unidadesError } = await supabase
+        .from("unidades_medida")
+        .select("*")
+        .eq("activo", true)
+        .order("nombre")
+
+      if (unidadesError) {
+        console.error("Error fetching unidades de medida:", unidadesError)
+        toast({
+          title: "Error",
+          description: "No se pudieron cargar las unidades de medida.",
+          variant: "destructive",
+        })
+      } else {
+        setUnidadesMedida(unidadesData || [])
+      }
+
+      setLoadingDropdowns(false)
+    }
+
+    fetchDropdownData()
+  }, [toast])
+
+  useEffect(() => {
+    if (state.success) {
+      toast({
+        title: "¡Registro exitoso!",
+        description: state.message,
+      })
+    } else if (state.error) {
       toast({
         title: "Error",
-        description: "Ocurrió un error al crear el ingrediente",
+        description: state.error,
         variant: "destructive",
       })
-    } finally {
-      setLoading(false)
     }
-  }
+  }, [state, toast])
 
-  const handleInputChange = (field: string, value: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      [field]: value,
-    }))
-  }
-
-  if (loadingData) {
+  if (loadingDropdowns) {
     return (
-      <div className="container py-6 space-y-6">
-        <div className="flex justify-center items-center h-64">
-          <div className="flex flex-col items-center gap-2">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="text-muted-foreground">Cargando formulario...</p>
-          </div>
-        </div>
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        <span className="ml-2 text-lg text-muted-foreground">Cargando opciones...</span>
       </div>
     )
   }
 
   return (
-    <div className="container py-6 space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="outline" size="sm" asChild>
-          <Link href="/ingredientes">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Volver
-          </Link>
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold">Nuevo Ingrediente</h1>
-          <p className="text-muted-foreground">Registra un nuevo ingrediente en el sistema</p>
-        </div>
-      </div>
-
-      <form onSubmit={handleSubmit}>
-        <div className="grid gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-2 space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Información Básica</CardTitle>
-                <CardDescription>Datos principales del ingrediente</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="clave">Código del Ingrediente *</Label>
-                    <Input
-                      id="clave"
-                      value={formData.clave}
-                      onChange={(e) => handleInputChange("clave", e.target.value)}
-                      placeholder="Ej: ING001"
-                      required
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="restaurante">Restaurante *</Label>
-                    <Select
-                      value={formData.restaurante_id}
-                      onValueChange={(value) => handleInputChange("restaurante_id", value)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar restaurante" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {hoteles.length === 0 ? (
-                          <SelectItem value="no-data" disabled>
-                            No hay restaurantes disponibles
-                          </SelectItem>
-                        ) : (
-                          hoteles.map((hotel) => (
-                            <SelectItem key={hotel.id} value={hotel.id}>
-                              {hotel.nombre}
-                            </SelectItem>
-                          ))
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="descripcion">Nombre del Ingrediente *</Label>
-                  <Input
-                    id="descripcion"
-                    value={formData.descripcion}
-                    onChange={(e) => handleInputChange("descripcion", e.target.value)}
-                    placeholder="Ej: Tomate Roma"
-                    required
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Acciones</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <Button type="submit" className="w-full" disabled={loading || hoteles.length === 0}>
-                  <Save className="h-4 w-4 mr-2" />
-                  {loading ? "Guardando..." : "Crear Ingrediente"}
-                </Button>
-                <Button type="button" variant="outline" className="w-full" asChild>
-                  <Link href="/ingredientes">Cancelar</Link>
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </form>
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-4">
+      <Card className="w-full max-w-md">
+        <CardHeader>
+          <CardTitle className="text-2xl font-bold text-center">Nuevo Ingrediente</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form action={formAction} className="space-y-4">
+            <div>
+              <Label htmlFor="clave">Clave</Label>
+              <Input id="clave" name="clave" type="text" placeholder="Ej: AZUCAR001" required />
+            </div>
+            <div>
+              <Label htmlFor="descripcion">Descripción</Label>
+              <Input id="descripcion" name="descripcion" type="text" placeholder="Ej: Azúcar Estándar" required />
+            </div>
+            <div>
+              <Label htmlFor="categoria_id">Categoría</Label>
+              <select
+                id="categoria_id"
+                name="categoria_id"
+                className="block w-full p-2 border border-gray-300 rounded-md"
+                required
+              >
+                <option value="">Selecciona una categoría</option>
+                {categorias.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label htmlFor="tipo">Tipo</Label>
+              <Input id="tipo" name="tipo" type="text" placeholder="Ej: Seco" />
+            </div>
+            <div>
+              <Label htmlFor="unidad_medida_id">Unidad de Medida</Label>
+              <select
+                id="unidad_medida_id"
+                name="unidad_medida_id"
+                className="block w-full p-2 border border-gray-300 rounded-md"
+                required
+              >
+                <option value="">Selecciona una unidad</option>
+                {unidadesMedida.map((um) => (
+                  <option key={um.id} value={um.id}>
+                    {um.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label htmlFor="cantidad_por_presentacion">Cantidad por Presentación</Label>
+              <Input
+                id="cantidad_por_presentacion"
+                name="cantidad_por_presentacion"
+                type="number"
+                step="0.01"
+                placeholder="Ej: 1000 (gramos)"
+              />
+            </div>
+            <div>
+              <Label htmlFor="conversion">Conversión</Label>
+              <Input id="conversion" name="conversion" type="number" step="0.01" placeholder="Ej: 1 (para kg a gr)" />
+            </div>
+            <Button type="submit" className="w-full" disabled={state.success}>
+              {state.success ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Crear Ingrediente"}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   )
 }

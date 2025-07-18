@@ -1,97 +1,106 @@
 "use client"
 
-import { ChevronRight, type LucideIcon } from "lucide-react"
-import { useState } from "react"
 import Link from "next/link"
+import { usePathname } from "next/navigation"
+import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
+import { ChevronDown } from "lucide-react"
+import type React from "react"
+import { useState } from "react"
 
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import {
-  SidebarGroup,
-  SidebarGroupLabel,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarMenuSub,
-  SidebarMenuSubButton,
-  SidebarMenuSubItem,
-} from "@/components/ui/sidebar"
+interface NavLink {
+  title: string
+  label?: string
+  icon: React.ElementType
+  variant: "default" | "ghost"
+  href: string
+  submenu?: NavLink[]
+}
 
-export function NavMain({
-  items,
-}: {
-  items: {
-    title: string
-    url: string
-    icon?: LucideIcon
-    isActive?: boolean
-    items?: {
-      title: string
-      url: string
-      icon?: LucideIcon
-    }[]
-  }[]
-}) {
-  const [openItems, setOpenItems] = useState<string[]>([])
+interface NavMainProps {
+  links: NavLink[]
+  isCollapsed: boolean
+}
 
-  const toggleItem = (title: string) => {
-    setOpenItems((prev) => (prev.includes(title) ? prev.filter((item) => item !== title) : [...prev, title]))
+export function NavMain({ links, isCollapsed }: NavMainProps) {
+  const pathname = usePathname()
+  const [openGroups, setOpenGroups] = useState<string[]>([])
+
+  const toggleGroup = (title: string) => {
+    setOpenGroups((prev) => (prev.includes(title) ? prev.filter((group) => group !== title) : [...prev, title]))
   }
 
   return (
-    <SidebarGroup>
-      <SidebarGroupLabel>Navegación Principal</SidebarGroupLabel>
-      <SidebarMenu>
-        {items.map((item) => {
-          // Si el item no tiene subitems, es un enlace directo
-          if (!item.items || item.items.length === 0) {
-            return (
-              <SidebarMenuItem key={item.title}>
-                <SidebarMenuButton asChild tooltip={item.title} isActive={item.isActive}>
-                  <Link href={item.url}>
-                    {item.icon && <item.icon />}
-                    <span>{item.title}</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            )
-          }
-
-          // Si tiene subitems, es un menú desplegable
-          return (
-            <Collapsible
-              key={item.title}
-              asChild
-              open={openItems.includes(item.title)}
-              onOpenChange={() => toggleItem(item.title)}
-              className="group/collapsible"
+    <div className="grid gap-1 px-2 group-[[data-collapsed=true]]:justify-center group-[[data-collapsed=true]]:px-2">
+      {links.map((link, index) =>
+        link.submenu ? (
+          <div key={index} className="relative">
+            <Button
+              variant={pathname.startsWith(link.href) ? "default" : "ghost"}
+              className={cn(
+                "w-full justify-start",
+                isCollapsed && "h-9 w-9",
+                pathname.startsWith(link.href) && "bg-primary text-primary-foreground",
+              )}
+              onClick={() => toggleGroup(link.title)}
             >
-              <SidebarMenuItem>
-                <CollapsibleTrigger asChild>
-                  <SidebarMenuButton tooltip={item.title} className="w-full">
-                    {item.icon && <item.icon />}
-                    <span>{item.title}</span>
-                    <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
-                  </SidebarMenuButton>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <SidebarMenuSub>
-                    {item.items.map((subItem) => (
-                      <SidebarMenuSubItem key={subItem.title}>
-                        <SidebarMenuSubButton asChild>
-                          <Link href={subItem.url} className="flex items-center gap-2">
-                            {subItem.icon && <subItem.icon className="h-4 w-4" />}
-                            <span>{subItem.title}</span>
-                          </Link>
-                        </SidebarMenuSubButton>
-                      </SidebarMenuSubItem>
-                    ))}
-                  </SidebarMenuSub>
-                </CollapsibleContent>
-              </SidebarMenuItem>
-            </Collapsible>
-          )
-        })}
-      </SidebarMenu>
-    </SidebarGroup>
+              <link.icon className={cn("h-5 w-5", !isCollapsed && "mr-3")} />
+              {!isCollapsed && (
+                <>
+                  {link.title}
+                  <ChevronDown
+                    className={cn(
+                      "ml-auto h-4 w-4 transition-transform",
+                      openGroups.includes(link.title) && "rotate-180",
+                    )}
+                  />
+                </>
+              )}
+            </Button>
+            {!isCollapsed && openGroups.includes(link.title) && (
+              <div className="ml-4 mt-1 grid gap-1">
+                {link.submenu.map((subLink, subIndex) => (
+                  <Link key={subIndex} href={subLink.href}>
+                    <Button
+                      variant={pathname === subLink.href ? "default" : "ghost"}
+                      className={cn(
+                        "w-full justify-start",
+                        pathname === subLink.href && "bg-accent text-accent-foreground",
+                      )}
+                    >
+                      <subLink.icon className="mr-3 h-5 w-5" />
+                      {subLink.title}
+                    </Button>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <Link key={index} href={link.href}>
+            <Button
+              variant={pathname === link.href ? "default" : "ghost"}
+              className={cn(
+                "w-full justify-start",
+                isCollapsed && "h-9 w-9",
+                pathname === link.href && "bg-primary text-primary-foreground",
+              )}
+            >
+              <link.icon className={cn("h-5 w-5", !isCollapsed && "mr-3")} />
+              {!isCollapsed && (
+                <>
+                  {link.title}
+                  {link.label && (
+                    <span className={cn("ml-auto", pathname === link.href && "text-background dark:text-white")}>
+                      {link.label}
+                    </span>
+                  )}
+                </>
+              )}
+            </Button>
+          </Link>
+        ),
+      )}
+    </div>
   )
 }

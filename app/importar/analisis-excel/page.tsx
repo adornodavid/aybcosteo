@@ -1,9 +1,12 @@
 "use client"
 
+import type React from "react"
+
+import { CardDescription } from "@/components/ui/card"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { FileSpreadsheet, CheckCircle, AlertCircle, Database, Eye, Loader2 } from "lucide-react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { FileSpreadsheet, CheckCircle, AlertCircle, Database, Eye, Loader2, XCircle, Download } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { useToast } from "@/components/ui/use-toast"
 import { Progress } from "@/components/ui/progress"
@@ -12,6 +15,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
 
 interface AnalisisResultado {
   totalFilas: number
@@ -25,6 +29,7 @@ interface AnalisisResultado {
 }
 
 export default function AnalisisExcelPage() {
+  const [file, setFile] = useState<File | null>(null)
   const [loading, setLoading] = useState(false)
   const [analizando, setAnalizando] = useState(false)
   const [importando, setImportando] = useState(false)
@@ -48,12 +53,66 @@ export default function AnalisisExcelPage() {
   // ID del restaurante Montana iStay
   const MONTANA_ISTAY_ID = "eb492bec-f87a-4bda-917f-4e8109ec914c"
 
-  // URL del archivo Excel
-  const EXCEL_URL =
-    "https://tjbnbfcowjkfnqifspcu.supabase.co/storage/v1/object/sign/filescosteo/Costo%20Montana%20istay.xlsx?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9hNWQxZGI4OS04MGU2LTQ0MDAtYWYwMS1mZTNjMGUwZWM2ZmMiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJmaWxlc2Nvc3Rlby9Db3N0byBNb250YW5hIGlzdGF5Lnhsc3giLCJpYXQiOjE3NDg5NzIwNTUsImV4cCI6MTc4MDUwODA1NX0.2z71BG-LqWKrKUjZTYAqDKDzkhAEGg80FNmBnsJAmqA"
-
   const addLog = (message: string) => {
     setLogs((prev) => [...prev, `${new Date().toLocaleTimeString()}: ${message}`])
+  }
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files && event.target.files[0]) {
+      setFile(event.target.files[0])
+    } else {
+      setFile(null)
+    }
+  }
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!file) {
+      toast({
+        title: "Error",
+        description: "Por favor, selecciona un archivo Excel para analizar.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setLoading(true)
+    setResultado(null)
+
+    const formData = new FormData()
+    formData.append("file", file)
+
+    try {
+      const response = await fetch("/api/analyze-excel", {
+        method: "POST",
+        body: formData,
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        setResultado(result.data)
+        toast({
+          title: "Análisis exitoso",
+          description: "El archivo Excel ha sido analizado correctamente.",
+        })
+      } else {
+        toast({
+          title: "Error en el análisis",
+          description: result.error || "Ocurrió un error al analizar el archivo Excel.",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error analyzing Excel file:", error)
+      toast({
+        title: "Error de conexión",
+        description: "No se pudo conectar con el servidor para analizar el archivo.",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
   }
 
   const analizarExcel = async () => {
@@ -63,7 +122,9 @@ export default function AnalisisExcelPage() {
       setProgress(10)
       addLog("Descargando archivo Excel...")
 
-      const response = await fetch(EXCEL_URL)
+      const response = await fetch(
+        "https://tjbnbfcowjkfnqifspcu.supabase.co/storage/v1/object/sign/filescosteo/Costo%20Montana%20istay.xlsx?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9hNWQxZGI4OS04MGU2LTQ0MDAtYWYwMS1mZTNjMGUwZWM2ZmMiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJmaWxlc2Nvc3Rlby9Db3N0byBNb250YW5hIGlzdGF5Lnhsc3giLCJpYXQiOjE3NDg5NzIwNTUsImV4cCI6MTc4MDUwODA1NX0.2z71BG-LqWKrKUjZTYAqDKDzkhAEGg80FNmBnsJAmqA",
+      )
       if (!response.ok) {
         throw new Error(`Error al descargar: ${response.status}`)
       }
@@ -154,7 +215,9 @@ export default function AnalisisExcelPage() {
       addLog("Iniciando importación de datos...")
 
       // Descargar nuevamente el archivo para procesarlo
-      const response = await fetch(EXCEL_URL)
+      const response = await fetch(
+        "https://tjbnbfcowjkfnqifspcu.supabase.co/storage/v1/object/sign/filescosteo/Costo%20Montana%20istay.xlsx?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9hNWQxZGI4OS04MGU2LTQ0MDAtYWYwMS1mZTNjMGUwZWM2ZmMiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJmaWxlc2Nvc3Rlby9Db3N0byBNb250YW5hIGlzdGF5Lnhsc3giLCJpYXQiOjE3NDg5NzIwNTUsImV4cCI6MTc4MDUwODA1NX0.2z71BG-LqWKrKUjZTYAqDKDzkhAEGg80FNmBnsJAmqA",
+      )
       if (!response.ok) {
         throw new Error(`Error al descargar: ${response.status}`)
       }
@@ -385,6 +448,41 @@ export default function AnalisisExcelPage() {
     }
   }
 
+  const analysisResults = [
+    {
+      row: 2,
+      status: "Éxito",
+      message: "Ingrediente 'Tomate' procesado correctamente.",
+    },
+    {
+      row: 3,
+      status: "Error",
+      message: "Falta la 'Cantidad por Presentación' para 'Cebolla'.",
+    },
+    {
+      row: 4,
+      status: "Advertencia",
+      message: "Categoría 'Vegetales' no encontrada, se asignó a 'General'.",
+    },
+    {
+      row: 5,
+      status: "Éxito",
+      message: "Ingrediente 'Pollo' procesado correctamente.",
+    },
+    {
+      row: 6,
+      status: "Error",
+      message: "Clave duplicada para 'Harina'.",
+    },
+  ]
+
+  const summary = {
+    totalRows: 5,
+    success: 2,
+    errors: 2,
+    warnings: 1,
+  }
+
   return (
     <div className="container py-6">
       <h1 className="text-3xl font-bold mb-6">Análisis e Importación de Excel - Montana iStay</h1>
@@ -407,6 +505,25 @@ export default function AnalisisExcelPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  <form onSubmit={handleSubmit} className="space-y-4">
+                    <div>
+                      <label htmlFor="excelFile" className="block text-sm font-medium text-gray-700">
+                        Seleccionar archivo Excel (.xlsx)
+                      </label>
+                      <Input id="excelFile" type="file" accept=".xlsx" onChange={handleFileChange} required />
+                    </div>
+                    <Button type="submit" className="w-full" disabled={loading || !file}>
+                      {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Analizar Excel"}
+                    </Button>
+                  </form>
+
+                  {resultado && (
+                    <div className="mt-6 p-4 bg-gray-50 rounded-md border border-gray-200 overflow-auto max-h-96">
+                      <h2 className="text-lg font-semibold mb-2">Resultados del Análisis:</h2>
+                      <pre className="whitespace-pre-wrap text-sm">{JSON.stringify(resultado, null, 2)}</pre>
+                    </div>
+                  )}
+
                   <div className="flex flex-wrap gap-2">
                     <Button onClick={analizarExcel} disabled={loading} variant="outline">
                       {analizando ? (
@@ -623,6 +740,46 @@ export default function AnalisisExcelPage() {
                   </AlertDescription>
                 </Alert>
               )}
+
+              {/* Detalle de Resultados */}
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <CardTitle>Detalle de Resultados</CardTitle>
+                  <Button variant="outline" size="sm">
+                    <Download className="mr-2 h-4 w-4" />
+                    Descargar Reporte
+                  </Button>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Fila</TableHead>
+                          <TableHead>Estatus</TableHead>
+                          <TableHead>Mensaje</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {analysisResults.map((result, index) => (
+                          <TableRow key={index}>
+                            <TableCell>{result.row}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                {result.status === "Éxito" && <CheckCircle className="h-4 w-4 text-green-500" />}
+                                {result.status === "Error" && <XCircle className="h-4 w-4 text-red-500" />}
+                                {result.status === "Advertencia" && <span className="text-yellow-500">⚠️</span>}
+                                {result.status}
+                              </div>
+                            </TableCell>
+                            <TableCell>{result.message}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
 
             {/* Panel lateral */}

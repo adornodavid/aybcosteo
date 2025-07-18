@@ -1,81 +1,63 @@
-import { createClient } from "@supabase/supabase-js"
+import { createClientComponentClient, createServerComponentClient } from "@supabase/auth-helpers-nextjs"
+import { cookies } from "next/headers"
+import type { Database } from "@/lib/types-sistema-costeo" // Asegúrate de que esta ruta sea correcta
+
+// Define the database schema types
+export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
+
+export type PublicSchema = Database[Extract<keyof Database, "public">]
+
+export type Tables<PublicTableNameOrOptions extends keyof PublicSchema["Tables"] | { schema: keyof Database }> =
+  PublicTableNameOrOptions extends { schema: keyof Database }
+    ? Database[PublicTableNameOrOptions["schema"]]["Tables"][Extract<
+        keyof Database[PublicTableNameOrOptions["schema"]]["Tables"],
+        string
+      >]
+    : PublicTableNameOrOptions extends keyof PublicSchema["Tables"]
+      ? PublicSchema["Tables"][PublicTableNameOrOptions]
+      : never
+
+export type TablesInsert<PublicTableNameOrOptions extends keyof PublicSchema["Tables"] | { schema: keyof Database }> =
+  PublicTableNameOrOptions extends { schema: keyof Database }
+    ? Database[PublicTableNameOrOptions["schema"]]["Tables"][Extract<
+        keyof Database[PublicTableNameOrOptions["schema"]]["Tables"],
+        string
+      >]["Insert"]
+    : PublicTableNameOrOptions extends keyof PublicSchema["Tables"]
+      ? PublicSchema["Tables"][PublicTableNameOrOptions]["Insert"]
+      : never
+
+export type TablesUpdate<PublicTableNameOrOptions extends keyof PublicSchema["Tables"] | { schema: keyof Database }> =
+  PublicTableNameOrOptions extends { schema: keyof Database }
+    ? Database[PublicTableNameOrOptions["schema"]]["Tables"][Extract<
+        keyof Database[PublicTableNameOrOptions["schema"]]["Tables"],
+        string
+      >]["Update"]
+    : PublicTableNameOrOptions extends keyof PublicSchema["Tables"]
+      ? PublicSchema["Tables"][PublicTableNameOrOptions]["Update"]
+      : never
+
+export type Enums<PublicEnumNameOrOptions extends keyof PublicSchema["Enums"] | { schema: keyof Database }> =
+  PublicEnumNameOrOptions extends { schema: keyof Database }
+    ? Database[PublicEnumNameOrOptions["schema"]]["Enums"][Extract<
+        keyof Database[PublicEnumNameOrOptions["schema"]]["Enums"],
+        string
+      >]
+    : PublicEnumNameOrOptions extends keyof PublicSchema["Enums"]
+      ? PublicSchema["Enums"][PublicEnumNameOrOptions]
+      : never
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-// Cliente para uso en el navegador
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// Client-side Supabase client
+export const createClient = () => createClientComponentClient<Database>()
 
-// Cliente para server actions
-export const createServerClient = () => {
-  return createClient(supabaseUrl, supabaseAnonKey)
-}
+// Server-side Supabase client wrapper
+export const createServerSupabaseClientWrapper = () => createServerComponentClient<Database>({ cookies })
 
-// SOLO LAS 17 TABLAS REALES DE TU BD
-export interface CategoriaIngrediente {
-  id: number
-  descripcion?: string
-}
+// Instancia principal de Supabase (para uso en cliente si es necesario, aunque se prefiere createClient)
+export const supabase = createClient()
 
-export interface Hotel {
-  id: number
-  acronimo?: string
-  nombre?: string
-  direccion?: string
-  activo?: boolean
-  fechacreacion?: string
-}
-
-export interface TipoUnidadMedida {
-  id: number
-  descripcion?: string
-  activo?: boolean
-  fechacreacion?: string
-}
-
-export interface Ingrediente {
-  id: number
-  codigo?: string
-  nombre?: string
-  categoriaid?: number
-  costo?: number
-  unidadmedidaid?: number
-  hotelid?: number
-  imgurl?: string
-  cambio?: number
-  activo?: boolean
-  fechacreacion?: string
-  fechamodificacion?: string
-  categoria?: CategoriaIngrediente
-  hotel?: Hotel
-  unidadmedida?: TipoUnidadMedida
-}
-
-export interface Restaurante {
-  id: number
-  hotelid?: number
-  nombre?: string
-  descripcion?: string
-  activo?: boolean
-  fechacreacion?: string
-  hotel?: Hotel
-}
-
-export interface Platillo {
-  id: number
-  nombre?: string
-  descripcion?: string
-  instruccionespreparacion?: string
-  tiempopreparacion?: string
-  costototal?: number
-  imgurl?: string
-  activo?: boolean
-  fechacreacion?: string
-}
-
-export const formatCurrency = (amount: number): string => {
-  return new Intl.NumberFormat("es-MX", {
-    style: "currency",
-    currency: "MXN",
-  }).format(amount)
-}
+// Exportación por defecto
+export default supabase

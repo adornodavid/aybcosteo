@@ -1,169 +1,122 @@
 "use client"
 
+import { useState, useEffect } from "react"
+import { useFormState } from "react-dom"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { ArrowLeft, AlertCircle, Store, CheckCircle } from "lucide-react"
-import Link from "next/link"
-import { crearRestaurante } from "@/app/actions/restaurantes-actions" // ✅ CORREGIDO
-import { useFormState } from "react-dom"
-import { useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
-import { supabase } from "@/lib/supabase"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { useToast } from "@/hooks/use-toast"
+import { Loader2 } from "lucide-react"
+import { crearRestaurante } from "@/app/actions/restaurantes-actions"
+import { createClient } from "@/lib/supabase" // Import the correct client for server-side fetching
 
-interface Hotel {
-  id: string
+interface HotelOption {
+  id: number
   nombre: string
 }
 
+const initialState = {
+  success: false,
+  message: "",
+  error: "",
+}
+
 export default function NuevoRestaurantePage() {
-  const [state, formAction] = useFormState(crearRestaurante, { success: false, error: null }) // ✅ Solo 2 parámetros
-  const [hoteles, setHoteles] = useState<Hotel[]>([])
-  const [hotelSeleccionado, setHotelSeleccionado] = useState<string>("")
-  const [loadingHoteles, setLoadingHoteles] = useState(true)
-  const router = useRouter()
+  const [state, formAction] = useFormState(crearRestaurante, initialState)
+  const { toast } = useToast()
+  const [hotels, setHotels] = useState<HotelOption[]>([])
+  const [loadingHotels, setLoadingHotels] = useState(true)
 
-  // Cargar hoteles disponibles desde Supabase
   useEffect(() => {
-    async function cargarHoteles() {
-      try {
-        setLoadingHoteles(true)
-        const { data, error } = await supabase.from("hoteles").select("id, nombre").eq("activo", true).order("nombre")
+    const fetchHotels = async () => {
+      setLoadingHotels(true)
+      const supabase = createClient() // Use the correct client for server-side fetching
+      const { data, error } = await supabase.from("hoteles").select("id, nombre").eq("activo", true).order("nombre")
 
-        if (error) {
-          console.error("Error cargando hoteles:", error)
-          setHoteles([])
-        } else {
-          setHoteles(data || [])
-        }
-      } catch (error) {
-        console.error("Error:", error)
-        setHoteles([])
-      } finally {
-        setLoadingHoteles(false)
+      if (error) {
+        console.error("Error fetching hotels:", error)
+        toast({
+          title: "Error",
+          description: "No se pudieron cargar los hoteles.",
+          variant: "destructive",
+        })
+      } else {
+        setHotels(data || [])
       }
+      setLoadingHotels(false)
     }
+    fetchHotels()
+  }, [toast])
 
-    cargarHoteles()
-  }, [])
-
-  // Manejar redirección cuando sea exitoso
   useEffect(() => {
-    if (state?.success) {
-      const timer = setTimeout(() => {
-        router.push("/restaurantes")
-      }, 1500)
-      return () => clearTimeout(timer)
+    if (state.success) {
+      toast({
+        title: "¡Registro exitoso!",
+        description: state.message,
+      })
+    } else if (state.error) {
+      toast({
+        title: "Error",
+        description: state.error,
+        variant: "destructive",
+      })
     }
-  }, [state?.success, router])
+  }, [state, toast])
+
+  if (loadingHotels) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        <span className="ml-2 text-lg text-muted-foreground">Cargando hoteles...</span>
+      </div>
+    )
+  }
 
   return (
-    <div className="container mx-auto p-6">
-      <div className="flex items-center gap-4 mb-6">
-        <Button variant="outline" size="icon" asChild>
-          <Link href="/restaurantes">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold">Crear Nuevo Restaurante</h1>
-          <p className="text-muted-foreground">Agrega un restaurante a tu hotel o como independiente</p>
-        </div>
-      </div>
-
-      <Card className="max-w-2xl">
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-4">
+      <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Store className="h-5 w-5" />
-            Información del Restaurante
-          </CardTitle>
-          <CardDescription>
-            Los restaurantes pueden estar asignados a un hotel específico o ser independientes.
-          </CardDescription>
+          <CardTitle className="text-2xl font-bold text-center">Nuevo Restaurante</CardTitle>
         </CardHeader>
         <CardContent>
-          {state?.error && (
-            <Alert variant="destructive" className="mb-6">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{state.error}</AlertDescription>
-            </Alert>
-          )}
-
-          {state?.success && (
-            <Alert className="mb-6 border-green-200 bg-green-50">
-              <CheckCircle className="h-4 w-4 text-green-600" />
-              <AlertDescription className="text-green-800">
-                {state.message || "Restaurante creado exitosamente"}. Redirigiendo...
-              </AlertDescription>
-            </Alert>
-          )}
-
-          <form action={formAction} className="space-y-6">
-            {/* Campo oculto para hotel_id */}
-            <input type="hidden" name="hotel_id" value={hotelSeleccionado} />
-
-            <div className="space-y-2">
-              <Label htmlFor="hotel">Hotel *</Label>
-              <Select
-                value={hotelSeleccionado}
-                onValueChange={setHotelSeleccionado}
-                disabled={state?.success || loadingHoteles}
+          <form action={formAction} className="space-y-4">
+            <div>
+              <Label htmlFor="nombre">Nombre del Restaurante</Label>
+              <Input id="nombre" name="nombre" type="text" placeholder="Ej: El Fogón" required />
+            </div>
+            <div>
+              <Label htmlFor="hotel_id">Hotel Asociado</Label>
+              <select
+                id="hotel_id"
+                name="hotel_id"
+                className="block w-full p-2 border border-gray-300 rounded-md"
+                defaultValue=""
               >
-                <SelectTrigger>
-                  <SelectValue
-                    placeholder={
-                      loadingHoteles ? "Cargando hoteles..." : "Selecciona un hotel o N/A para independiente"
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="N/A">N/A - Restaurante Independiente</SelectItem>
-                  {hoteles.map((hotel) => (
-                    <SelectItem key={hotel.id} value={hotel.id}>
-                      {hotel.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                <option value="">Selecciona un hotel</option>
+                {hotels.map((hotel) => (
+                  <option key={hotel.id} value={hotel.id}>
+                    {hotel.nombre}
+                  </option>
+                ))}
+                <option value="N/A">N/A (Sin hotel asignado)</option>
+              </select>
             </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="nombre">Nombre del Restaurante *</Label>
-              <Input
-                id="nombre"
-                name="nombre"
-                placeholder="Ej: Restaurante La Terraza, Café Central, etc."
-                required
-                minLength={2}
-                maxLength={100}
-                disabled={state?.success}
-              />
+            <div>
+              <Label htmlFor="direccion">Dirección</Label>
+              <Input id="direccion" name="direccion" type="text" placeholder="Ej: Calle Falsa 123" />
             </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="descripcion">Descripción</Label>
-              <Textarea
-                id="descripcion"
-                name="descripcion"
-                placeholder="Ej: Restaurante de cocina internacional con vista panorámica..."
-                rows={3}
-                maxLength={500}
-                disabled={state?.success}
-              />
+            <div>
+              <Label htmlFor="telefono">Teléfono</Label>
+              <Input id="telefono" name="telefono" type="text" placeholder="Ej: 5512345678" />
             </div>
-
-            <div className="flex gap-4 pt-4">
-              <Button type="submit" className="flex-1" disabled={state?.success || !hotelSeleccionado}>
-                {state?.success ? "Restaurante Creado ✓" : "Crear Restaurante"}
-              </Button>
-              <Button type="button" variant="outline" asChild>
-                <Link href="/restaurantes">Cancelar</Link>
-              </Button>
+            <div>
+              <Label htmlFor="email">Email</Label>
+              <Input id="email" name="email" type="email" placeholder="Ej: info@elfogon.com" />
             </div>
+            <Button type="submit" className="w-full" disabled={state.success}>
+              {state.success ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Crear Restaurante"}
+            </Button>
           </form>
         </CardContent>
       </Card>

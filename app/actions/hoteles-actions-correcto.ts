@@ -1,91 +1,46 @@
 "use server"
 
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@/lib/supabase"
 import { revalidatePath } from "next/cache"
-import type { Hotel, CrearHotelData } from "@/lib/types-sistema-costeo"
+import { cookies } from "next/headers"
+
+const getSupabaseClient = () => {
+  return createClient(cookies())
+}
 
 export async function obtenerHoteles() {
+  const supabase = getSupabaseClient()
   try {
-    const { data, error } = await supabase.from("hoteles").select("*").order("nombre")
+    const { data, error } = await supabase.from("hoteles").select("id, nombre").order("nombre", { ascending: true })
 
-    if (error) throw error
-    return { success: true, data: data as Hotel[] }
-  } catch (error: any) {
-    console.error("Error obteniendo hoteles:", error)
-    return { success: false, error: error.message }
-  }
-}
-
-export async function obtenerHotelPorId(id: number) {
-  try {
-    const { data, error } = await supabase.from("hoteles").select("*").eq("id", id).single()
-
-    if (error) throw error
-    return { success: true, data: data as Hotel }
-  } catch (error: any) {
-    console.error("Error obteniendo hotel:", error)
-    return { success: false, error: error.message }
-  }
-}
-
-export async function crearHotel(hotelData: CrearHotelData) {
-  try {
-    const { data, error } = await supabase.from("hoteles").insert([hotelData]).select().single()
-
-    if (error) throw error
-
-    revalidatePath("/hoteles")
-    return { success: true, data: data as Hotel }
-  } catch (error: any) {
-    console.error("Error creando hotel:", error)
-    return { success: false, error: error.message }
-  }
-}
-
-export async function actualizarHotel(id: number, hotelData: Partial<CrearHotelData>) {
-  try {
-    const updateData = {
-      ...hotelData,
-      fechaactualizacion: new Date().toISOString().split("T")[0],
+    if (error) {
+      console.error("Error fetching hoteles:", error.message)
+      return { data: null, error }
     }
-
-    const { data, error } = await supabase.from("hoteles").update(updateData).eq("id", id).select().single()
-
-    if (error) throw error
-
-    revalidatePath("/hoteles")
-    return { success: true, data: data as Hotel }
-  } catch (error: any) {
-    console.error("Error actualizando hotel:", error)
-    return { success: false, error: error.message }
+    return { data, error: null }
+  } catch (e: any) {
+    console.error("Exception fetching hoteles:", e)
+    return { data: null, error: { message: e.message || "An unexpected error occurred" } }
   }
 }
 
-export async function eliminarHotel(id: number) {
+export async function crearHotel(nombre: string) {
+  const supabase = getSupabaseClient()
   try {
-    // Verificar si tiene restaurantes asociados
-    const { count, error: countError } = await supabase
-      .from("restaurantes")
-      .select("*", { count: "exact", head: true })
-      .eq("hotel_id", id)
+    const { data, error } = await supabase
+      .from("hoteles")
+      .insert({ nombre: nombre, fechacreacion: new Date().toISOString() })
+      .select()
+      .single()
 
-    if (countError) throw countError
-
-    if (count && count > 0) {
-      return {
-        success: false,
-        error: `No se puede eliminar el hotel porque tiene ${count} restaurante(s) asociado(s)`,
-      }
+    if (error) {
+      console.error("Error creating hotel:", error.message)
+      return { success: false, error }
     }
-
-    const { error } = await supabase.from("hoteles").delete().eq("id", id)
-
-    if (error) throw error
-
     revalidatePath("/hoteles")
-    return { success: true }
-  } catch (error: any) {
-    console.error("Error eliminando hotel:", error)
-    return { success: false, error: error.message }
+    return { success: true, data, error: null }
+  } catch (e: any) {
+    console.error("Exception creating hotel:", e)
+    return { success: false, error: { message: e.message || "An unexpected error occurred" } }
   }
 }

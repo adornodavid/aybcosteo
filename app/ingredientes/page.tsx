@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import Image from "next/image" // Importar Image de next/image
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -226,15 +227,29 @@ export default function IngredientesPage() {
   }
 
   const estadisticas = calcularEstadisticas()
-
+  
   if (loading) {
     return (
-      <div className="flex justify-center items-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <span className="ml-2">Cargando página...</span>
+      <div className="flex justify-center items-center min-h-screen" >
+      <div className="flex flex-col items-center justify-center">
+         <div className="relative w-24 h-24 mb-4">
+            <Image
+              src="https://nxtrsibnomdqmzcrwedc.supabase.co/storage/v1/object/public/imagenes/AnimationGif/CargarPage.gif"
+              alt="Procesando..."
+              width={300} // Ajusta el tamaño según sea necesario
+              height={300} // Ajusta el tamaño según sea necesario
+              unoptimized // Importante para GIFs externos
+              className="absolute inset-0 animate-bounce-slow"
+            />
+            </div>
+        
+            <span className="text-lg font-semibold text-gray-800">Cargando página...</span>
+            </div>
       </div>
     )
   }
+  
+  
 
   if (error) {
     return (
@@ -251,7 +266,7 @@ export default function IngredientesPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
       {/* 1. Título */}
       <div className="flex justify-between items-center">
         <div>
@@ -377,7 +392,7 @@ export default function IngredientesPage() {
             </div>
 
             <div className="space-y-2">
-              <Button variant="outline" onClick={handleBtnLimpiar} className="w-full">
+              <Button variant="outline" onClick={handleBtnLimpiar} className="w-full bg-transparent">
                 Limpiar Filtros
               </Button>
             </div>
@@ -509,41 +524,31 @@ export default function IngredientesPage() {
                     Mostrando {(currentPage - 1) * itemsPerPage + 1} a{" "}
                     {Math.min(currentPage * itemsPerPage, totalCount)} de {totalCount} ingredientes
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => ejecutarBusqueda(currentPage - 1)}
-                      disabled={currentPage <= 1 || searching}
-                    >
-                      Anterior
-                    </Button>
-                    <div className="flex items-center space-x-1">
-                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                        const pageNum = Math.max(1, currentPage - 2) + i
-                        if (pageNum > totalPages) return null
-                        return (
-                          <Button
-                            key={pageNum}
-                            variant={pageNum === currentPage ? "default" : "outline"}
-                            size="sm"
-                            onClick={() => ejecutarBusqueda(pageNum)}
-                            disabled={searching}
-                          >
-                            {pageNum}
-                          </Button>
-                        )
-                      })}
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => ejecutarBusqueda(currentPage + 1)}
-                      disabled={currentPage >= totalPages || searching}
-                    >
-                      Siguiente
-                    </Button>
+                  <div className="flex items-center space-x-1">
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      const pageNum = Math.max(1, currentPage - 2) + i
+                      if (pageNum > totalPages) return null
+                      return (
+                        <Button
+                          key={pageNum}
+                          variant={pageNum === currentPage ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => ejecutarBusqueda(pageNum)}
+                          disabled={searching}
+                        >
+                          {pageNum}
+                        </Button>
+                      )
+                    })}
                   </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => ejecutarBusqueda(currentPage + 1)}
+                    disabled={currentPage >= totalPages || searching}
+                  >
+                    Siguiente
+                  </Button>
                 </div>
               )}
             </>

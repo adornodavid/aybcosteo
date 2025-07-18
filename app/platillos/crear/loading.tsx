@@ -1,15 +1,10 @@
-import { Skeleton } from "@/components/ui/skeleton"
+import { Loader2 } from "lucide-react"
 
 export default function Loading() {
   return (
-    <div className="container py-6 space-y-6">
-      <Skeleton className="h-8 w-64" />
-      <div className="space-y-4">
-        <Skeleton className="h-12 w-full" />
-        <Skeleton className="h-12 w-full" />
-        <Skeleton className="h-32 w-full" />
-        <Skeleton className="h-12 w-full" />
-      </div>
+    <div className="flex items-center justify-center min-h-screen">
+      <Loader2 className="h-10 w-10 animate-spin text-primary" />
+      <span className="ml-2 text-lg text-muted-foreground">Cargando formulario de creación de platillo...</span>
     </div>
   )
 }

@@ -260,7 +260,7 @@ CREATE TRIGGER trigger_actualizar_costo_platillo
 -- DATOS INICIALES
 -- =============================================
 
--- Categorías básicas
+-- Categorías b��sicas
 INSERT INTO categorias (nombre, descripcion) VALUES
 ('Aceites y Grasas', 'Aceites vegetales, mantequilla, margarina, etc.'),
 ('Harinas y Cereales', 'Harina de trigo, arroz, avena, quinoa, etc.'),

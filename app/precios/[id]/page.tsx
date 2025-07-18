@@ -1,170 +1,158 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { useParams, useRouter } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { supabase, type PrecioUnitario, type IngredienteRestaurante } from "@/lib/supabase"
+import { useEffect, useState } from "react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { format } from "date-fns"
-import { es } from "date-fns/locale"
-import { ArrowLeft } from "lucide-react"
-import { PrecioForm } from "@/components/precios/precio-form"
-import { Skeleton } from "@/components/ui/skeleton"
-import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Loader2, Plus, Pencil } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
+import Link from "next/link"
+import { createClient } from "@/lib/supabase" // Import the correct client for server-side fetching
 
-export default function PreciosIngredientePage() {
-  const params = useParams()
-  const router = useRouter()
-  const [ingrediente, setIngrediente] = useState<IngredienteRestaurante | null>(null)
+interface PrecioUnitario {
+  id: number
+  precio: number
+  fecha_inicio: string
+  fecha_fin: string | null
+  activo: boolean
+}
+
+interface Ingrediente {
+  id: number
+  descripcion: string
+  clave: string
+  unidad_medida_id: number
+  unidades_medida: { nombre: string } | null
+}
+
+export default function PreciosIngredientePage({ params }: { params: { id: string } }) {
+  const ingredienteId = Number(params.id)
+  const [ingrediente, setIngrediente] = useState<Ingrediente | null>(null)
   const [precios, setPrecios] = useState<PrecioUnitario[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { toast } = useToast()
 
   useEffect(() => {
-    if (params.id) {
-      fetchIngrediente(params.id as string)
-      fetchPrecios(params.id as string)
-    }
-  }, [params.id])
+    const fetchPrecios = async () => {
+      setLoading(true)
+      const supabase = createClient() // Use the correct client for server-side fetching
 
-  const fetchIngrediente = async (id: string) => {
-    try {
-      const { data, error } = await supabase
-        .from("ingredientes_restaurante")
-        .select(`
-        *,
-        categoria:categorias(*)
-      `)
-        .eq("id", id)
+      const { data: ingredienteData, error: ingredienteError } = await supabase
+        .from("ingredientes")
+        .select(`*, unidades_medida(nombre)`)
+        .eq("id", ingredienteId)
         .single()
 
-      if (error) throw error
-      setIngrediente(data)
-    } catch (error: any) {
-      console.error("Error fetching ingrediente:", error)
-      setError(error.message || "No se pudo cargar el ingrediente")
-    }
-  }
+      if (ingredienteError) {
+        console.error("Error fetching ingrediente:", ingredienteError)
+        toast({
+          title: "Error",
+          description: "No se pudo cargar la información del ingrediente.",
+          variant: "destructive",
+        })
+        setLoading(false)
+        return
+      }
+      setIngrediente(ingredienteData)
 
-  const fetchPrecios = async (id: string) => {
-    try {
-      setLoading(true)
-      const { data, error } = await supabase
+      const { data: preciosData, error: preciosError } = await supabase
         .from("precios_unitarios")
-        .select(`
-        *,
-        ingrediente:ingredientes_restaurante(*)
-      `)
-        .eq("ingrediente_id", id)
+        .select("*")
+        .eq("ingrediente_id", ingredienteId)
         .order("fecha_inicio", { ascending: false })
 
-      if (error) throw error
-      setPrecios(data || [])
-    } catch (error: any) {
-      console.error("Error fetching precios:", error)
-      setError(error.message || "No se pudieron cargar los precios")
-    } finally {
+      if (preciosError) {
+        console.error("Error fetching precios:", preciosError)
+        toast({
+          title: "Error",
+          description: "No se pudieron cargar los precios unitarios.",
+          variant: "destructive",
+        })
+      } else {
+        setPrecios(preciosData || [])
+      }
       setLoading(false)
     }
-  }
 
-  const handlePrecioAdded = () => {
-    if (params.id) {
-      fetchPrecios(params.id as string)
-    }
-  }
+    fetchPrecios()
+  }, [ingredienteId, toast])
 
   if (loading) {
     return (
-      <div className="p-6 space-y-6">
-        <Skeleton className="h-8 w-64" />
-        <Skeleton className="h-4 w-32" />
-        <div className="space-y-4">
-          <Skeleton className="h-64 w-full" />
-        </div>
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        <span className="ml-2 text-lg text-muted-foreground">Cargando precios...</span>
       </div>
     )
   }
 
-  if (error || !ingrediente) {
+  if (!ingrediente) {
     return (
-      <div className="p-6">
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-          <p>{error || "No se encontró el ingrediente"}</p>
-        </div>
+      <div className="flex items-center justify-center min-h-screen">
+        <p className="text-lg text-destructive">Ingrediente no encontrado.</p>
       </div>
     )
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center gap-2">
-        <Button variant="outline" size="icon" onClick={() => router.back()}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
+    <div className="flex flex-col gap-6 p-4 md:p-6">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Precios de Ingrediente</h1>
-          <p className="text-muted-foreground">
-            Gestiona los precios históricos de <strong>{ingrediente.descripcion}</strong>
+          <h1 className="text-3xl font-bold">Precios Unitarios de {ingrediente.descripcion}</h1>
+          <p className="text-lg text-muted-foreground">Clave: {ingrediente.clave}</p>
+          <p className="text-lg text-muted-foreground">
+            Unidad de Medida: {ingrediente.unidades_medida?.nombre || "N/A"}
           </p>
         </div>
+        <Link href={`/precios/nuevo?ingredienteId=${ingredienteId}`}>
+          <Button>
+            <Plus className="mr-2 h-4 w-4" />
+            Nuevo Precio
+          </Button>
+        </Link>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="md:col-span-1">
-          <PrecioForm ingrediente={ingrediente} onSuccess={handlePrecioAdded} />
-        </div>
-
-        <div className="md:col-span-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Historial de Precios</CardTitle>
-              <CardDescription>Precios históricos del ingrediente</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Precio</TableHead>
-                    <TableHead>Fecha Inicio</TableHead>
-                    <TableHead>Fecha Fin</TableHead>
-                    <TableHead>Estado</TableHead>
+      <Card>
+        <CardHeader>
+          <CardTitle>Historial de Precios</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {precios.length === 0 ? (
+            <p className="text-muted-foreground">No hay precios registrados para este ingrediente.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Precio</TableHead>
+                  <TableHead>Fecha Inicio</TableHead>
+                  <TableHead>Fecha Fin</TableHead>
+                  <TableHead>Activo</TableHead>
+                  <TableHead className="text-center">Acciones</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {precios.map((precio) => (
+                  <TableRow key={precio.id}>
+                    <TableCell>${precio.precio.toFixed(2)}</TableCell>
+                    <TableCell>{new Date(precio.fecha_inicio).toLocaleDateString()}</TableCell>
+                    <TableCell>
+                      {precio.fecha_fin ? new Date(precio.fecha_fin).toLocaleDateString() : "Actual"}
+                    </TableCell>
+                    <TableCell>{precio.activo ? "Sí" : "No"}</TableCell>
+                    <TableCell className="text-center">
+                      {/* Add edit functionality if needed */}
+                      <Button variant="ghost" size="icon" title="Editar precio">
+                        <Pencil className="h-4 w-4" />
+                        <span className="sr-only">Editar precio {precio.id}</span>
+                      </Button>
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {precios.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
-                        No hay precios registrados para este ingrediente
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    precios.map((precio) => (
-                      <TableRow key={precio.id}>
-                        <TableCell className="font-medium">
-                          ${Number.parseFloat(precio.precio.toString()).toFixed(2)}
-                        </TableCell>
-                        <TableCell>{format(new Date(precio.fecha_inicio), "PPP", { locale: es })}</TableCell>
-                        <TableCell>
-                          {precio.fecha_fin ? format(new Date(precio.fecha_fin), "PPP", { locale: es }) : "Vigente"}
-                        </TableCell>
-                        <TableCell>
-                          {!precio.fecha_fin ? (
-                            <Badge variant="default">Actual</Badge>
-                          ) : (
-                            <Badge variant="secondary">Histórico</Badge>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }

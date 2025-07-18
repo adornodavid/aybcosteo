@@ -1,12 +1,16 @@
 "use server"
 
-import { createServerClient } from "@/lib/supabase"
+import { createClient } from "@supabase/supabase-js"
 import { revalidatePath } from "next/cache"
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+
+const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
 
 export async function obtenerIngredientes(hotelId?: number) {
   try {
-    const supabase = createServerClient()
-    let query = supabase
+    let query = supabaseAdmin // Usando supabaseAdmin
       .from("ingredientes")
       .select(`
         *,
@@ -37,8 +41,7 @@ export async function obtenerIngredientes(hotelId?: number) {
 
 export async function obtenerIngredientePorId(id: number) {
   try {
-    const supabase = createServerClient()
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin // Usando supabaseAdmin
       .from("ingredientes")
       .select(`
         *,
@@ -59,8 +62,7 @@ export async function obtenerIngredientePorId(id: number) {
 
 export async function crearIngrediente(ingredienteData: any) {
   try {
-    const supabase = createServerClient()
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin // Usando supabaseAdmin
       .from("ingredientes")
       .insert([
         {
@@ -91,8 +93,7 @@ export async function crearIngrediente(ingredienteData: any) {
 
 export async function actualizarIngrediente(id: number, ingredienteData: any) {
   try {
-    const supabase = createServerClient()
-    const { error } = await supabase
+    const { error } = await supabaseAdmin // Usando supabaseAdmin
       .from("ingredientes")
       .update({
         codigo: ingredienteData.codigo,
@@ -118,8 +119,7 @@ export async function actualizarIngrediente(id: number, ingredienteData: any) {
 
 export async function eliminarIngrediente(id: number) {
   try {
-    const supabase = createServerClient()
-    const { error } = await supabase
+    const { error } = await supabaseAdmin // Usando supabaseAdmin
       .from("ingredientes")
       .update({
         activo: false,
@@ -139,8 +139,10 @@ export async function eliminarIngrediente(id: number) {
 
 export async function obtenerCategorias() {
   try {
-    const supabase = createServerClient()
-    const { data, error } = await supabase.from("categoriaingredientes").select("*").order("descripcion")
+    const { data, error } = await supabaseAdmin // Usando supabaseAdmin
+      .from("categoriaingredientes")
+      .select("*")
+      .order("descripcion")
 
     if (error) {
       console.error("Error obteniendo categorías:", error)
@@ -156,15 +158,13 @@ export async function obtenerCategorias() {
 
 export async function obtenerHoteles() {
   try {
-    const supabase = createServerClient()
-
     // Verificar que las variables de entorno estén disponibles
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
       console.error("Variables de entorno de Supabase no configuradas")
       return { success: false, data: [], error: "Configuración de Supabase faltante" }
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin // Usando supabaseAdmin
       .from("hoteles")
       .select("id, nombre")
       .eq("activo", true)
@@ -184,8 +184,7 @@ export async function obtenerHoteles() {
 
 export async function obtenerCategoriasIngredientes() {
   try {
-    const supabase = createServerClient()
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin // Usando supabaseAdmin
       .from("categoriaingredientes")
       .select("id, descripcion")
       .order("id", { ascending: true })
@@ -211,12 +210,11 @@ export async function buscarIngredientes(filtros: {
   limit?: number
 }) {
   try {
-    const supabase = createServerClient()
     const { codigo, nombre, hotelId, categoriaId, page = 1, limit = 20 } = filtros
     const from = (page - 1) * limit
     const to = from + limit - 1
 
-    let query = supabase
+    let query = supabaseAdmin // Usando supabaseAdmin
       .from("ingredientes")
       .select(
         `

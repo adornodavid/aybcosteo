@@ -1,51 +1,43 @@
-import { createMiddlewareClient } from "@supabase/auth-helpers-nextjs"
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 
-// CONFIGURACIÓN: Cambiar a true para activar protección de rutas
-const ENABLE_AUTH_PROTECTION = false
-
-export async function middleware(req: NextRequest) {
-  const res = NextResponse.next()
-
-  // Si la protección está desactivada, permitir acceso a todas las rutas
-  if (!ENABLE_AUTH_PROTECTION) {
-    return res
-  }
-
-  const supabase = createMiddlewareClient({ req, res })
-
-  // Verificar sesión solo si la protección está activada
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
+export function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl
 
   // Rutas públicas que no requieren autenticación
-  const publicRoutes = ["/login", "/login/test"]
-  const isPublicRoute = publicRoutes.includes(req.nextUrl.pathname)
+  const publicRoutes = ["/login", "/logout", "/debug-session"]
 
-  // Si no hay sesión y no es ruta pública, redirigir a login
-  if (!session && !isPublicRoute) {
-    return NextResponse.redirect(new URL("/login", req.url))
+  // Si es una ruta pública, permitir acceso
+  if (publicRoutes.includes(pathname)) {
+    return NextResponse.next()
   }
 
-  // Si hay sesión y está en login, redirigir al dashboard
-  if (session && req.nextUrl.pathname === "/login") {
-    return NextResponse.redirect(new URL("/", req.url))
+  // Verificar si hay sesión activa
+  const sesionActiva = request.cookies.get("SesionActiva")?.value
+  const rolId = request.cookies.get("RolId")?.value
+
+  // Si no hay sesión activa o RolId no es válido, redirigir al login
+  if (sesionActiva !== "true" || !rolId || Number.parseInt(rolId) === 0) {
+    const redirectUrl = request.nextUrl.clone()
+    redirectUrl.pathname = "/login"
+    redirectUrl.searchParams.set("redirectedFrom", request.nextUrl.pathname)
+    return NextResponse.redirect(redirectUrl)
   }
 
-  return res
+  // Si hay sesión activa y RolId es válido, permitir acceso
+  return NextResponse.next()
 }
 
 export const config = {
   matcher: [
     /*
      * Match all request paths except for the ones starting with:
+     * - api (API routes)
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      * - public folder
      */
-    "/((?!_next/static|_next/image|favicon.ico|public/).*)",
+    "/((?!api|_next/static|_next/image|favicon.ico|public).*)",
   ],
 }

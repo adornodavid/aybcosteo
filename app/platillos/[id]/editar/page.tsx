@@ -1,68 +1,134 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { useParams } from "next/navigation"
-import { PlatilloForm } from "@/components/platillos/platillo-form"
-import { supabase, type Platillo } from "@/lib/supabase"
-import { Skeleton } from "@/components/ui/skeleton"
+import { useEffect, useState } from "react"
+import { useFormState } from "react-dom"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { useToast } from "@/hooks/use-toast"
+import { Loader2 } from "lucide-react"
+import { actualizarPlatillo } from "@/app/actions/platillos-actions"
+import { createClient } from "@/lib/supabase" // Import the correct client for server-side fetching
+import { ImageUpload } from "@/components/ui/image-upload"
 
-export default function EditarPlatilloPage() {
-  const params = useParams()
+interface Platillo {
+  id: number
+  nombre: string
+  descripcion: string | null
+  imagen_url: string | null
+  activo: boolean
+}
+
+const initialState = {
+  success: false,
+  message: "",
+  error: "",
+}
+
+export default function EditarPlatilloPage({ params }: { params: { id: string } }) {
+  const platilloId = Number(params.id)
   const [platillo, setPlatillo] = useState<Platillo | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [state, formAction] = useFormState(actualizarPlatillo.bind(null, platilloId), initialState)
+  const { toast } = useToast()
+  const [imageUrl, setImageUrl] = useState<string | null>(null)
 
   useEffect(() => {
-    if (params.id && params.id !== "nuevo") {
-      fetchPlatillo(params.id as string)
-    }
-  }, [params.id])
-
-  const fetchPlatillo = async (id: string) => {
-    try {
+    const fetchPlatilloData = async () => {
       setLoading(true)
-      const { data, error } = await supabase.from("platillos").select("*").eq("id", id).single()
+      const supabase = createClient() // Use the correct client for server-side fetching
+      const { data, error } = await supabase.from("platillos").select("*").eq("id", platilloId).single()
 
-      if (error) throw error
-      setPlatillo(data)
-    } catch (error: any) {
-      console.error("Error fetching platillo:", error)
-      setError(error.message || "No se pudo cargar el platillo")
-    } finally {
+      if (error) {
+        console.error("Error fetching platillo:", error)
+        toast({
+          title: "Error",
+          description: "No se pudo cargar la información del platillo.",
+          variant: "destructive",
+        })
+      } else {
+        setPlatillo(data)
+        setImageUrl(data.imagen_url)
+      }
       setLoading(false)
     }
+
+    fetchPlatilloData()
+  }, [platilloId, toast])
+
+  useEffect(() => {
+    if (state.success) {
+      toast({
+        title: "¡Actualización exitosa!",
+        description: state.message,
+      })
+    } else if (state.error) {
+      toast({
+        title: "Error",
+        description: state.error,
+        variant: "destructive",
+      })
+    }
+  }, [state, toast])
+
+  const handleImageChange = (url: string | null) => {
+    setImageUrl(url)
   }
 
   if (loading) {
     return (
-      <div className="p-6 space-y-6">
-        <Skeleton className="h-8 w-64" />
-        <Skeleton className="h-4 w-32" />
-        <div className="space-y-4">
-          <Skeleton className="h-64 w-full" />
-        </div>
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        <span className="ml-2 text-lg text-muted-foreground">Cargando platillo...</span>
       </div>
     )
   }
 
-  if (error || !platillo) {
+  if (!platillo) {
     return (
-      <div className="p-6">
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-          <p>{error || "No se encontró el platillo"}</p>
-        </div>
+      <div className="flex items-center justify-center min-h-screen">
+        <p className="text-lg text-destructive">Platillo no encontrado.</p>
       </div>
     )
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Editar Platillo</h1>
-        <p className="text-muted-foreground">Modifica la información del platillo</p>
-      </div>
-
-      <PlatilloForm platillo={platillo} />
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-4">
+      <Card className="w-full max-w-md">
+        <CardHeader>
+          <CardTitle className="text-2xl font-bold text-center">Editar Platillo</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form action={formAction} className="space-y-4">
+            <input type="hidden" name="imagen_url" value={imageUrl || ""} />
+            <div>
+              <Label htmlFor="nombre">Nombre del Platillo</Label>
+              <Input id="nombre" name="nombre" type="text" defaultValue={platillo.nombre} required />
+            </div>
+            <div>
+              <Label htmlFor="descripcion">Descripción</Label>
+              <Textarea id="descripcion" name="descripcion" defaultValue={platillo.descripcion || ""} rows={4} />
+            </div>
+            <div>
+              <Label htmlFor="imagen">Imagen del Platillo</Label>
+              <ImageUpload
+                id="imagen"
+                name="imagen"
+                initialImageUrl={platillo.imagen_url}
+                onImageChange={handleImageChange}
+                bucketFolder="platillos"
+                maxFileSizeMB={5} // Example: 5MB limit for platillo images
+                allowedFileTypes={["image/jpeg", "image/png"]} // Example: allow JPG and PNG
+              />
+            </div>
+            <Button type="submit" className="w-full" disabled={state.success}>
+              {state.success ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Actualizar Platillo"}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   )
 }

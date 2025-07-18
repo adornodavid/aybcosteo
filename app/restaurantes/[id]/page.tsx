@@ -1,137 +1,141 @@
-import { createServerComponentClient } from "@supabase/auth-helpers-nextjs"
-import { cookies } from "next/headers"
+"use client"
+
+import { useEffect, useState } from "react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Loader2, Pencil } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
-import { redirect } from "next/navigation"
+import { createClient } from "@/lib/supabase" // Import the correct client for server-side fetching
+import Image from "next/image"
+import { ImageIcon } from "@/components/ui/image-icon"
 
-interface Restaurant {
-  id: string
-  created_at: string
+interface Restaurante {
+  id: number
   nombre: string
-  direccion: string
-  telefono: string
-  descripcion: string
-  imagen_url: string
+  direccion: string | null
+  telefono: string | null
+  email: string | null
+  imagen_url: string | null
+  activo: boolean
+  hoteles: { nombre: string } | null
 }
 
-interface Menu {
-  id: string
-  created_at: string
-  nombre: string
-  descripcion: string
-  precio: number
-  imagen_url: string
-  restaurante_id: string
-}
+export default function RestauranteDetallePage({ params }: { params: { id: string } }) {
+  const restauranteId = Number(params.id)
+  const [restaurante, setRestaurante] = useState<Restaurante | null>(null)
+  const [loading, setLoading] = useState(true)
+  const { toast } = useToast()
 
-async function getRestaurant(id: string): Promise<Restaurant | null> {
-  // Verificar si el ID es "nuevo" o no es un UUID válido
-  if (id === "nuevo" || !isValidUUID(id)) {
-    return null
-  }
+  useEffect(() => {
+    const fetchRestaurante = async () => {
+      setLoading(true)
+      const supabase = createClient() // Use the correct client for server-side fetching
+      const { data, error } = await supabase
+        .from("restaurantes")
+        .select(`*, hoteles(nombre)`)
+        .eq("id", restauranteId)
+        .single()
 
-  const supabase = createServerComponentClient({ cookies })
+      if (error) {
+        console.error("Error fetching restaurante:", error)
+        toast({
+          title: "Error",
+          description: "No se pudo cargar la información del restaurante.",
+          variant: "destructive",
+        })
+      } else {
+        setRestaurante(data)
+      }
+      setLoading(false)
+    }
 
-  const { data: restaurant, error } = await supabase.from("restaurantes").select("*").eq("id", id).single()
+    fetchRestaurante()
+  }, [restauranteId, toast])
 
-  if (error) {
-    console.error("Error fetching restaurant:", error)
-    return null
-  }
-
-  return restaurant
-}
-
-// Función helper para validar UUID
-function isValidUUID(str: string): boolean {
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-  return uuidRegex.test(str)
-}
-
-async function getMenus(restaurantId: string): Promise<any[]> {
-  const supabase = createServerComponentClient({ cookies })
-
-  const { data: menusData, error: menusError } = await supabase
-    .from("restaurante_menus")
-    .select(`
-    *,
-    menus (
-      id,
-      nombre,
-      descripcion,
-      imagen_url
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        <span className="ml-2 text-lg text-muted-foreground">Cargando restaurante...</span>
+      </div>
     )
-  `)
-    .eq("restaurante_id", restaurantId)
-    .eq("activo", true)
-
-  if (menusError) {
-    console.error("Error fetching menus:", menusError)
-    return []
   }
 
-  return menusData || []
-}
-
-export default async function RestaurantPage({
-  params,
-}: {
-  params: { id: string }
-}) {
-  const restaurantId = params.id
-
-  // Si es "nuevo" o "crear", redirigir a la página de creación
-  if (restaurantId === "nuevo" || restaurantId === "crear") {
-    redirect("/restaurantes/crear")
-  }
-
-  const restaurant = await getRestaurant(restaurantId)
-
-  // Solo obtener menús si el restaurante existe y el ID es válido
-  const menusData = restaurant ? await getMenus(restaurantId) : []
-
-  if (!restaurant) {
-    return <div>Restaurant not found</div>
+  if (!restaurante) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <p className="text-lg text-destructive">Restaurante no encontrado.</p>
+      </div>
+    )
   }
 
   return (
-    <div className="container mx-auto p-4">
-      <Link href="/restaurantes" className="mb-4 inline-block">
-        &larr; Back to Restaurants
-      </Link>
-      <h1 className="text-2xl font-bold mb-2">{restaurant.nombre}</h1>
-      <p className="text-gray-700 mb-2">{restaurant.descripcion}</p>
-      <p className="text-gray-700 mb-2">Address: {restaurant.direccion}</p>
-      <p className="text-gray-700 mb-2">Phone: {restaurant.telefono}</p>
-      <img
-        src={restaurant.imagen_url || "/placeholder.svg"}
-        alt={restaurant.nombre}
-        className="mb-4 rounded-md"
-        style={{ maxWidth: "400px" }}
-      />
+    <div className="flex flex-col gap-6 p-4 md:p-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Detalle del Restaurante: {restaurante.nombre}</h1>
+          <p className="text-lg text-muted-foreground">Hotel: {restaurante.hoteles?.nombre || "N/A"}</p>
+        </div>
+        {/* Assuming there's an edit page for restaurants, similar to platillos */}
+        <Link href={`/restaurantes/${restaurante.id}/editar`}>
+          <Button>
+            <Pencil className="mr-2 h-4 w-4" />
+            Editar Restaurante
+          </Button>
+        </Link>
+      </div>
 
-      <h2 className="text-xl font-bold mb-2">Menus</h2>
-      {menusData && menusData.length > 0 ? (
-        <ul className="list-disc list-inside">
-          {menusData.map((restauranteMenu) => (
-            <li key={restauranteMenu.id} className="mb-2">
-              <Link href={`/menus/${restauranteMenu.menus?.id}`} className="hover:underline">
-                <h3 className="font-semibold">{restauranteMenu.menus?.nombre}</h3>
-              </Link>
-              <p className="text-gray-700">{restauranteMenu.menus?.descripcion}</p>
-              {restauranteMenu.menus?.imagen_url && (
-                <img
-                  src={restauranteMenu.menus.imagen_url || "/placeholder.svg"}
-                  alt={restauranteMenu.menus.nombre}
-                  className="mt-2 rounded-md"
-                  style={{ maxWidth: "200px" }}
-                />
-              )}
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p>No hay menús asignados a este restaurante.</p>
-      )}
+      <Card>
+        <CardHeader>
+          <CardTitle>Información General</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-2">
+          <div>
+            <p className="text-sm font-medium text-muted-foreground">Dirección</p>
+            <p className="text-lg">{restaurante.direccion || "N/A"}</p>
+          </div>
+          <div>
+            <p className="text-sm font-medium text-muted-foreground">Teléfono</p>
+            <p className="text-lg">{restaurante.telefono || "N/A"}</p>
+          </div>
+          <div>
+            <p className="text-sm font-medium text-muted-foreground">Email</p>
+            <p className="text-lg">{restaurante.email || "N/A"}</p>
+          </div>
+          <div>
+            <p className="text-sm font-medium text-muted-foreground">Estado</p>
+            <p className="text-lg">
+              <span
+                className={`px-2 py-1 rounded-full text-xs font-medium ${
+                  restaurante.activo ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                }`}
+              >
+                {restaurante.activo ? "Activo" : "Inactivo"}
+              </span>
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Imagen del Restaurante</CardTitle>
+        </CardHeader>
+        <CardContent className="flex justify-center">
+          {restaurante.imagen_url ? (
+            <Image
+              src={restaurante.imagen_url || "/placeholder.svg"}
+              alt={restaurante.nombre}
+              width={200}
+              height={200}
+              className="rounded-md object-cover"
+            />
+          ) : (
+            <ImageIcon className="h-32 w-32 text-muted-foreground" />
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }

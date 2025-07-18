@@ -1,96 +1,124 @@
 "use server"
 
-import { supabase } from "@/lib/supabase"
+import { createServerSupabaseClientWrapper } from "@/lib/supabase"
 import { revalidatePath } from "next/cache"
+import { cookies } from "next/headers"
 
-export async function asignarMenuARestaurante(restauranteId: string, menuId: string, activo = true) {
+export async function crearMenuRestaurante(prevState: any, formData: FormData) {
   try {
-    // Verificar si ya existe esta relación
-    const { data: existente, error: errorBusqueda } = await supabase
+    const nombre = formData.get("nombre") as string
+    const restaurante_id = formData.get("restaurante_id") as string
+    const platillo_id = formData.get("platillo_id") as string
+
+    if (!nombre || nombre.trim() === "") {
+      return { success: false, error: "El nombre del menú es requerido." }
+    }
+    if (!restaurante_id || restaurante_id.trim() === "") {
+      return { success: false, error: "El restaurante es requerido." }
+    }
+    if (!platillo_id || platillo_id.trim() === "") {
+      return { success: false, error: "El platillo es requerido." }
+    }
+
+    const supabase = createServerSupabaseClientWrapper(cookies())
+    const { data, error } = await supabase
       .from("menus_restaurantes")
-      .select("id")
-      .eq("restaurante_id", restauranteId)
-      .eq("menu_id", menuId)
-      .maybeSingle()
-
-    if (errorBusqueda) {
-      console.error("Error al verificar menú en restaurante:", errorBusqueda)
-      return { success: false, error: errorBusqueda.message }
-    }
-
-    // Si ya existe, actualizar
-    if (existente) {
-      const { error: errorActualizar } = await supabase
-        .from("menus_restaurantes")
-        .update({
-          activo: activo,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", existente.id)
-
-      if (errorActualizar) {
-        console.error("Error al actualizar menú en restaurante:", errorActualizar)
-        return { success: false, error: errorActualizar.message }
-      }
-    } else {
-      // Si no existe, insertar
-      const { error: errorInsertar } = await supabase.from("menus_restaurantes").insert({
-        restaurante_id: restauranteId,
-        menu_id: menuId,
-        activo: activo,
-        created_at: new Date().toISOString(),
+      .insert({
+        nombre: nombre.trim(),
+        restaurante_id: Number(restaurante_id),
+        platillo_id: Number(platillo_id),
+        activo: true,
       })
-
-      if (errorInsertar) {
-        console.error("Error al asignar menú a restaurante:", errorInsertar)
-        return { success: false, error: errorInsertar.message }
-      }
-    }
-
-    revalidatePath(`/restaurantes/${restauranteId}`)
-    return { success: true }
-  } catch (error: any) {
-    console.error("Error en asignarMenuARestaurante:", error)
-    return { success: false, error: error.message }
-  }
-}
-
-export async function eliminarMenuDeRestaurante(restauranteMenuId: string, restauranteId: string) {
-  try {
-    const { error } = await supabase.from("menus_restaurantes").delete().eq("id", restauranteMenuId)
+      .select()
+      .single()
 
     if (error) {
-      console.error("Error al eliminar menú del restaurante:", error)
-      return { success: false, error: error.message }
+      console.error("Error al crear menú de restaurante:", error)
+      return { success: false, error: `Error de base de datos: ${error.message}` }
     }
 
-    revalidatePath(`/restaurantes/${restauranteId}`)
-    return { success: true }
+    revalidatePath("/menus")
+    return { success: true, message: `Menú "${nombre}" creado exitosamente.`, data }
   } catch (error: any) {
-    console.error("Error en eliminarMenuDeRestaurante:", error)
-    return { success: false, error: error.message }
+    console.error("Error en crearMenuRestaurante:", error)
+    return { success: false, error: `Error al crear menú de restaurante: ${error.message}` }
   }
 }
 
-export async function actualizarEstadoMenu(restauranteMenuId: string, activo: boolean, restauranteId: string) {
+export async function obtenerMenusRestaurante() {
+  const supabase = createServerSupabaseClientWrapper(cookies())
   try {
+    const { data, error } = await supabase
+      .from("menus_restaurantes")
+      .select("*, restaurantes(nombre), platillos(nombre)")
+      .eq("activo", true)
+      .order("nombre")
+
+    if (error) {
+      console.error("Error obteniendo menús de restaurante:", error)
+      return { success: false, error: error.message, data: [] }
+    }
+
+    return { success: true, data: data || [] }
+  } catch (error: any) {
+    console.error("Error en obtenerMenusRestaurante:", error)
+    return { success: false, error: error.message, data: [] }
+  }
+}
+
+export async function actualizarMenuRestaurante(id: number, prevState: any, formData: FormData) {
+  try {
+    const nombre = formData.get("nombre") as string
+    const restaurante_id = formData.get("restaurante_id") as string
+    const platillo_id = formData.get("platillo_id") as string
+
+    if (!nombre || nombre.trim() === "") {
+      return { success: false, error: "El nombre del menú es requerido." }
+    }
+    if (!restaurante_id || restaurante_id.trim() === "") {
+      return { success: false, error: "El restaurante es requerido." }
+    }
+    if (!platillo_id || platillo_id.trim() === "") {
+      return { success: false, error: "El platillo es requerido." }
+    }
+
+    const supabase = createServerSupabaseClientWrapper(cookies())
     const { error } = await supabase
       .from("menus_restaurantes")
       .update({
-        activo: activo,
-        updated_at: new Date().toISOString(),
+        nombre: nombre.trim(),
+        restaurante_id: Number(restaurante_id),
+        platillo_id: Number(platillo_id),
       })
-      .eq("id", restauranteMenuId)
+      .eq("id", id)
 
     if (error) {
-      console.error("Error al actualizar estado del menú:", error)
-      return { success: false, error: error.message }
+      console.error("Error al actualizar menú de restaurante:", error)
+      return { success: false, error: `Error de base de datos: ${error.message}` }
     }
 
-    revalidatePath(`/restaurantes/${restauranteId}`)
-    return { success: true }
+    revalidatePath("/menus")
+    return { success: true, message: `Menú "${nombre}" actualizado exitosamente.` }
   } catch (error: any) {
-    console.error("Error en actualizarEstadoMenu:", error)
-    return { success: false, error: error.message }
+    console.error("Error en actualizarMenuRestaurante:", error)
+    return { success: false, error: `Error al actualizar menú de restaurante: ${error.message}` }
+  }
+}
+
+export async function eliminarMenuRestaurante(id: number) {
+  try {
+    const supabase = createServerSupabaseClientWrapper(cookies())
+    const { error } = await supabase.from("menus_restaurantes").update({ activo: false }).eq("id", id)
+
+    if (error) {
+      console.error("Error al eliminar menú de restaurante:", error)
+      return { success: false, error: `Error de base de datos: ${error.message}` }
+    }
+
+    revalidatePath("/menus")
+    return { success: true, message: "Menú de restaurante eliminado exitosamente." }
+  } catch (error: any) {
+    console.error("Error en eliminarMenuRestaurante:", error)
+    return { success: false, error: `Error al eliminar menú de restaurante: ${error.message}` }
   }
 }

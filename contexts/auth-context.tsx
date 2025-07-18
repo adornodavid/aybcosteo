@@ -1,34 +1,73 @@
 "use client"
 
 import type React from "react"
-import { createContext, useContext, useState } from "react"
-import type { User } from "@supabase/supabase-js"
+import { createContext, useContext, useEffect, useState } from "react"
+import { useRouter, usePathname } from "next/navigation"
+import { getSession } from "@/app/actions/session-actions"
+import type { DatosSesion } from "@/lib/types-sistema-costeo"
 
 interface AuthContextType {
-  user: User | null
-  loading: boolean
-  signOut: () => Promise<void>
-  refreshUser: () => Promise<void>
+  user: DatosSesion | null
+  isLoading: boolean
+  selectedHotel: number | null
+  setSelectedHotel: (hotelId: number | null) => void
+  logout: () => void
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
-  const [loading, setLoading] = useState(false) // Cambiado a false para evitar bloqueos
+  const [user, setUser] = useState<DatosSesion | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [selectedHotel, setSelectedHotel] = useState<number | null>(null)
+  const router = useRouter()
+  const pathname = usePathname()
 
-  const signOut = async () => {
-    // Implementación simple de logout
+  const publicRoutes = ["/login", "/logout"]
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const session = await getSession()
+
+        if (session) {
+          setUser(session)
+          setSelectedHotel(session.HotelId || null)
+        } else if (!publicRoutes.includes(pathname)) {
+          router.push("/login")
+        }
+      } catch (error) {
+        console.error("Error checking auth:", error)
+        if (!publicRoutes.includes(pathname)) {
+          router.push("/login")
+        }
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    checkAuth()
+  }, [pathname, router])
+
+  const logout = () => {
     setUser(null)
-    window.location.href = "/login"
+    setSelectedHotel(null)
+    router.push("/logout")
   }
 
-  const refreshUser = async () => {
-    // Función placeholder
-    console.log("Refresh user called")
-  }
-
-  return <AuthContext.Provider value={{ user, loading, signOut, refreshUser }}>{children}</AuthContext.Provider>
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        isLoading,
+        selectedHotel,
+        setSelectedHotel,
+        logout,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  )
 }
 
 export function useAuth() {

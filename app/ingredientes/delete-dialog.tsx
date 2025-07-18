@@ -1,56 +1,84 @@
 "use client"
 
-import { AlertTriangle, Loader2 } from "lucide-react"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+import { useToast } from "@/hooks/use-toast"
+import { Loader2, Trash2 } from "lucide-react"
+import { eliminarIngrediente } from "@/app/actions/ingredientes-actions-correcto"
 
 interface DeleteDialogProps {
-  open: boolean
-  ingrediente: { id: string; name: string } | null
-  onClose: () => void
-  onConfirm: () => void
-  loading: boolean
+  id: number
+  descripcion: string
+  onSuccess: () => void
 }
 
-export default function DeleteDialog({ open, ingrediente, onClose, onConfirm, loading }: DeleteDialogProps) {
+export function DeleteDialog({ id, descripcion, onSuccess }: DeleteDialogProps) {
+  const [loading, setLoading] = useState(false)
+  const { toast } = useToast()
+
+  const handleDelete = async () => {
+    setLoading(true)
+    try {
+      const result = await eliminarIngrediente(id)
+      if (result.success) {
+        toast({
+          title: "¡Eliminación exitosa!",
+          description: `El ingrediente "${descripcion}" ha sido eliminado.`,
+        })
+        onSuccess()
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "No se pudo eliminar el ingrediente.",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error deleting ingredient:", error)
+      toast({
+        title: "Error",
+        description: "Ocurrió un error inesperado al eliminar el ingrediente.",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-yellow-500" />
-            Confirmar Eliminación
-          </DialogTitle>
-        </DialogHeader>
-
-        <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
-          <div className="text-sm text-yellow-800">
-            <strong>¿Estás seguro de que deseas eliminar este ingrediente?</strong>
-          </div>
-          <div className="text-xs text-yellow-700 mt-1">Esta acción no se puede deshacer.</div>
-          {ingrediente && (
-            <div className="mt-2 p-2 bg-white/50 rounded border border-yellow-100">
-              <span className="text-sm font-medium">{ingrediente.name}</span>
-            </div>
-          )}
-        </div>
-
-        <DialogFooter className="flex gap-2">
-          <Button variant="outline" onClick={onClose} disabled={loading}>
-            Cancelar
-          </Button>
-          <Button variant="destructive" onClick={onConfirm} disabled={loading}>
-            {loading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Eliminando...
-              </>
-            ) : (
-              "Eliminar"
-            )}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button variant="ghost" size="icon" title="Eliminar ingrediente" disabled={loading}>
+          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4 text-red-500" />}
+          <span className="sr-only">Eliminar ingrediente {descripcion}</span>
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>¿Estás absolutamente seguro?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Esta acción eliminará permanentemente el ingrediente &quot;{descripcion}&quot;. Esta acción no se puede
+            deshacer.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={loading}>Cancelar</AlertDialogCancel>
+          <AlertDialogAction onClick={handleDelete} disabled={loading}>
+            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Eliminar"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }

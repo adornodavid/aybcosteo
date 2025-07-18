@@ -37,7 +37,7 @@ export function useUserSession() {
         .from("usuarios")
         .select(`
           id,
-          nombre,
+          nombrecompleto,
           email,
           rolid,
           hotelid,
