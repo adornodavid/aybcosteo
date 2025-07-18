@@ -1,12 +1,13 @@
 "use server"
 
 import { cookies } from "next/headers"
-import { createServerSupabaseClientWrapper } from "@/lib/supabase"
+//import { createServerSupabaseClientWrapper } from "@/lib/supabase"
+import { createServerSupabaseClient } from "@/lib/supabase-server"
 import type { Restaurante, DropdownOption, RestauranteTableRow } from "@/lib/types-sistema-costeo"
 import { revalidatePath } from "next/cache"
 
 // Helper para obtener el cliente Supabase en el servidor
-const getSupabaseClient = () => createServerSupabaseClientWrapper(cookies())
+const getSupabaseClient = () => createServerSupabaseClient(cookies())
 
 export async function obtenerRestaurantesFiltrados(
   searchTerm: string,

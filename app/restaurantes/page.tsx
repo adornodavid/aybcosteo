@@ -1,4 +1,4 @@
-import { createServerSupabaseClientWrapper } from "@/lib/supabase"
+//import { createServerSupabaseClientWrapper } from "@/lib/supabase"
 import { getSession } from "@/app/actions/session-actions" // Importación correcta de la función getSession
 import {
   obtenerRestaurantesFiltrados,
@@ -12,7 +12,7 @@ import Image from "next/image" // Importar Image de next/image
 export const dynamic = "force-dynamic"
 
 export default async function RestaurantesPage() {
-  const supabase = createServerSupabaseClientWrapper() // Se mantiene por si se usa en otras partes, aunque no directamente para la sesión aquí.
+  //const supabase = createServerSupabaseClientWrapper() // Se mantiene por si se usa en otras partes, aunque no directamente para la sesión aquí.
 
   // Obtener la sesión directamente, ya que getSession devuelve SessionData | null
   const sessionData = await getSession()
