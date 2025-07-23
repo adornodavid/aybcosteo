@@ -1,9 +1,9 @@
 "use client"
 
 import Link from "next/link"
-import Image from "next/image" // Importar Image para mostrar imágenes de platillos
+import Image from "next/image"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { supabase } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -18,7 +18,7 @@ import {
   PaginationLink,
   PaginationNext,
 } from "@/components/ui/pagination"
-import { Utensils, Search, RotateCcw, Eye, Edit, PowerOff, Power, HandPlatter, X } from "lucide-react" // Añadir X para el botón de cerrar
+import { Utensils, Search, RotateCcw, Eye, Edit, PowerOff, Power, HandPlatter, X } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { getSession } from "@/app/actions/session-actions"
 import { useToast } from "@/components/ui/use-toast"
@@ -34,35 +34,37 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Loader2 } from "@/components/ui/loader2"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog" // Importar Dialog
-import * as DialogPrimitive from "@radix-ui/react-dialog" // Importar DialogPrimitive para DialogClose
-import { ScrollArea } from "@/components/ui/scroll-area" // Importar ScrollArea
-import { getMenuDetails } from "@/app/actions/menus-details-actions" // Importar la nueva acción
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import * as DialogPrimitive from "@radix-ui/react-dialog"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { getMenuDetails } from "@/app/actions/menus-details-actions"
+import { updateMenu, getHotelsForDropdown, getRestaurantsForDropdown } from "@/app/actions/menus-editar-actions"
 
 interface Menu {
-  id: string // Aseguramos que el ID sea string para consistencia
+  id: string
   nombre: string
   descripcion: string | null
   activo: boolean
   restaurante: {
+    id: string
     nombre: string
     hotel: {
+      id: string
       nombre: string
     }
   }
 }
 
 interface Hotel {
-  id: string // Aseguramos que el ID sea string
+  id: string
   nombre: string
 }
 
 interface Restaurante {
-  id: string // Aseguramos que el ID sea string
+  id: string
   nombre: string
 }
 
-// Interfaces para los detalles del menú
 interface MenuDetails {
   id: string
   nombre: string
@@ -70,8 +72,10 @@ interface MenuDetails {
   activo: boolean
   fechacreacion: string
   restaurante: {
+    id: string
     nombre: string
     hotel: {
+      id: string
       nombre: string
     }
   }
@@ -98,9 +102,9 @@ export default function MenusPage() {
   const [restaurantes, setRestaurantes] = useState<Restaurante[]>([])
 
   const [menuNameFilter, setMenuNameFilter] = useState("")
-  const [selectedHotelId, setSelectedHotelId] = useState<string>("-1") // -1 para 'Todos'
-  const [selectedRestauranteId, setSelectedRestauranteId] = useState<string>("-1") // -1 para 'Todos'
-  const [statusFilter, setStatusFilter] = useState<string>("true") // 'true' para Activo por defecto
+  const [selectedHotelId, setSelectedHotelId] = useState<string>("-1")
+  const [selectedRestauranteId, setSelectedRestauranteId] = useState<string>("-1")
+  const [statusFilter, setStatusFilter] = useState<string>("true")
 
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 20
@@ -117,7 +121,23 @@ export default function MenusPage() {
   const [loadingDetails, setLoadingDetails] = useState(false)
   const [detailsError, setDetailsError] = useState<string | null>(null)
 
-  // Cargar Hoteles
+  // NUEVOS ESTADOS PARA EL MODAL DE EDICIÓN
+  const [showEditMenuDialog, setShowEditMenuDialog] = useState(false)
+  const [editingMenu, setEditingMenu] = useState<MenuDetails | null>(null)
+  const [editMenuName, setEditMenuName] = useState("")
+  const [editMenuDescription, setEditMenuDescription] = useState("")
+  const [editSelectedHotelId, setEditSelectedHotelId] = useState<string>("-1")
+  const [editSelectedRestauranteId, setEditSelectedRestauranteId] = useState<string>("-1")
+  const [editHoteles, setEditHoteles] = useState<Hotel[]>([])
+  const [editRestaurantes, setEditRestaurantes] = useState<Restaurante[]>([])
+  const [loadingEditData, setLoadingEditData] = useState(false)
+  const [savingEditChanges, setSavingEditChanges] = useState(false)
+  const [editErrorMessage, setEditErrorMessage] = useState<string | null>(null)
+
+  // Bandera para controlar la carga inicial del modal de edición
+  const isInitialEditLoad = useRef(true)
+
+  // Cargar Hoteles (para filtros)
   const cargarHoteles = useCallback(
     async (rolId: number | null, hotelId: string | null) => {
       if (rolId === null) return
@@ -140,14 +160,13 @@ export default function MenusPage() {
 
         if (error) throw error
 
-        // Convertir todos los IDs a string inmediatamente después de la consulta
         let fetchedHoteles: Hotel[] = (data || []).map((h) => ({ ...h, id: String(h.id) }))
 
         if (rolId === 1 || rolId === 2 || rolId === 3 || rolId === 4) {
           fetchedHoteles = [{ id: "-1", nombre: "Todos" }, ...fetchedHoteles]
           setSelectedHotelId("-1")
         } else if (fetchedHoteles.length > 0) {
-          setSelectedHotelId(String(fetchedHoteles[0].id)) // Asegurar que se setea como string
+          setSelectedHotelId(String(fetchedHoteles[0].id))
         }
 
         setHoteles(fetchedHoteles)
@@ -163,7 +182,7 @@ export default function MenusPage() {
     [toast],
   )
 
-  // Cargar Restaurantes
+  // Cargar Restaurantes (para filtros)
   const cargarRestaurantes = useCallback(
     async (hotelId: string, rolId: number | null, sessionHotelId: string | null) => {
       if (rolId === null) return
@@ -181,7 +200,6 @@ export default function MenusPage() {
 
         if (error) throw error
 
-        // Convertir todos los IDs a string inmediatamente después de la consulta
         const fetchedRestaurantes: Restaurante[] = [
           { id: "-1", nombre: "Todos" },
           ...(data || []).map((r) => ({ ...r, id: String(r.id) })),
@@ -207,23 +225,25 @@ export default function MenusPage() {
 
       setSearching(true)
       try {
-        let query = supabase
-          .from("menus")
-          .select(
-            `
+        // Modificación aquí: Usar !inner si hay un filtro de hotel para asegurar que la relación exista
+        const selectString = `
           id,
           nombre,
           descripcion,
           activo,
-          restaurante:restaurantes(
+          restaurante:restaurantes${hotelIdFilter !== "-1" ? "!inner" : ""}(
+            id,
             nombre,
             hotel:hoteles(
+              id,
               nombre
             )
           )
-        `,
-            { count: "exact" },
-          )
+        `
+
+        let query = supabase
+          .from("menus")
+          .select(selectString, { count: "exact" })
           .eq("activo", status === "true")
           .ilike("nombre", `%${nameFilter}%`)
 
@@ -241,7 +261,6 @@ export default function MenusPage() {
 
         if (error) throw error
 
-        // Convertir IDs de menú a string para consistencia
         setMenus((data || []).map((m) => ({ ...m, id: String(m.id) })) as Menu[])
         setTotalMenus(count || 0)
       } catch (error: any) {
@@ -275,10 +294,8 @@ export default function MenusPage() {
       setSessionRolId(rolId)
       setSessionHotelId(session.HotelId || null)
 
-      // Cargar hoteles primero
       await cargarHoteles(rolId, session.HotelId || null)
 
-      // Determinar valores iniciales para la primera carga de menús
       const initialHotelId = rolId === 1 || rolId === 2 || rolId === 3 || rolId === 4 ? "-1" : session.HotelId || "-1"
       const initialRestauranteId = "-1"
       const initialStatus = "true"
@@ -289,7 +306,7 @@ export default function MenusPage() {
     initPage()
   }, [router, cargarHoteles, cargarMenus])
 
-  // Efecto para recargar restaurantes cuando cambia el hotel seleccionado
+  // Efecto para recargar restaurantes cuando cambia el hotel seleccionado (para filtros)
   useEffect(() => {
     if (sessionRolId !== null && selectedHotelId) {
       cargarRestaurantes(selectedHotelId, sessionRolId, sessionHotelId)
@@ -297,7 +314,7 @@ export default function MenusPage() {
   }, [selectedHotelId, sessionRolId, sessionHotelId, cargarRestaurantes])
 
   const handleSearch = () => {
-    setCurrentPage(1) // Resetear a la primera página en cada nueva búsqueda
+    setCurrentPage(1)
     cargarMenus(menuNameFilter, selectedHotelId, selectedRestauranteId, statusFilter, 1)
   }
 
@@ -344,11 +361,10 @@ export default function MenusPage() {
     }
   }
 
-  // Función para manejar la visualización de detalles del menú
   const handleViewMenuDetails = async (menuId: string) => {
     setLoadingDetails(true)
     setDetailsError(null)
-    setShowDetailsDialog(true) // Abrir el diálogo inmediatamente para mostrar el loader
+    setShowDetailsDialog(true)
 
     try {
       const { menu, platillos, error } = await getMenuDetails(menuId)
@@ -385,24 +401,237 @@ export default function MenusPage() {
     }
   }
 
+  // Cargar Restaurantes para el formulario de edición (usado en useEffect)
+  const cargarRestaurantesForEditForm = useCallback(
+    async (hotelId: string) => {
+      if (sessionRolId === null) return []
+
+      try {
+        const { data, error } = await getRestaurantsForDropdown(Number(hotelId))
+        if (error) throw new Error(error)
+        const fetchedRestaurantes: Restaurante[] = (data || []).map((r) => ({ id: String(r.id), nombre: r.nombre }))
+        setEditRestaurantes(fetchedRestaurantes)
+        return fetchedRestaurantes
+      } catch (error: any) {
+        console.error("Error cargando restaurantes para edición:", error.message)
+        toast({
+          title: "Error",
+          description: "No se pudieron cargar los restaurantes para edición.",
+          variant: "destructive",
+        })
+        return []
+      }
+    },
+    [sessionRolId, toast],
+  )
+
+  const handleOpenEditDialog = useCallback(
+    async (menuId: string) => {
+      setLoadingEditData(true)
+      setEditErrorMessage(null)
+      setShowEditMenuDialog(true)
+      isInitialEditLoad.current = true // Establecer la bandera al inicio de la carga
+
+      console.log("handleOpenEditDialog: Abriendo modal para menú ID:", menuId)
+
+      try {
+        const { menu, error: menuError } = await getMenuDetails(menuId)
+        if (menuError || !menu) {
+          throw new Error(menuError || "No se encontraron detalles del menú.")
+        }
+        console.log("handleOpenEditDialog: Detalles del menú obtenidos:", menu)
+
+        setEditingMenu(menu) // Establecer el menú de edición primero
+
+        // 1. Cargar todos los hoteles para el dropdown
+        console.log(
+          "handleOpenEditDialog: Llamando a getHotelsForDropdown con rolId:",
+          sessionRolId,
+          "y sessionHotelId:",
+          sessionHotelId,
+        )
+        const { data: fetchedHoteles, error: hotelsError } = await getHotelsForDropdown(sessionRolId!, sessionHotelId)
+        if (hotelsError) throw new Error(hotelsError)
+        const mappedHoteles: Hotel[] = (fetchedHoteles || []).map((h) => ({ id: String(h.id), nombre: h.nombre }))
+        setEditHoteles(mappedHoteles) // Set hotels first
+        console.log("handleOpenEditDialog: Hoteles cargados para edición:", mappedHoteles)
+
+        // 2. Establecer el hotel seleccionado del menú
+        const menuHotelId = menu.restaurante?.hotel?.id ? String(menu.restaurante.hotel.id) : "-1"
+        setEditSelectedHotelId(menuHotelId) // This will trigger the useEffect below
+        console.log("handleOpenEditDialog: Estableciendo editSelectedHotelId a:", menuHotelId)
+
+        // NO establecer editSelectedRestauranteId here directly.
+        // It will be set in the useEffect that reacts to editSelectedHotelId.
+        // 3. Establecer los detalles del menú y el nombre/descripción
+        setEditMenuName(menu.nombre)
+        setEditMenuDescription(menu.descripcion || "")
+      } catch (error: any) {
+        console.error("handleOpenEditDialog: Error al cargar detalles del menú para edición:", error.message)
+        setEditErrorMessage(error.message || "Error al cargar los detalles del menú para edición.")
+        toast({
+          title: "Error",
+          description: "No se pudieron cargar los detalles del menú para edición.",
+          variant: "destructive",
+        })
+        setShowEditMenuDialog(false)
+      } finally {
+        setLoadingEditData(false)
+        console.log("handleOpenEditDialog: Finalizado. loadingEditData:", false)
+      }
+    },
+    [toast, sessionRolId, sessionHotelId],
+  )
+
+  const handleSaveEditChanges = async () => {
+    if (!editingMenu) return
+
+    if (!editMenuName.trim()) {
+      setEditErrorMessage("El nombre del menú no puede estar vacío.")
+      return
+    }
+    if (!editSelectedHotelId || editSelectedHotelId === "-1") {
+      setEditErrorMessage("Debe seleccionar un hotel.")
+      return
+    }
+    if (!editSelectedRestauranteId || editSelectedRestauranteId === "-1") {
+      setEditErrorMessage("Debe seleccionar un restaurante.")
+      return
+    }
+
+    setSavingEditChanges(true)
+    setEditErrorMessage(null)
+
+    const formData = new FormData()
+    formData.append("nombre", editMenuName)
+    formData.append("descripcion", editMenuDescription)
+    formData.append("activo", String(editingMenu.activo))
+    formData.append("restauranteid", editSelectedRestauranteId)
+
+    try {
+      const result = await updateMenu(editingMenu.id, formData)
+
+      if (result.success) {
+        toast({
+          title: "Éxito",
+          description: result.message,
+        })
+        setShowEditMenuDialog(false)
+        cargarMenus(menuNameFilter, selectedHotelId, selectedRestauranteId, statusFilter, currentPage)
+      } else {
+        setEditErrorMessage(result.error || "Error desconocido al guardar cambios.")
+        toast({
+          title: "Error",
+          description: result.error || "No se pudieron guardar los cambios del menú.",
+          variant: "destructive",
+        })
+      }
+    } catch (error: any) {
+      console.error("Excepción al guardar cambios del menú:", error.message)
+      setEditErrorMessage("Ocurrió un error inesperado al guardar los cambios.")
+      toast({
+        title: "Error",
+        description: "Ocurrió un error inesperado al guardar los cambios del menú.",
+        variant: "destructive",
+      })
+    } finally {
+      setSavingEditChanges(false)
+    }
+  }
+
+  // Efecto para recargar restaurantes cuando cambia el hotel seleccionado en el modal de edición
+  // y para establecer el restaurante por defecto una vez que las opciones estén cargadas.
+  useEffect(() => {
+    console.log(
+      "useEffect (editSelectedHotelId): Disparado. showEditMenuDialog:",
+      showEditMenuDialog,
+      "editSelectedHotelId:",
+      editSelectedHotelId,
+      "sessionRolId:",
+      sessionRolId,
+    )
+    console.log("useEffect (editSelectedHotelId): isInitialEditLoad.current:", isInitialEditLoad.current)
+    console.log("useEffect (editSelectedHotelId): editingMenu (current state):", editingMenu)
+
+    if (showEditMenuDialog && editSelectedHotelId !== "-1" && sessionRolId !== null) {
+      console.log("useEffect (editSelectedHotelId): Cargando restaurantes para hotel:", editSelectedHotelId)
+      cargarRestaurantesForEditForm(editSelectedHotelId).then((fetchedRestaurantes) => {
+        console.log(
+          "useEffect (editSelectedHotelId): Restaurantes cargados por cargarRestaurantesForEditForm:",
+          fetchedRestaurantes,
+        )
+        if (isInitialEditLoad.current && editingMenu) {
+          // Asegurarse de que menuRestauranteId sea un string para la comparación
+          const menuRestauranteId = String(editingMenu.restaurante?.id || "-1")
+          console.log(
+            `useEffect (editSelectedHotelId): Es carga inicial. Intentando preseleccionar restaurante: ${menuRestauranteId} (Tipo: ${typeof menuRestauranteId})`,
+          )
+          console.log(
+            "useEffect (editSelectedHotelId): Lista de fetchedRestaurantes para buscar:",
+            fetchedRestaurantes.map((r) => ({ id: r.id, type: typeof r.id })),
+          )
+
+          const restauranteExists = fetchedRestaurantes.some((r) => {
+            console.log(
+              `Comparando r.id: ${r.id} (Tipo: ${typeof r.id}) con menuRestauranteId: ${menuRestauranteId} (Tipo: ${typeof menuRestauranteId})`,
+            )
+            return r.id === menuRestauranteId
+          })
+
+          if (restauranteExists) {
+            setEditSelectedRestauranteId(menuRestauranteId)
+            console.log("useEffect (editSelectedHotelId): Restaurante preseleccionado:", menuRestauranteId)
+          } else {
+            // Si el restaurante del menú no está en la lista (ej. por cambio de hotel), resetear
+            setEditSelectedRestauranteId("-1")
+            console.warn(
+              `Restaurante ID ${menuRestauranteId} del menú no encontrado en la lista de restaurantes para el hotel ${editSelectedHotelId}. Reseteando selección.`,
+            )
+          }
+          // IMPORTANT: Set isInitialEditLoad to false *after* setting the restaurant ID
+          // to ensure this block only runs once per modal open.
+          isInitialEditLoad.current = false
+          console.log("useEffect (editSelectedHotelId): isInitialEditLoad establecido a false.")
+        } else if (!isInitialEditLoad.current) {
+          // This condition means user manually changed hotel
+          console.log("useEffect (editSelectedHotelId): Usuario cambió hotel. Reseteando restaurante a -1.")
+          setEditSelectedRestauranteId("-1")
+        }
+      })
+    } else if (showEditMenuDialog && editSelectedHotelId === "-1") {
+      console.log(
+        "useEffect (editSelectedHotelId): Hotel seleccionado es -1. Reseteando restaurantes y seleccion a -1.",
+      )
+      setEditRestaurantes([])
+      setEditSelectedRestauranteId("-1")
+    }
+  }, [editSelectedHotelId, showEditMenuDialog, sessionRolId, cargarRestaurantesForEditForm, editingMenu])
+
+  // Efecto para resetear la bandera isInitialEditLoad cuando el modal se cierra
+  useEffect(() => {
+    if (!showEditMenuDialog) {
+      console.log("useEffect (showEditMenuDialog): Modal cerrado. Reseteando isInitialEditLoad a true.")
+      isInitialEditLoad.current = true
+    }
+  }, [showEditMenuDialog])
+
   const totalPages = Math.ceil(totalMenus / itemsPerPage)
 
-    if (loading) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-         <div className="flex flex-col items-center justify-center p-8">
-            <div className="relative w-24 h-24 mb-4">
+        <div className="flex flex-col items-center justify-center p-8">
+          <div className="relative w-24 h-24 mb-4">
             <Image
               src="https://nxtrsibnomdqmzcrwedc.supabase.co/storage/v1/object/public/imagenes/AnimationGif/CargarPage.gif"
               alt="Procesando..."
-              width={300} // Ajusta el tamaño según sea necesario
-              height={300} // Ajusta el tamaño según sea necesario
-              unoptimized // Importante para GIFs externos
+              width={300}
+              height={300}
+              unoptimized
               className="absolute inset-0 animate-bounce-slow"
             />
-            </div>
-            <p className="text-lg font-semibold text-gray-800">Cargando Pagina...</p>
-           
+          </div>
+          <p className="text-lg font-semibold text-gray-800">Cargando Pagina...</p>
         </div>
       </div>
     )
@@ -601,16 +830,14 @@ export default function MenusPage() {
                               <HandPlatter className="h-4 w-4" />
                             </Button>
                           </Link>
-                          <Link href={`/menus/${menu.id}`} passHref>
-                            <Button variant="ghost" size="icon" aria-label="Ver menú">
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                          </Link>
-                          <Link href={`/menus/${menu.id}/editar`} passHref>
-                            <Button variant="ghost" size="icon" aria-label="Editar menú">
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                          </Link>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label="Editar menú"
+                            onClick={() => handleOpenEditDialog(menu.id)}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
                               <Button
@@ -800,6 +1027,132 @@ export default function MenusPage() {
                     )}
                   </CardContent>
                 </Card>
+              </div>
+            </ScrollArea>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      {/* NUEVO: Modal de Edición de Menú */}
+      <Dialog open={showEditMenuDialog} onOpenChange={setShowEditMenuDialog}>
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] flex flex-col">
+          <DialogHeader className="relative pb-4">
+            <DialogTitle className="text-3xl font-bold text-[#986ec2]">Editar Menú</DialogTitle>
+            <DialogDescription className="text-gray-600">
+              Actualiza la información del menú seleccionado.
+            </DialogDescription>
+            <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
+              <X className="h-6 w-6 text-gray-500" />
+              <span className="sr-only">Cerrar</span>
+            </DialogPrimitive.Close>
+          </DialogHeader>
+
+          {loadingEditData ? (
+            <div className="flex flex-col items-center justify-center h-64 text-[#c49deb]">
+              <Loader2 className="h-16 w-16 animate-spin" />
+              <p className="mt-4 text-lg">Cargando datos del menú...</p>
+            </div>
+          ) : editErrorMessage ? (
+            <div className="text-center text-red-500 py-8">
+              <p className="text-lg font-semibold">Error:</p>
+              <p>{editErrorMessage}</p>
+            </div>
+          ) : editingMenu ? (
+            <ScrollArea className="flex-1 pr-4">
+              <div className="grid gap-4 py-4">
+                <div className="space-y-2">
+                  <label htmlFor="editMenuName" className="text-sm font-medium">
+                    Nombre del Menú
+                  </label>
+                  <Input
+                    id="editMenuName"
+                    name="editMenuName"
+                    type="text"
+                    maxLength={150}
+                    value={editMenuName}
+                    onChange={(e) => setEditMenuName(e.target.value)}
+                    placeholder="Nombre del menú"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="editMenuDescription" className="text-sm font-medium">
+                    Descripción
+                  </label>
+                  <Input
+                    id="editMenuDescription"
+                    name="editMenuDescription"
+                    type="text"
+                    maxLength={250}
+                    value={editMenuDescription}
+                    onChange={(e) => setEditMenuDescription(e.target.value)}
+                    placeholder="Descripción del menú"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="editDdlHotel" className="text-sm font-medium">
+                    Hotel
+                  </label>
+                  <Select
+                    value={editSelectedHotelId}
+                    onValueChange={setEditSelectedHotelId}
+                    id="editDdlHotel"
+                    name="editDdlHotel"
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona un hotel">
+                        {editHoteles.find((h) => h.id === editSelectedHotelId)?.nombre || "Selecciona un hotel"}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {editHoteles.map((hotel) => (
+                        <SelectItem key={hotel.id} value={hotel.id}>
+                          {hotel.nombre}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="editDdlRestaurante" className="text-sm font-medium">
+                    Restaurante
+                  </label>
+                  <Select
+                    value={editSelectedRestauranteId}
+                    onValueChange={setEditSelectedRestauranteId}
+                    id="editDdlRestaurante"
+                    name="editDdlRestaurante"
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona un restaurante">
+                        {editRestaurantes.find((r) => r.id === editSelectedRestauranteId)?.nombre ||
+                          "Selecciona un restaurante"}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {editRestaurantes.map((restaurante) => (
+                        <SelectItem key={restaurante.id} value={restaurante.id}>
+                          {restaurante.nombre}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="flex justify-end pt-4">
+                <Button
+                  type="button"
+                  onClick={handleSaveEditChanges}
+                  disabled={savingEditChanges}
+                  style={{ backgroundColor: "#4CAF50", color: "white" }}
+                >
+                  {savingEditChanges ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Guardando...
+                    </>
+                  ) : (
+                    "Guardar cambios"
+                  )}
+                </Button>
               </div>
             </ScrollArea>
           ) : null}

@@ -124,7 +124,7 @@ export function RestauranteForm({ isOpen, onClose, initialData, hotels }: Restau
           <DialogDescription>
             {initialData
               ? "Modifica los detalles del restaurante existente."
-              : "Ingresa la información para crear un nuevo restaurante."}
+              : "Ingresa la informaci��n para crear un nuevo restaurante."}
           </DialogDescription>
         </DialogHeader>
         <form

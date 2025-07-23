@@ -8,11 +8,13 @@ export async function agregarPlatilloAMenu(data: {
   menuid: number
   platilloid: number
   precioventa: number
-  costoplatillo: number // Nuevo parámetro para el costo del platillo
+  costoplatillo: number // Mantener por si se usa en otro lado, aunque el margen usará costoadministrativo
+  costoadministrativo: number // Nuevo parámetro para el costo administrativo
   activo?: boolean
 }) {
   try {
-    const margenUtilidad = data.precioventa - data.costoplatillo
+    // Modificación aquí: margenUtilidad ahora usa costoadministrativo
+    const margenUtilidad = data.precioventa - data.costoadministrativo
 
     const { data: result, error } = await supabase
       .from("platillosxmenu") // Usar 'platillosxmenu'
@@ -110,10 +112,12 @@ export async function actualizarPrecioVenta(data: {
   menuid: number
   platilloid: number
   precioventa: number
-  costoplatillo: number // Añadido para calcular margen
+  costoplatillo: number // Mantener por si se usa en otro lado
+  costoadministrativo: number // Añadido para calcular margen
 }) {
   try {
-    const margenUtilidad = data.precioventa - data.costoplatillo
+    // Modificación aquí: margenUtilidad ahora usa costoadministrativo
+    const margenUtilidad = data.precioventa - data.costoadministrativo
 
     const { data: result, error } = await supabase
       .from("platillosxmenu") // Usar 'platillosxmenu'
@@ -158,6 +162,7 @@ export async function obtenerPlatillosDeMenu(menuid: number): Promise<ApiRespons
           descripcion,
           instruccionespreparacion,
           costototal,
+          costoadministrativo, 
           imgurl,
           activo
         )
@@ -187,6 +192,7 @@ export async function obtenerPlatillosDeMenu(menuid: number): Promise<ApiRespons
         instruccionespreparacion: item.platillos.instruccionespreparacion,
         imgurl: item.platillos.imgurl,
         costototal: item.platillos.costototal,
+        costoadministrativo: item.platillos.costoadministrativo, // Mapear costoadministrativo
         activo: item.platillos.activo,
       },
     }))
@@ -202,7 +208,7 @@ export async function obtenerTodosLosPlatillos(): Promise<ApiResponse<Platillo[]
   try {
     const { data, error } = await supabase
       .from("platillos")
-      .select("id, nombre, costototal, imgurl") // Usar 'costototal' y 'imgurl'
+      .select("id, nombre, costototal, costoadministrativo, imgurl") // Usar 'costototal', 'costoadministrativo' y 'imgurl'
       .eq("activo", true)
       .order("nombre", { ascending: true })
 
@@ -222,7 +228,7 @@ export async function obtenerDetallePlatillo(platilloId: number): Promise<ApiRes
   try {
     const { data, error } = await supabase
       .from("platillos")
-      .select("id, nombre, descripcion, instruccionespreparacion, costototal, imgurl")
+      .select("id, nombre, descripcion, instruccionespreparacion, costototal, costoadministrativo, imgurl")
       .eq("id", platilloId)
       .single()
 
@@ -230,7 +236,30 @@ export async function obtenerDetallePlatillo(platilloId: number): Promise<ApiRes
       console.error("Error al obtener detalle del platillo:", error)
       return { data: null, error: error.message }
     }
-    return { data: data as Platillo, error: null }
+
+    let precioSugerido = 0
+    if (data && data.costoadministrativo !== null) {
+      const { data: configData, error: configError } = await supabase
+        .from("configuraciones")
+        .select("valorfloat")
+        .eq("id", 2)
+        .single()
+
+      if (configError) {
+        console.error("Error al obtener configuración para precio sugerido:", configError)
+        // Puedes decidir cómo manejar este error, por ahora, el precio sugerido será 0
+      } else if (configData && configData.valorfloat !== null && configData.valorfloat !== 0) {
+        precioSugerido = data.costoadministrativo / configData.valorfloat
+      }
+    }
+
+    // Añadir precioSugerido al objeto data antes de retornarlo
+    const platilloConPrecioSugerido = {
+      ...data,
+      precioSugerido: precioSugerido,
+    }
+
+    return { data: platilloConPrecioSugerido as Platillo, error: null }
   } catch (error: any) {
     console.error("Error en obtenerDetallePlatillo:", error)
     return { data: null, error: error.message }

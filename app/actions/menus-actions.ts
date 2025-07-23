@@ -48,7 +48,7 @@ export async function crearMenu(menuData: {
     }
 
     revalidatePath("/menus")
-    return { data, error: null }
+    return { data, success: true, error: null }
   } catch (error: any) {
     console.error("Error en crearMenu:", error)
     return { data: null, error: error.message }

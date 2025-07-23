@@ -78,7 +78,7 @@ console.log("\n🔐 Credenciales de prueba:")
 console.log("📧 Correo: admin@sistema.com")
 console.log("🔑 Contraseña: 123456")
 
-console.log("\n⚡ Funcionalidades implementadas:")
+console.log("\n�� Funcionalidades implementadas:")
 const funcionalidades = [
   "Validación de campos requeridos",
   "Mostrar/ocultar contraseña",

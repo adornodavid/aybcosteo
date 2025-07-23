@@ -20,10 +20,19 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Loader2, PlusIcon, TrashIcon, SaveIcon, CheckCircleIcon, XCircleIcon } from "lucide-react"
+import {
+  Loader2,
+  PlusIcon,
+  TrashIcon,
+  SaveIcon,
+  CheckCircleIcon,
+  XCircleIcon,
+  ArrowRightIcon,
+  ArrowLeftIcon,
+} from "lucide-react"
 import type { IngredienteReceta, UnidadMedidaDropdown } from "@/lib/types-sistema-costeo"
 import { ImageUpload } from "@/components/ui/image-upload"
-import { useToast } from "@/components/ui/use-toast"
+import { useToast } from "@/components/ui/use-toast" // Mantener useToast para otros mensajes
 import {
   Dialog,
   DialogContent,
@@ -34,6 +43,7 @@ import {
 } from "@/components/ui/dialog"
 import { obtenerHoteles } from "@/app/actions/hoteles-actions-correcto" // Importar obtenerHoteles
 import { createClient } from "@supabase/supabase-js" // Importar createClient para la validación
+import Image from "next/image"
 
 // Configuración de Supabase para validación en cliente
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -46,7 +56,7 @@ interface RecetaEditFormProps {
 
 export function RecetaEditForm({ recetaId }: RecetaEditFormProps) {
   const router = useRouter()
-  const { toast } = useToast()
+  const { toast } = useToast() // Se mantiene para otros toasts
   const [isPending, startTransition] = useTransition()
 
   const [nombreReceta, setNombreReceta] = useState("")
@@ -66,10 +76,11 @@ export function RecetaEditForm({ recetaId }: RecetaEditFormProps) {
   const [hotelesDropdown, setHotelesDropdown] = useState<{ id: number; nombre: string }[]>([])
   const [selectedHotelId, setSelectedHotelId] = useState<string>("")
 
-  const [currentStep, setCurrentStep] = useState(1)
+  const [currentStep, setCurrentStep] = useState(1) // Estado para controlar las etapas
   const [showConfirmationModal, setShowConfirmationModal] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false) // State for loading animation
   const [showIngredienteDuplicadoDialog, setShowIngredienteDuplicadoDialog] = useState(false) // Nuevo estado para modal de duplicado
+  const [showIngredientesInsuficientesDialog, setShowIngredientesInsuficientesDialog] = useState(false) // Nuevo estado para el AlertDialog de ingredientes insuficientes
 
   useEffect(() => {
     const loadRecetaData = async () => {
@@ -335,6 +346,7 @@ export function RecetaEditForm({ recetaId }: RecetaEditFormProps) {
           title: "Información básica actualizada",
           description: "La información general de la sub-receta ha sido guardada.",
         })
+        setCurrentStep(2) // Avanzar a la siguiente etapa
       } else {
         toast({
           title: "Error",
@@ -346,6 +358,12 @@ export function RecetaEditForm({ recetaId }: RecetaEditFormProps) {
   }
 
   const handleUpdateRecetaCompleto = async () => {
+    // Validar que existan al menos 2 ingredientes
+    if (ingredientesReceta.length < 2) {
+      setShowIngredientesInsuficientesDialog(true) // Mostrar AlertDialog en lugar de toast
+      return // Detener el proceso de actualización
+    }
+
     setShowConfirmationModal(true)
   }
 
@@ -354,21 +372,18 @@ export function RecetaEditForm({ recetaId }: RecetaEditFormProps) {
     setIsUpdating(true) // Start loading animation
 
     try {
-      const { success, error } = await updateRecetaCostoAndHistorico(recetaId)
-      if (success) {
-        toast({
-          title: "Sub-Receta Actualizada correctamente",
-          description: "Se actualizó la información y costos de las recetas asociadas a esta sub-receta.",
-          action: <CheckCircleIcon className="text-green-500" />,
-        })
-      } else {
-        toast({
-          title: "Error al actualizar receta",
-          description: `Hubo un problema al actualizar la sub-receta: ${error?.message}`,
-          variant: "destructive",
-          action: <XCircleIcon className="text-red-500" />,
-        })
-      }
+      // Ensure minimum 4 seconds for animation
+      await Promise.all([
+        updateRecetaCostoAndHistorico(recetaId),
+        new Promise((resolve) => setTimeout(resolve, 4000)), // Minimum 4 seconds
+      ])
+
+      toast({
+        title: "Sub-Receta Actualizada correctamente",
+        description: "Se actualizó la información y costos de las recetas asociadas a esta sub-receta.",
+        action: <CheckCircleIcon className="text-green-500" />,
+      })
+      router.push("/recetas") // Redirect to /recetas page
     } catch (e: any) {
       toast({
         title: "Error inesperado",
@@ -385,10 +400,19 @@ export function RecetaEditForm({ recetaId }: RecetaEditFormProps) {
     <div className="space-y-6 p-6">
       {isUpdating && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="flex flex-col items-center">
-            <Loader2 className="h-16 w-16 animate-spin text-white" />
-            <p className="mt-4 text-white text-lg">Actualizando costos y registros...</p>
-            <p className="text-white text-sm">Esto puede tomar unos momentos.</p>
+          <div className="flex flex-col items-center justify-center p-8 bg-white rounded-lg shadow-xl">
+            <div className="relative w-24 h-24 mb-4">
+              <Image
+                src="https://nxtrsibnomdqmzcrwedc.supabase.co/storage/v1/object/public/imagenes/AnimationGif/RegistrarSubReceta.gif"
+                alt="Procesando..."
+                width={400} // Ajusta el tamaño según sea necesario
+                height={400} // Ajusta el tamaño según sea necesario
+                unoptimized // Importante para GIFs externos
+                className="absolute inset-0 animate-bounce-slow"
+              />
+            </div>
+            <p className="text-lg font-semibold text-gray-800">Actualizando Sub-receta...</p>
+            <p className="text-sm text-gray-600">Esto puede tomar unos segundos.</p>
           </div>
         </div>
       )}
@@ -396,186 +420,198 @@ export function RecetaEditForm({ recetaId }: RecetaEditFormProps) {
       <h1 className="text-3xl font-bold">Editar Sub-Receta</h1>
 
       {/* Step 1: Basic Recipe Information */}
-      <div className="space-y-4">
-        <h2 className="text-2xl font-semibold">1. Información Básica de la Sub-Receta</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="nombreReceta">Nombre de la Sub-Receta</Label>
-            <Input
-              id="nombreReceta"
-              value={nombreReceta}
-              onChange={(e) => setNombreReceta(e.target.value)}
-              placeholder="Ej. Sopa de Tomate Cremosa"
-            />
+      {currentStep === 1 && (
+        <div className="space-y-4">
+          <h2 className="text-2xl font-semibold">1. Información Básica de la Sub-Receta</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="nombreReceta">Nombre de la Sub-Receta</Label>
+              <Input
+                id="nombreReceta"
+                value={nombreReceta}
+                onChange={(e) => setNombreReceta(e.target.value)}
+                placeholder="Ej. Sopa de Tomate Cremosa"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="notasPreparacion">Notas de Preparación (Opcional)</Label>
+              <Textarea
+                id="notasPreparacion"
+                value={notasPreparacion || ""}
+                onChange={(e) => setNotasPreparacion(e.target.value)}
+                placeholder="Instrucciones especiales, tips, etc."
+              />
+            </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="notasPreparacion">Notas de Preparación (Opcional)</Label>
-            <Textarea
-              id="notasPreparacion"
-              value={notasPreparacion || ""}
-              onChange={(e) => setNotasPreparacion(e.target.value)}
-              placeholder="Instrucciones especiales, tips, etc."
-            />
+            <Label htmlFor="imgUrl">Imagen de la Sub-Receta</Label>
+            <ImageUpload value={imgUrl} onChange={setImgUrl} folder="recetas" />
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={handleUpdateRecetaBasicInfo} disabled={isPending}>
+              {isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <ArrowRightIcon className="mr-2 h-4 w-4" />
+              )}
+              Siguiente
+            </Button>
           </div>
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="imgUrl">Imagen de la Sub-Receta</Label>
-          <ImageUpload value={imgUrl} onChange={setImgUrl} folder="recetas" />
-        </div>
-        <div className="flex justify-end">
-          <Button onClick={handleUpdateRecetaBasicInfo} disabled={isPending}>
-            {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <SaveIcon className="mr-2 h-4 w-4" />}
-            Guardar Información Básica
-          </Button>
-        </div>
-      </div>
+      )}
 
       {/* Step 2: Ingredient Management */}
-      <div className="space-y-4">
-        <h2 className="text-2xl font-semibold">2. Gestión de Ingredientes</h2>
-        <div className="space-y-2">
-          <Label htmlFor="ddlHotel">Hotel</Label>
-          <Select value={selectedHotelId} onValueChange={setSelectedHotelId} disabled={isPending}>
-            <SelectTrigger id="ddlHotel">
-              <SelectValue placeholder="Selecciona un hotel" />
-            </SelectTrigger>
-            <SelectContent>
-              {hotelesDropdown.map((hotel) => (
-                <SelectItem key={hotel.id} value={String(hotel.id)}>
-                  {hotel.nombre}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-          <div className="space-y-2 md:col-span-1">
-            <Label htmlFor="ddlIngredientes">Ingrediente</Label>
-            <Select
-              value={selectedIngredienteId}
-              onValueChange={setSelectedIngredienteId}
-              disabled={isPending || !selectedHotelId}
-            >
-              <SelectTrigger id="ddlIngredientes">
-                <SelectValue placeholder="Selecciona un ingrediente" />
+      {currentStep === 2 && (
+        <div className="space-y-4">
+          <h2 className="text-2xl font-semibold">2. Gestión de Ingredientes</h2>
+          <div className="space-y-2">
+            <Label htmlFor="ddlHotel">Hotel</Label>
+            <Select value={selectedHotelId} onValueChange={setSelectedHotelId} disabled={true}>
+              <SelectTrigger id="ddlHotel">
+                <SelectValue placeholder="Selecciona un hotel" />
               </SelectTrigger>
               <SelectContent>
-                {ingredientesDropdown.map((ingrediente) => (
-                  <SelectItem key={ingrediente.id} value={String(ingrediente.id)}>
-                    {ingrediente.nombre}
+                {hotelesDropdown.map((hotel) => (
+                  <SelectItem key={hotel.id} value={String(hotel.id)}>
+                    {hotel.nombre}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-2 md:col-span-1">
-            <Label htmlFor="txtCantidad">Cantidad</Label>
-            <Input
-              id="txtCantidad"
-              type="number"
-              value={cantidadIngrediente}
-              onChange={(e) => setCantidadIngrediente(Number(e.target.value))}
-              placeholder="0"
-              min="0"
-              step="0.01"
-              disabled={isPending}
-            />
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+            <div className="space-y-2 md:col-span-1">
+              <Label htmlFor="ddlIngredientes">Ingrediente</Label>
+              <Select
+                value={selectedIngredienteId}
+                onValueChange={setSelectedIngredienteId}
+                disabled={isPending || !selectedHotelId}
+              >
+                <SelectTrigger id="ddlIngredientes">
+                  <SelectValue placeholder="Selecciona un ingrediente" />
+                </SelectTrigger>
+                <SelectContent>
+                  {ingredientesDropdown.map((ingrediente) => (
+                    <SelectItem key={ingrediente.id} value={String(ingrediente.id)}>
+                      {ingrediente.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2 md:col-span-1">
+              <Label htmlFor="txtCantidad">Cantidad</Label>
+              <Input
+                id="txtCantidad"
+                type="number"
+                value={cantidadIngrediente}
+                onChange={(e) => setCantidadIngrediente(Number(e.target.value))}
+                placeholder="0"
+                min="0"
+                step="0.01"
+                disabled={isPending}
+              />
+            </div>
+            <div className="space-y-2 md:col-span-1">
+              <Label htmlFor="ddlUnidadMedida">Unidad de Medida</Label>
+              <Select
+                value={selectedUnidadMedidaId}
+                onValueChange={setSelectedUnidadMedidaId}
+                disabled={isUnidadMedidaDisabled}
+              >
+                <SelectTrigger id="ddlUnidadMedida">
+                  <SelectValue placeholder="Unidad" />
+                </SelectTrigger>
+                <SelectContent>
+                  {unidadMedidaDropdown.map((um) => (
+                    <SelectItem key={um.id} value={String(um.id)}>
+                      {um.descripcion}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2 md:col-span-1">
+              <Label htmlFor="txtCostoIngrediente">Costo Unitario</Label>
+              <Input
+                id="txtCostoIngrediente"
+                type="number"
+                value={selectedIngredienteCosto.toFixed(2)}
+                disabled={true} // This field is for display only
+              />
+            </div>
           </div>
-          <div className="space-y-2 md:col-span-1">
-            <Label htmlFor="ddlUnidadMedida">Unidad de Medida</Label>
-            <Select
-              value={selectedUnidadMedidaId}
-              onValueChange={setSelectedUnidadMedidaId}
-              disabled={isUnidadMedidaDisabled}
+          <div className="flex justify-end">
+            <Button
+              onClick={handleAddIngrediente}
+              disabled={isPending || !selectedIngredienteId || cantidadIngrediente <= 0}
             >
-              <SelectTrigger id="ddlUnidadMedida">
-                <SelectValue placeholder="Unidad" />
-              </SelectTrigger>
-              <SelectContent>
-                {unidadMedidaDropdown.map((um) => (
-                  <SelectItem key={um.id} value={String(um.id)}>
-                    {um.descripcion}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlusIcon className="mr-2 h-4 w-4" />}
+              Agregar Ingrediente
+            </Button>
           </div>
-          <div className="space-y-2 md:col-span-1">
-            <Label htmlFor="txtCostoIngrediente">Costo Unitario</Label>
-            <Input
-              id="txtCostoIngrediente"
-              type="number"
-              value={selectedIngredienteCosto.toFixed(2)}
-              disabled={true} // This field is for display only
-            />
-          </div>
-        </div>
-        <div className="flex justify-end">
-          <Button
-            onClick={handleAddIngrediente}
-            disabled={isPending || !selectedIngredienteId || cantidadIngrediente <= 0}
-          >
-            {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlusIcon className="mr-2 h-4 w-4" />}
-            Agregar Ingrediente
-          </Button>
-        </div>
 
-        <h3 className="text-xl font-semibold mt-6">Ingredientes de la Sub-Receta</h3>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Ingrediente</TableHead>
-              <TableHead>Cantidad</TableHead>
-              <TableHead>Unidad</TableHead>
-              <TableHead>Costo Parcial</TableHead>
-              <TableHead className="text-right">Acciones</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {ingredientesReceta.length === 0 ? (
+          <h3 className="text-xl font-semibold mt-6">Ingredientes de la Sub-Receta</h3>
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-muted-foreground">
-                  No hay ingredientes agregados a esta sub-receta.
-                </TableCell>
+                <TableHead>Ingrediente</TableHead>
+                <TableHead>Cantidad</TableHead>
+                <TableHead>Unidad</TableHead>
+                <TableHead>Costo Parcial</TableHead>
+                <TableHead className="text-right">Acciones</TableHead>
               </TableRow>
-            ) : (
-              ingredientesReceta.map((ingrediente) => (
-                <TableRow key={ingrediente.id}>
-                  <TableCell>{ingrediente.nombre}</TableCell>
-                  <TableCell>{ingrediente.cantidad}</TableCell>
-                  <TableCell>{ingrediente.unidadmedidadescripcion}</TableCell>
-                  <TableCell>{ingrediente.ingredientecostoparcial?.toFixed(2) || "0.00"}</TableCell>
-                  <TableCell className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleDeleteIngrediente(ingrediente.id)}
-                      disabled={isPending}
-                    >
-                      <TrashIcon className="h-4 w-4 text-red-500" />
-                    </Button>
+            </TableHeader>
+            <TableBody>
+              {ingredientesReceta.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-muted-foreground">
+                    No hay ingredientes agregados a esta sub-receta.
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-        <div className="text-right text-lg font-bold mt-4">
-          Costo Total de Sub-Receta: ${costoTotalReceta.toFixed(2)}
-        </div>
-      </div>
+              ) : (
+                ingredientesReceta.map((ingrediente) => (
+                  <TableRow key={ingrediente.id}>
+                    <TableCell>{ingrediente.nombre}</TableCell>
+                    <TableCell>{ingrediente.cantidad}</TableCell>
+                    <TableCell>{ingrediente.unidadmedidadescripcion}</TableCell>
+                    <TableCell>{ingrediente.ingredientecostoparcial?.toFixed(2) || "0.00"}</TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDeleteIngrediente(ingrediente.id)}
+                        disabled={isPending}
+                      >
+                        <TrashIcon className="h-4 w-4 text-red-500" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+          <div className="text-right text-lg font-bold mt-4">
+            Costo Total de Sub-Receta: ${costoTotalReceta.toFixed(2)}
+          </div>
 
-      {/* Final Action Button */}
-      <div className="flex justify-end mt-8">
-        <Button onClick={handleUpdateRecetaCompleto} disabled={isPending || isUpdating}>
-          {isPending || isUpdating ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <SaveIcon className="mr-2 h-4 w-4" />
-          )}
-          Actualizar Sub-Receta
-        </Button>
-      </div>
+          {/* Navigation buttons for Step 2 */}
+          <div className="flex justify-between mt-8">
+            <Button onClick={() => setCurrentStep(1)} disabled={isPending}>
+              <ArrowLeftIcon className="mr-2 h-4 w-4" />
+              Anterior
+            </Button>
+            <Button onClick={handleUpdateRecetaCompleto} disabled={isPending || isUpdating}>
+              {isPending || isUpdating ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <SaveIcon className="mr-2 h-4 w-4" />
+              )}
+              Actualizar Sub-Receta
+            </Button>
+          </div>
+        </div>
+      )}
 
       <Dialog open={showConfirmationModal} onOpenChange={setShowConfirmationModal}>
         <DialogContent>
@@ -603,6 +639,22 @@ export function RecetaEditForm({ recetaId }: RecetaEditFormProps) {
           </DialogHeader>
           <DialogFooter>
             <Button onClick={() => setShowIngredienteDuplicadoDialog(false)}>Aceptar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Nuevo Dialogo para Ingredientes Insuficientes */}
+      <Dialog open={showIngredientesInsuficientesDialog} onOpenChange={setShowIngredientesInsuficientesDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Ingredientes Insuficientes</DialogTitle>
+            <DialogDescription>
+              No puedes actualizar una sub-receta sin al menos 2 ingredientes. De lo contrario, al no contener
+              ingredientes se eliminará de la base de datos automáticamente.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button onClick={() => setShowIngredientesInsuficientesDialog(false)}>Aceptar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -9,14 +9,24 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Loader2 } from "@/components/ui/loader2"
-import { useToast } from "@/hooks/use-toast"
+import { useToast } from "@/hooks/use-toast" // Mantener si se usa en otros lugares, aunque no para los errores de handleSubmit
 import { useRouter } from "next/navigation"
 import { useState, useEffect, useMemo } from "react"
 import { crearMenu } from "@/app/actions/menus-actions"
 import { obtenerHoteles } from "@/app/actions/ingredientes-actions" // Reutilizando obtenerHoteles
 import { useAuth } from "@/contexts/auth-context"
 import { supabase } from "@/lib/supabase"
-import { toast as sonnerToast } from "sonner"
+import { toast as sonnerToast } from "sonner" // Mantener si se usa en otros lugares, aunque no para los errores de handleSubmit
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 interface Hotel {
   id: number
@@ -30,7 +40,8 @@ interface Restaurante {
 
 export default function NuevoMenuPage() {
   const router = useRouter()
-  const { toast } = useToast()
+  const { toast } = useToast() // Se mantiene por si se usa en otros contextos, pero no para los errores de handleSubmit
+
   const { user, isLoading: authLoading } = useAuth()
 
   const [nombre, setNombre] = useState("")
@@ -40,6 +51,13 @@ export default function NuevoMenuPage() {
   const [activo, setActivo] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [loadingPage, setLoadingPage] = useState(true)
+
+  // Estados para los AlertDialogs
+  const [showConfirmationDialog, setShowConfirmationDialog] = useState(false)
+  const [newMenuId, setNewMenuId] = useState<number | null>(null)
+  const [showIncompleteFieldsDialog, setShowIncompleteFieldsDialog] = useState(false)
+  const [showErrorDialog, setShowErrorDialog] = useState(false)
+  const [errorMessage, setErrorMessage] = useState("")
 
   const [hoteles, setHoteles] = useState<Hotel[]>([])
   const [restaurantes, setRestaurantes] = useState<Restaurante[]>([])
@@ -115,11 +133,7 @@ export default function NuevoMenuPage() {
     setIsSubmitting(true)
 
     if (!nombre || !hotelId || !restauranteId) {
-      toast({
-        title: "Campos incompletos",
-        description: "Por favor, completa todos los campos obligatorios (Nombre, Hotel, Restaurante).",
-        variant: "destructive",
-      })
+      setShowIncompleteFieldsDialog(true) // Mostrar AlertDialog de campos incompletos
       setIsSubmitting(false)
       return
     }
@@ -134,25 +148,24 @@ export default function NuevoMenuPage() {
       })
 
       if (result.success) {
-        toast({
-          title: "Menú Creado",
-          description: `El menú "${nombre}" ha sido creado exitosamente.`,
-        })
-        router.push("/menus")
+        const getMenuid = result.data?.id // Asignar el nuevo ID a getMenuid
+        if (getMenuid) {
+          setNewMenuId(getMenuid)
+          setShowConfirmationDialog(true) // Mostrar el modal de confirmación
+        } else {
+          // Fallback si por alguna razón no se obtiene el ID
+          setErrorMessage("El menú ha sido creado exitosamente, pero no se pudo obtener el ID para agregar recetas.")
+          setShowErrorDialog(true)
+          router.push("/menus") // Redirigir a /menus si no hay ID para agregar recetas
+        }
       } else {
-        toast({
-          title: "Error al crear menú",
-          description: result.error || "Hubo un problema al crear el menú.",
-          variant: "destructive",
-        })
+        setErrorMessage(result.error || "Hubo un problema al crear el menú.")
+        setShowErrorDialog(true) // Mostrar AlertDialog de error
       }
     } catch (error) {
       console.error("Error inesperado al enviar el formulario:", error)
-      toast({
-        title: "Error inesperado",
-        description: "Ocurrió un error al procesar tu solicitud.",
-        variant: "destructive",
-      })
+      setErrorMessage("Ocurrió un error inesperado al procesar tu solicitud.")
+      setShowErrorDialog(true) // Mostrar AlertDialog de error inesperado
     } finally {
       setIsSubmitting(false)
     }
@@ -285,6 +298,66 @@ export default function NuevoMenuPage() {
           </form>
         </CardContent>
       </Card>
+
+      {/* AlertDialog de confirmación de éxito */}
+      <AlertDialog open={showConfirmationDialog} onOpenChange={setShowConfirmationDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Menú Registrado Exitosamente</AlertDialogTitle>
+            <AlertDialogDescription>¿Deseas agregar recetas a este nuevo menú?</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => {
+                setShowConfirmationDialog(false)
+                router.push("/menus")
+              }}
+            >
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setShowConfirmationDialog(false)
+                if (newMenuId) {
+                  router.push(`/menus/${newMenuId}/agregar`)
+                } else {
+                  router.push("/menus") // Fallback si newMenuId es null por alguna razón
+                }
+              }}
+            >
+              Aceptar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* AlertDialog para campos incompletos */}
+      <AlertDialog open={showIncompleteFieldsDialog} onOpenChange={setShowIncompleteFieldsDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Campos Incompletos</AlertDialogTitle>
+            <AlertDialogDescription>
+              Por favor, completa todos los campos obligatorios (Nombre, Hotel, Restaurante).
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setShowIncompleteFieldsDialog(false)}>Aceptar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* AlertDialog para errores generales */}
+      <AlertDialog open={showErrorDialog} onOpenChange={setShowErrorDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Error al crear menú</AlertDialogTitle>
+            <AlertDialogDescription>{errorMessage}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setShowErrorDialog(false)}>Aceptar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

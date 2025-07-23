@@ -16,6 +16,20 @@ export async function getPlatilloDetailsForModal(platilloId: number) {
       return { success: false, error: "Unauthorized" }
     }*/
 
+    // Obtener el valorfloat de configuraciones para el Precio Sugerido
+    const { data: configData, error: configError } = await supabaseAdmin
+      .from("configuraciones")
+      .select("valorfloat")
+      .eq("id", 2)
+      .single()
+
+    if (configError) {
+      console.error("Error fetching configuracion for Precio Sugerido:", configError)
+      // Continuar sin precio sugerido si hay error en la configuración
+    }
+   
+    const factorPrecioSugerido = configData.valorfloat || 0.25 // Usar .25 como fallback si no se encuentra la configuración
+
     // La consulta SQL proporcionada por el usuario implica que un platillo puede estar
     // asociado a múltiples menús, restaurantes y hoteles, lo que resultaría en múltiples filas
     // si el platillo aparece en varios menús. Por lo tanto, no usamos .single() aquí.
@@ -59,6 +73,9 @@ export async function getPlatilloDetailsForModal(platilloId: number) {
 
     // Transformar y aplanar los datos para que coincidan con los alias y la estructura deseada
     const transformedData = data.flatMap((platillo: any) => {
+      const costoAdministrativo = platillo.costoadministrativo 
+      const precioSugerido = costoAdministrativo / factorPrecioSugerido
+
       if (platillo.platillosxmenu && platillo.platillosxmenu.length > 0) {
         return platillo.platillosxmenu.map((pxm: any) => ({
           id: platillo.id,
@@ -73,7 +90,8 @@ export async function getPlatilloDetailsForModal(platilloId: number) {
           CostoElaboracion: platillo.costototal,
           precioventa: pxm.precioventa,
           margenutilidad: pxm.margenutilidad,
-          CostoTotal: platillo.costoadministrativo,
+          CostoTotal: costoAdministrativo, // Ya es el costo administrativo
+          PrecioSugerido: precioSugerido, // precioSugerido, // Nuevo campo
         }))
       } else {
         // Caso donde el platillo no está asociado a ningún menú, pero queremos mostrar sus detalles principales
@@ -91,7 +109,8 @@ export async function getPlatilloDetailsForModal(platilloId: number) {
             CostoElaboracion: platillo.costototal,
             precioventa: null,
             margenutilidad: null,
-            CostoTotal: platillo.costoadministrativo,
+            CostoTotal: costoAdministrativo, // Ya es el costo administrativo
+            PrecioSugerido:  precioSugerido, //precioSugerido, // Nuevo campo
           },
         ]
       }

@@ -3,7 +3,7 @@
 import type React from "react"
 import { useState, useEffect, useMemo } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { supabase } from "@/lib/supabase"
+import { supabase } from "@/lib/supabase" // Asegúrate de que esta importación sea correcta
 import { toast } from "sonner"
 import Image from "next/image"
 
@@ -28,6 +28,8 @@ import { Loader2, ArrowLeft, PlusCircle, Trash2, XCircle } from "lucide-react"
 
 // Importar acciones de imagen
 import { uploadImage, deleteImage } from "@/app/actions/recetas-image-actions"
+// Importar acciones del wizard para obtener costos
+import { getPlatilloTotalCost } from "@/app/actions/platillos-wizard-actions"
 
 // --- Interfaces ---
 interface PlatilloData {
@@ -38,6 +40,7 @@ interface PlatilloData {
   tiempopreparacion: string | null
   imgurl: string | null
   costototal: number | null
+  costoadministrativo: number | null // Añadir esta propiedad
 }
 
 interface IngredientePlatillo {
@@ -103,6 +106,11 @@ export default function EditarPlatilloPage() {
   const [recetaToDelete, setRecetaToDelete] = useState<number | null>(null) // id de recetasxplatillo
   const [showRecetaExistsDialog, setShowRecetaExistsDialog] = useState(false) // Nuevo estado para el modal de sub-receta existente
 
+  // Estados para Etapa 3: Resumen y Costos
+  const [totalCostoPlatillo, setTotalCostoPlatillo] = useState<number | null>(null)
+  const [costoAdministrativoPlatillo, setCostoAdministrativoPlatillo] = useState<number | null>(null)
+  const [precioSugeridoPlatillo, setPrecioSugeridoPlatillo] = useState<number | null>(null)
+
   const canAdvanceToStep2 = useMemo(() => {
     return platilloData?.nombre && platilloData?.descripcion
   }, [platilloData])
@@ -124,7 +132,9 @@ export default function EditarPlatilloPage() {
       try {
         const { data, error } = await supabase
           .from("platillos")
-          .select("id, nombre, descripcion, instruccionespreparacion, tiempopreparacion, imgurl, costototal")
+          .select(
+            "id, nombre, descripcion, instruccionespreparacion, tiempopreparacion, imgurl, costototal, costoadministrativo",
+          ) // Incluir costoadministrativo
           .eq("id", platilloId)
           .single()
 
@@ -295,6 +305,28 @@ export default function EditarPlatilloPage() {
     loadStep2Data()
   }, [platilloId, currentStep])
 
+  // --- Carga de costos para Etapa 3 ---
+  useEffect(() => {
+    const loadStep3Data = async () => {
+      if (!platilloId || currentStep !== 3) return
+
+      setLoading(true)
+      try {
+        const { totalCost, costoAdministrativo, precioSugerido } = await getPlatilloTotalCost(Number(platilloId))
+        setTotalCostoPlatillo(totalCost)
+        setCostoAdministrativoPlatillo(costoAdministrativo)
+        setPrecioSugeridoPlatillo(precioSugerido)
+      } catch (error) {
+        console.error("Error al cargar costos para la Etapa 3:", error)
+        toast.error("Error al cargar costos para el resumen.")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadStep3Data()
+  }, [platilloId, currentStep])
+
   // --- Handlers de Inputs Etapa 1 ---
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { id, value } = e.target
@@ -432,38 +464,46 @@ export default function EditarPlatilloPage() {
 
   // --- Navegación entre etapas ---
   const handleNextStep = async () => {
-    if (!platilloData?.nombre || !platilloData?.descripcion) {
-      toast.error("Favor de llenar la información faltante (Nombre y Descripción).")
-      return
-    }
-
-    setIsSubmitting(true)
-    try {
-      const { error: updateError } = await supabase
-        .from("platillos")
-        .update({
-          nombre: platilloData.nombre,
-          descripcion: platilloData.descripcion,
-          imgurl: imageUrl, // Usar el imageUrl que ya fue actualizado por handleImageChange
-          instruccionespreparacion: platilloData.instruccionespreparacion,
-          tiempopreparacion: platilloData.tiempopreparacion,
-        })
-        .eq("id", platilloId)
-
-      if (updateError) {
-        console.error("Error al actualizar receta:", updateError)
-        toast.error("Error al actualizar información de la receta.")
-        setIsSubmitting(false)
+    if (currentStep === 1) {
+      if (!platilloData?.nombre || !platilloData?.descripcion) {
+        toast.error("Favor de llenar la información faltante (Nombre y Descripción).")
         return
       }
 
-      toast.success("Información básica de la receta actualizada correctamente.")
-      setCurrentStep(2)
-    } catch (error) {
-      console.error("Error inesperado al actualizar receta:", error)
-      toast.error("Error inesperado al actualizar receta.")
-    } finally {
-      setIsSubmitting(false)
+      setIsSubmitting(true)
+      try {
+        const { error: updateError } = await supabase
+          .from("platillos")
+          .update({
+            nombre: platilloData.nombre,
+            descripcion: platilloData.descripcion,
+            imgurl: imageUrl, // Usar el imageUrl que ya fue actualizado por handleImageChange
+            instruccionespreparacion: platilloData.instruccionespreparacion,
+            tiempopreparacion: platilloData.tiempopreparacion,
+          })
+          .eq("id", platilloId)
+
+        if (updateError) {
+          console.error("Error al actualizar receta:", updateError)
+          toast.error("Error al actualizar información de la receta.")
+          setIsSubmitting(false)
+          return
+        }
+
+        toast.success("Información básica de la receta actualizada correctamente.")
+        setCurrentStep(2)
+      } catch (error) {
+        console.error("Error inesperado al actualizar receta:", error)
+        toast.error("Error inesperado al actualizar receta.")
+      } finally {
+        setIsSubmitting(false)
+      }
+    } else if (currentStep === 2) {
+      if (!canFinalizePlatillo) {
+        toast.error("Debe registrar al menos 2 ingredientes para pasar al resumen.")
+        return
+      }
+      setCurrentStep(3)
     }
   }
 
@@ -661,7 +701,7 @@ export default function EditarPlatilloPage() {
             id: data.id,
             recetaid: data.recetas.id,
             nombre: data.recetas.nombre,
-            recetacostoparcial: data.recetacostoparcial,
+            recetacostoparcial: data.recetas.recetacostoparcial,
           },
         ])
         toast.success("Sub-Receta agregada correctamente.")
@@ -749,6 +789,63 @@ export default function EditarPlatilloPage() {
             .eq("id", platilloId)
 
           if (updatePlatilloError) throw updatePlatilloError
+
+          // Obtener valorfloat de la tabla configuraciones
+          const { data: configData, error: configError } = await supabase
+            .from("configuraciones")
+            .select("valorfloat")
+            .eq("id", 1)
+            .single()
+
+          if (configError || !configData) {
+            console.error("Error al obtener valorfloat de configuraciones:", configError)
+            throw new Error("No se pudo obtener el valor de configuración para el cálculo administrativo.")
+          }
+
+          const valorFloatConfig = configData.valorfloat
+          const costoAdministrativoCalculado = nuevoCostoTotal * valorFloatConfig + nuevoCostoTotal
+
+          // Actualizar costoadministrativo en la tabla platillos
+          const { error: updateCostoAdministrativoError } = await supabase
+            .from("platillos")
+            .update({ costoadministrativo: costoAdministrativoCalculado })
+            .eq("id", platilloId)
+
+          if (updateCostoAdministrativoError) throw updateCostoAdministrativoError
+
+          // INICIO DE LA MODIFICACIÓN SOLICITADA (después de la línea 779)
+          // Obtener precioventa de platillosxmenu y actualizar margenutilidad si no es nulo
+          const { data: platillosxMenuEntries, error: platillosxMenuError } = await supabase
+            .from("platillosxmenu")
+            .select("id, precioventa") // Select id to update specific entry
+            .eq("platilloid", platilloId)
+
+          if (platillosxMenuError) {
+            console.error("Error al obtener entradas de platillosxmenu para margen de utilidad:", platillosxMenuError)
+            throw new Error("Error al obtener datos de platillosxmenu para el cálculo del margen de utilidad.")
+          }
+
+          if (platillosxMenuEntries && platillosxMenuEntries.length > 0) {
+            for (const entry of platillosxMenuEntries) {
+              if (entry.precioventa !== null) {
+                const margenUtilidadCalculado = entry.precioventa - costoAdministrativoCalculado
+
+                const { error: updateMargenUtilidadError } = await supabase
+                  .from("platillosxmenu")
+                  .update({ margenutilidad: margenUtilidadCalculado })
+                  .eq("id", entry.id) // Update specific entry by its ID
+
+                if (updateMargenUtilidadError) {
+                  console.error(
+                    `Error al actualizar margenutilidad para platillosxmenu ID ${entry.id}:`,
+                    updateMargenUtilidadError,
+                  )
+                  throw updateMargenUtilidadError // Or handle more gracefully if one failure shouldn't stop all
+                }
+              }
+            }
+          }
+          // FIN DE LA MODIFICACIÓN SOLICITADA
 
           // 3. Insertar en la tabla historico (ingredientes)
           const { data: platilloMenus, error: platilloMenusError } = await supabase
@@ -867,7 +964,7 @@ export default function EditarPlatilloPage() {
     new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(amount || 0)
 
   return (
-    <div className="container mx-auto p-4 md:p-6 lg:p-8 space-y-6">
+    <div className="container mx-auto max-w-5xl p-8">
       {/* Título y Botón Regresar */}
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold tracking-tight">Actualizar Receta</h1>
@@ -988,17 +1085,19 @@ export default function EditarPlatilloPage() {
                 </div>
               )}
             </div>
+            <div className="flex items-center p-6 pt-4 justify-end">
             <Button
               id="btnActualizarPlatillo"
               name="btnActualizarPlatillo"
               type="button"
               onClick={handleNextStep}
               disabled={isSubmitting || isUploadingImage}
-              className="w-full bg-black text-white hover:bg-gray-800"
+              className="bg-black text-white hover:bg-gray-800"
             >
               {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Actualizar y Siguiente
             </Button>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -1283,6 +1382,144 @@ export default function EditarPlatilloPage() {
             </CardContent>
           </Card>
 
+          {/* Botones de navegación */}
+          <div className="flex justify-between gap-4 mt-6">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handlePreviousStep}
+              disabled={isSubmitting}
+              className="bg-black text-white hover:bg-gray-800"
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Anterior
+            </Button>
+            <Button
+              type="button"
+              onClick={handleNextStep}
+              disabled={isSubmitting || !canFinalizePlatillo}
+              className="bg-black text-white hover:bg-gray-800"
+            >
+              Siguiente
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Etapa 3: Resumen y Finalización */}
+      {currentStep === 3 && (
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Etapa 3: Resumen de la Receta</CardTitle>
+              <CardDescription>Revisa la información y los costos de tu receta antes de finalizar.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Resumen de Información Básica */}
+              <div className="space-y-2">
+                <h3 className="text-lg font-semibold">Información Básica</h3>
+                <p>
+                  <span className="font-medium">Nombre:</span> {platilloData?.nombre}
+                </p>
+                <p>
+                  <span className="font-medium">Descripción:</span> {platilloData?.descripcion}
+                </p>
+                {platilloData?.instruccionespreparacion && (
+                  <p>
+                    <span className="font-medium">Instrucciones:</span> {platilloData.instruccionespreparacion}
+                  </p>
+                )}
+                {platilloData?.tiempopreparacion && (
+                  <p>
+                    <span className="font-medium">Tiempo de Preparación:</span> {platilloData.tiempopreparacion}
+                  </p>
+                )}
+                {imageUrl && (
+                  <div className="mt-4">
+                    <span className="font-medium">Imagen:</span>
+                    <div className="relative w-32 h-32 mt-2 border rounded-md overflow-hidden">
+                      <Image
+                        src={imageUrl || "/placeholder.svg"}
+                        alt="Imagen del platillo"
+                        layout="fill"
+                        objectFit="cover"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Resumen de Ingredientes */}
+              <div className="space-y-2">
+                <h3 className="text-lg font-semibold">Ingredientes Agregados</h3>
+                {ingredientesPlatillo.length > 0 ? (
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Ingrediente</TableHead>
+                          <TableHead>Cantidad</TableHead>
+                          <TableHead>Unidad</TableHead>
+                          <TableHead>Costo Parcial</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {ingredientesPlatillo.map((ing) => (
+                          <TableRow key={ing.id}>
+                            <TableCell>{ing.nombre}</TableCell>
+                            <TableCell>{ing.cantidad}</TableCell>
+                            <TableCell>{ing.unidad}</TableCell>
+                            <TableCell>{formatCurrency(ing.ingredientecostoparcial)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground">No hay ingredientes agregados.</p>
+                )}
+              </div>
+
+              {/* Resumen de Sub-Recetas */}
+              <div className="space-y-2">
+                <h3 className="text-lg font-semibold">Sub-Recetas Agregadas</h3>
+                {recetasPlatillo.length > 0 ? (
+                  <div className="rounded-md border">
+                    <Table className="table-fixed w-full caption-bottom text-sm">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-64 h-12 px-4 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0">Sub-Receta</TableHead>
+                          <TableHead className="w-16 h-12 px-4 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0">Costo</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {recetasPlatillo.map((rec) => (
+                          <TableRow key={rec.id}>
+                            <TableCell>{rec.nombre}</TableCell>
+                            <TableCell>{formatCurrency(rec.recetacostoparcial)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground">No hay sub-recetas agregadas.</p>
+                )}
+              </div>
+
+              {/* Resumen de Costos */}
+              <div className="space-y-2">
+                
+                <p className="mt-2 text-right text-xl font-semibold text-gray-700">Costo de Elaboracion: {formatCurrency(totalCostoPlatillo)}</p>
+                <h3 className="text-right text-base font-semibold text-gray-700">Variacion de Precios: 5%</h3>
+                <p className="mt-6 text-right text-2xl font-bold border-t-4 border-[#58e0be] pt-4">Costo Total: {formatCurrency(costoAdministrativoPlatillo)}</p>
+                <p className="mt-6 text-right text-lg text-black-600">
+                 <span className = "text-yellow-600">*</span>Precio Sugerido: {formatCurrency(precioSugeridoPlatillo)}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Botones de navegación y finalización */}
           <div className="flex justify-between gap-4 mt-6">
             <Button
@@ -1345,14 +1582,14 @@ export default function EditarPlatilloPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="flex flex-col items-center justify-center p-8 bg-white rounded-lg shadow-xl">
             <div className="relative w-24 h-24 mb-4">
-            <Image
-              src="https://nxtrsibnomdqmzcrwedc.supabase.co/storage/v1/object/public/imagenes/AnimationGif/EditarReceta.gif"
-              alt="Procesando..."
-              width={300} // Ajusta el tamaño según sea necesario
-              height={300} // Ajusta el tamaño según sea necesario
-              unoptimized // Importante para GIFs externos
-              className="absolute inset-0 animate-bounce-slow"
-            />
+              <Image
+                src="https://nxtrsibnomdqmzcrwedc.supabase.co/storage/v1/object/public/imagenes/AnimationGif/EditarReceta.gif"
+                alt="Procesando..."
+                width={300} // Ajusta el tamaño según sea necesario
+                height={300} // Ajusta el tamaño según sea necesario
+                unoptimized // Importante para GIFs externos
+                className="absolute inset-0 animate-bounce-slow"
+              />
             </div>
             <p className="text-lg font-semibold text-gray-800">Actualizando receta...</p>
             <p className="text-sm text-gray-600">Esto puede tomar unos segundos.</p>

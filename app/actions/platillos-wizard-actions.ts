@@ -157,8 +157,10 @@ export async function getUnidadesMedidaByIngrediente(ingredienteId: number): Pro
   return [{ id: unit.id, descripcion: unit.descripcion, calculoconversion: unit.calculoconversion }]
 }
 
-// NUEVA FUNCIÓN: Obtener el costo total de un platillo
-export async function getPlatilloTotalCost(platilloId: number): Promise<number> {
+// NUEVA FUNCIÓN: Obtener el costo total de un platillo y el costo administrativo
+export async function getPlatilloTotalCost(
+  platilloId: number,
+): Promise<{ totalCost: number; costoAdministrativo: number; precioSugerido: number }> {
   const supabase = createServerComponentClient({ cookies })
 
   // Fetch sum of ingredient costs
@@ -169,7 +171,7 @@ export async function getPlatilloTotalCost(platilloId: number): Promise<number> 
 
   if (ingSumError) {
     console.error("Error fetching ingredient costs for total:", ingSumError)
-    return 0
+    return { totalCost: 0, costoAdministrativo: 0, precioSugerido: 0 }
   }
   const totalIngredientesCost = ingredientesSum.reduce((sum, item) => sum + (item.ingredientecostoparcial || 0), 0)
 
@@ -181,11 +183,77 @@ export async function getPlatilloTotalCost(platilloId: number): Promise<number> 
 
   if (recSumError) {
     console.error("Error fetching recipe costs for total:", recSumError)
-    return totalIngredientesCost // Return ingredients cost if recipes fail
+    const totalCost = totalIngredientesCost
+    // If recipes fail, we still need a totalCost and a default costoAdministrativo
+    // Attempt to get config for administrative cost even if recipes fail
+    const { data: configData, error: configError } = await supabase
+      .from("configuraciones")
+      .select("valorfloat")
+      .eq("id", 1)
+      .single()
+
+    const valorFloatConfig = configError || !configData ? 0 : configData.valorfloat || 0
+    const costoAdministrativo = totalCost * valorFloatConfig + totalCost
+    console.log("getPlatilloTotalCost (Error Recetas):")
+    console.log("  totalCost:", totalCost)
+    console.log("  valorFloatConfig (ID 1):", valorFloatConfig)
+    console.log("  costoAdministrativo:", costoAdministrativo)
+    return { totalCost, costoAdministrativo, precioSugerido: 0 }
   }
   const totalRecetasCost = recetasSum.reduce((sum, item) => sum + (item.recetacostoparcial || 0), 0)
 
-  return totalIngredientesCost + totalRecetasCost
+  const totalCost = totalIngredientesCost + totalRecetasCost
+
+  // Get valorfloat from configuraciones where id = 1 for administrative cost
+  const { data: configData, error: configError } = await supabase
+    .from("configuraciones")
+    .select("valorfloat")
+    .eq("id", 1)
+    .single()
+
+  if (configError || !configData) {
+    console.error("Error al obtener la configuración para el costo administrativo (ID 1):", configError)
+    // Return totalCost and a default costoAdministrativo if config fails
+    console.log("getPlatilloTotalCost (Error Config ID 1):")
+    console.log("  totalCost:", totalCost)
+    console.log("  costoAdministrativo (fallback):", totalCost)
+    return { totalCost, costoAdministrativo: totalCost, precioSugerido: 0 } // Or 0, depending on desired fallback
+  }
+  const valorFloatConfig = configData.valorfloat || 0
+
+  // Calculate costoAdministrativo
+  const costoAdministrativo = totalCost * valorFloatConfig + totalCost
+
+  // Obtener valorfloat de la tabla configuraciones para Precio Sugerido (id = 2)
+  const { data: configPrecioSugeridoData, error: configPrecioSugeridoError } = await supabase
+    .from("configuraciones")
+    .select("valorfloat")
+    .eq("id", 2)
+    .single()
+
+  if (configPrecioSugeridoError || !configPrecioSugeridoData) {
+    console.error("Error al obtener la configuración para el precio sugerido (ID 2):", configPrecioSugeridoError)
+    // Return default if config fails
+    console.log("getPlatilloTotalCost (Error Config ID 2):")
+    console.log("  totalCost:", totalCost)
+    console.log("  costoAdministrativo:", costoAdministrativo)
+    console.log("  precioSugerido (fallback):", 0)
+    return { totalCost, costoAdministrativo, precioSugerido: 0 }
+  }
+  const valorFloatPrecioSugerido = configPrecioSugeridoData.valorfloat || 1 // Default to 1 to avoid division by zero
+
+  // Calcular Precio Sugerido
+  const precioSugerido = valorFloatPrecioSugerido !== 0 ? costoAdministrativo / valorFloatPrecioSugerido : 0
+
+  console.log("getPlatilloTotalCost (Final):")
+  console.log("  platilloId:", platilloId)
+  console.log("  totalCost:", totalCost)
+  console.log("  valorFloatConfig (ID 1):", valorFloatConfig)
+  console.log("  costoAdministrativo:", costoAdministrativo)
+  console.log("  valorFloatPrecioSugerido (ID 2):", valorFloatPrecioSugerido)
+  console.log("  precioSugerido:", precioSugerido)
+
+  return { totalCost, costoAdministrativo, precioSugerido }
 }
 
 // --- ACCIONES DEL WIZARD ---
@@ -411,6 +479,31 @@ export async function finalizarRegistro(platilloId: number, menuId: number) {
       .eq("id", platilloId)
 
     if (updateCostoError) throw updateCostoError
+
+    //Actualizar costo administrativo
+    // Obtener valorfloat de la tabla configuraciones
+    const { data: configData, error: configError } = await supabase
+      .from("configuraciones")
+      .select("valorfloat")
+      .eq("id", 1)
+      .single()
+
+    if (configError || !configData) {
+      console.error("Error al obtener la configuración para el costo administrativo:", configError)
+      throw new Error("No se pudo obtener la configuración para el costo administrativo.")
+    }
+    const valorFloatConfig = configData.valorfloat || 0 // Asegurarse de que sea un número, por defecto 0 si es null/undefined
+
+    // Calcular costoadministrativo
+    const costoAdministrativo = totalCost * valorFloatConfig + totalCost
+
+    // Actualizar la columna costoadministrativo en la tabla platillos
+    const { error: updateCostoAdminError } = await supabase
+      .from("platillos")
+      .update({ costoadministrativo: costoAdministrativo })
+      .eq("id", platilloId)
+
+    if (updateCostoAdminError) throw updateCostoAdminError
 
     // 2. Insertar en platillosxmenu
     const { error: platillosxmenuError } = await supabase.from("platillosxmenu").insert({

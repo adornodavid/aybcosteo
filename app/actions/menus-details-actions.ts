@@ -1,9 +1,11 @@
 "use server"
 
-import { supabase } from "@/lib/supabase"
+import { createServerSupabaseClient } from "@/lib/supabase-server"
 
 export async function getMenuDetails(menuId: string) {
   try {
+    const supabase = createServerSupabaseClient()
+
     // Consulta para obtener los detalles básicos del menú, restaurante y hotel
     const { data: menuData, error: menuError } = await supabase
       .from("menus")
@@ -15,8 +17,10 @@ export async function getMenuDetails(menuId: string) {
         activo,
         fechacreacion,
         restaurante:restauranteid(
+          id,
           nombre,
           hotel:hotelid(
+            id,
             nombre
           )
         )

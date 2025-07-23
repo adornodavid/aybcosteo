@@ -402,6 +402,38 @@ export async function updateRecetaCostoAndHistorico(recetaId: string) {
         return { success: false, error: updatePlatilloCostError }
       }
 
+      // INICIO DE LA NUEVA LÓGICA PARA costoadministrativo (después de la línea 403)
+      // 1. Obtener valorfloat de configuraciones
+      const { data: configData, error: configError } = await supabase
+        .from("configuraciones")
+        .select("valorfloat")
+        .eq("id", 1)
+        .single()
+
+      if (configError || !configData) {
+        console.error("Error fetching valorfloat from configuraciones:", configError?.message || "Config not found")
+        return { success: false, error: configError || { message: "Configuracion with ID 1 not found" } }
+      }
+      const valorFloatConfig = configData.valorfloat || 0
+
+      // 2. Calcular costoadministrativo
+      const costoAdministrativoCalculado = totalPlatilloCost * valorFloatConfig + totalPlatilloCost
+
+      // 3. Actualizar platillos.costoadministrativo
+      const { error: updateCostoAdministrativoError } = await supabase
+        .from("platillos")
+        .update({ costoadministrativo: costoAdministrativoCalculado })
+        .eq("id", platilloId)
+
+      if (updateCostoAdministrativoError) {
+        console.error(
+          `Error updating costoadministrativo for platillo ${platilloId}:`,
+          updateCostoAdministrativoError.message,
+        )
+        return { success: false, error: updateCostoAdministrativoError }
+      }
+      // FIN DE LA NUEVA LÓGICA PARA costoadministrativo
+
       // NUEVA LÓGICA: Actualizar margenutilidad en platillosxmenu
       // SQL: select id, precioventa from platillosxmenu where platilloid = [platilloId]
       const { data: platillosxMenuRecords, error: platillosxMenuError } = await supabase
@@ -415,7 +447,7 @@ export async function updateRecetaCostoAndHistorico(recetaId: string) {
       }
 
       for (const pxmRecord of platillosxMenuRecords) {
-        const margenUtilidad = (pxmRecord.precioventa || 0) - totalPlatilloCost
+        const margenUtilidad = (pxmRecord.precioventa || 0) - costoAdministrativoCalculado
         const { error: updateMargenUtilidadError } = await supabase
           .from("platillosxmenu")
           .update({ margenutilidad: margenUtilidad })
@@ -429,6 +461,8 @@ export async function updateRecetaCostoAndHistorico(recetaId: string) {
           return { success: false, error: updateMargenUtilidadError }
         }
       }
+
+     
     }
 
     // 4. Insertar en la tabla 'historico' (primera inserción - costos de receta por platillo)

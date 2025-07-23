@@ -77,7 +77,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-blue-900 via-blue-800 to-blue-900">
+    <div className="min-h-screen relative overflow-hidden bg-[url('https://nxtrsibnomdqmzcrwedc.supabase.co/storage/v1/object/public/imagenes/Backgrouds/FondoInicioSesion.jpg')] bg-cover bg-center">
       {/* Iconos de fondo */}
       <div className="absolute inset-0 pointer-events-none z-0">
         <div className="absolute top-10 left-10 text-blue-700/20">
@@ -103,42 +103,42 @@ export default function LoginPage() {
       {/* Contenido principal */}
       <div className="relative z-10 flex flex-col items-center justify-center min-h-screen p-4">
         {/* Logo */}
-        <div className="mb-8">
-          <div className="flex items-center space-x-3">
+        <div className="bg-[#fffcf5] shadow-2xl mb-8 rounded-lg">
+          <div className="bg-[#fffcf5] shadow-2xl flex items-center space-x-3 rounded-lg">
             <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center">
               <Icons.Utensils className="w-8 h-8 text-black" />
             </div>
-            <h1 className="text-3xl font-bold text-white">Sistema de Costeo</h1>
+            <h1 className="text-3xl font-bold text-black">Sistema de Costeo </h1>
           </div>
         </div>
 
         {/* Formulario */}
-        <Card className="w-full max-w-md z-20 shadow-2xl">
+        <Card className="bg-[#fffcf5] w-full max-w-md z-20 shadow-2xl">
           <CardHeader className="text-center">
-            <CardTitle className="text-2xl font-bold text-gray-800">Iniciar Sesión</CardTitle>
+            <CardTitle className="text-2xl font-bold">Iniciar Sesión</CardTitle>
           </CardHeader>
           <CardContent>
-            <form id="frmLogin" name="frmLogin" className="space-y-4">
-              <div className="space-y-2 z-30 relative">
+            <form id="frmLogin" name="frmLogin" className="bg-[#fffcf5] space-y-4">
+              <div className="bg-[#fffcf5] space-y-2 z-30 relative">
                 <Input
                   type="text"
                   id="txtCorreo"
                   name="txtCorreo"
                   maxLength={50}
                   placeholder="Introduce tu Usuario / Correo electrónico"
-                  className="w-full z-30"
+                  className="bg-[#fffcf5] w-full z-30"
                   autoComplete="email"
                 />
               </div>
 
-              <div className="space-y-2 z-30 relative">
+              <div className="bg-[#fffcf5] space-y-2 z-30 relative">
                 <Input
                   type="password"
                   id="txtPassword"
                   name="txtPassword"
                   maxLength={150}
                   placeholder="Coloca tu contraseña de acceso"
-                  className="w-full z-30"
+                  className="bg-[#fffcf5] w-full z-30"
                   autoComplete="current-password"
                 />
               </div>
@@ -149,7 +149,7 @@ export default function LoginPage() {
                 name="btnValidar"
                 onClick={validateLogin}
                 disabled={loading}
-                className="w-full bg-black hover:bg-gray-800 text-white z-30 relative"
+                className="w-full bg-black text-white z-30 relative"
               >
                 {loading ? (
                   <div className="flex items-center space-x-2">

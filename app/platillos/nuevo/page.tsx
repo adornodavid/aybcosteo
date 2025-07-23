@@ -3,7 +3,7 @@
 import type React from "react"
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
-import { Loader2, ArrowLeft, UploadCloud } from "lucide-react"
+import { Loader2, UploadCloud } from "lucide-react"
 import { toast } from "sonner"
 import { Suspense } from "react"
 import Loading from "./loading"
@@ -132,6 +132,8 @@ export default function NuevoPlatilloPage() {
 
   // --- ETAPA 4: RESUMEN ---
   const [totalCostoPlatillo, setTotalCostoPlatillo] = useState<number | null>(null) // Nuevo estado para el costo total
+  const [costoAdministrativoPlatillo, setCostoAdministrativoPlatillo] = useState<number | null>(null) // Nuevo estado para el costo administrativo
+  const [precioSugeridoPlatillo, setPrecioSugeridoPlatillo] = useState<number | null>(null) // Nuevo estado para el precio sugerido
 
   // --- EFECTOS ---
 
@@ -224,8 +226,10 @@ export default function NuevoPlatilloPage() {
   useEffect(() => {
     if (etapa === 4 && platilloId !== null) {
       const fetchTotalCost = async () => {
-        const cost = await actions.getPlatilloTotalCost(platilloId)
-        setTotalCostoPlatillo(cost)
+        const { totalCost, costoAdministrativo, precioSugerido } = await actions.getPlatilloTotalCost(platilloId)
+        setTotalCostoPlatillo(totalCost)
+        setCostoAdministrativoPlatillo(costoAdministrativo) // Set the new state
+        setPrecioSugeridoPlatillo(precioSugerido) // Set the new state for suggested price
       }
       fetchTotalCost()
     }
@@ -589,7 +593,7 @@ export default function NuevoPlatilloPage() {
             <div className="flex flex-col items-center justify-center p-8 bg-white rounded-lg shadow-xl">
               <div className="relative w-24 h-24 mb-4">
                 <Image
-                  src="https://nxtrsibnomdqmzcrwedc.supabase.co/storage/v1/object/public/imagenes//12817462.gif"
+                  src="https://nxtrsibnomdqmzcrwedc.supabase.co/storage/v1/object/public/imagenes/AnimationGif/RegistroReceta.gif"
                   alt="Cocinando"
                   width={200}
                   height={200}
@@ -1091,8 +1095,20 @@ export default function NuevoPlatilloPage() {
                 )}
               </div>
               {totalCostoPlatillo !== null && (
-                <div className="mt-6 text-right text-2xl font-bold">
-                  Costo Total de la Receta: ${totalCostoPlatillo.toFixed(2)}
+                <div className="mt-2 text-right text-xl font-semibold text-gray-700">
+                  Costo de Elaboracion: ${totalCostoPlatillo.toFixed(2)}
+                </div>
+              )}
+              <div className="text-right text-base font-semibold text-gray-700">Variacion Precios: 5%</div>
+              {costoAdministrativoPlatillo !== null && (
+                <div className="mt-6 text-right text-2xl font-bold border-t-4 border-[#58e0be] pt-4">
+                  Costo Total: ${costoAdministrativoPlatillo.toFixed(2)}
+                </div>
+              )}
+              {/* Línea 1107 del código anterior, el nuevo contenido va después de este div */}
+              {precioSugeridoPlatillo !== null && (
+                <div className="mt-6 text-right text-lg text-black-600">
+                  <span className = "text-yellow-600">*</span> Precio Sugerido: ${precioSugeridoPlatillo.toFixed(2)}
                 </div>
               )}
             </CardContent>

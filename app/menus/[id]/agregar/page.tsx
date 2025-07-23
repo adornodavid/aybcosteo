@@ -26,7 +26,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/components/ui/use-toast"
-import { Loader2, ArrowLeft, Plus, Trash2, Pencil } from "lucide-react" // Importar Pencil
+import { Loader2, ArrowLeft, Plus, Trash2, Pencil, TriangleAlert } from "lucide-react" // Importar Pencil y TriangleAlert
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table"
 
 interface AgregarPlatillosPageProps {
@@ -46,8 +46,11 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
   const [dialogOpen, setDialogOpen] = useState(false) // Para agregar platillo
   const [selectedPlatilloId, setSelectedPlatilloId] = useState<string>("")
   const [costoPlatillo, setCostoPlatillo] = useState<string>("")
+  const [costoAdministrativo, setCostoAdministrativo] = useState<string>("") // Nueva variable de estado
   const [precioVenta, setPrecioVenta] = useState<string>("")
+  const [precioSugerido, setPrecioSugerido] = useState<string>("") // Nueva variable de estado para precio sugerido
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [showValidationAlert, setShowValidationAlert] = useState(false) // Nuevo estado para la alerta de validación
 
   // Estados para el modal de detalles del platillo
   const [showDetailsDialog, setShowDetailsDialog] = useState(false)
@@ -94,14 +97,12 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
   }, [fetchPlatillos])
 
   const handleAddPlatillo = async () => {
-    if (!selectedPlatilloId || !costoPlatillo || !precioVenta) {
-      toast({
-        title: "Información faltante",
-        description: "Favor de llenar la información faltante.",
-        variant: "destructive",
-      })
+    // Validar que se haya seleccionado un platillo y se haya ingresado un precio de venta
+    if (!selectedPlatilloId || !precioVenta || Number.parseFloat(precioVenta) <= 0) {
+      setShowValidationAlert(true) // Mostrar la alerta
       return
     }
+    setShowValidationAlert(false) // Ocultar la alerta si la validación pasa
 
     const platilloExistente = assignedPlatillos.find((p) => p.platilloid === Number.parseInt(selectedPlatilloId))
     if (platilloExistente) {
@@ -119,6 +120,7 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
       platilloid: Number.parseInt(selectedPlatilloId),
       precioventa: Number.parseFloat(precioVenta),
       costoplatillo: Number.parseFloat(costoPlatillo),
+      costoadministrativo: Number.parseFloat(costoAdministrativo), // Pasar el costo administrativo
     })
 
     if (res.data) {
@@ -129,7 +131,9 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
       setDialogOpen(false)
       setSelectedPlatilloId("")
       setCostoPlatillo("")
+      setCostoAdministrativo("") // Limpiar costo administrativo
       setPrecioVenta("")
+      setPrecioSugerido("") // Limpiar precio sugerido
       setSelectedPlatilloDetailsForForm(null) // Limpiar detalles del formulario
       fetchPlatillos() // Actualizar el listado
     } else {
@@ -144,6 +148,9 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
 
   const handlePlatilloSelect = async (value: string) => {
     setSelectedPlatilloId(value)
+    // Reset validation alert when a platillo is selected
+    setShowValidationAlert(false)
+
     const selected = availablePlatillos.find((p) => p.id === Number.parseInt(value))
     if (selected && selected.costototal !== null) {
       setCostoPlatillo(selected.costototal.toString())
@@ -156,8 +163,22 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
       const detailsRes = await obtenerDetallePlatillo(Number.parseInt(value))
       if (detailsRes.data) {
         setSelectedPlatilloDetailsForForm(detailsRes.data)
+        // Actualizar el costo administrativo si está disponible
+        if (detailsRes.data.costoadministrativo !== null) {
+          setCostoAdministrativo(detailsRes.data.costoadministrativo.toString())
+        } else {
+          setCostoAdministrativo("")
+        }
+        // Actualizar el precio sugerido si está disponible
+        if (detailsRes.data.precioSugerido !== null && detailsRes.data.precioSugerido !== undefined) {
+          setPrecioSugerido(detailsRes.data.precioSugerido.toFixed(2).toString())
+        } else {
+          setPrecioSugerido("")
+        }
       } else {
         setSelectedPlatilloDetailsForForm(null)
+        setCostoAdministrativo("") // Limpiar si hay error
+        setPrecioSugerido("") // Limpiar si hay error
         toast({
           title: "Error",
           description: detailsRes.error || "Error al cargar detalles del platillo.",
@@ -166,6 +187,8 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
       }
     } else {
       setSelectedPlatilloDetailsForForm(null)
+      setCostoAdministrativo("") // Limpiar si no hay selección
+      setPrecioSugerido("") // Limpiar si no hay selección
     }
   }
 
@@ -218,6 +241,7 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
       platilloid: platilloToEdit.platilloid,
       precioventa: Number.parseFloat(editPrecioVenta),
       costoplatillo: platilloToEdit.platillos?.costototal || 0, // Usar el costo del platillo asignado
+      costoadministrativo: platilloToEdit.platillos?.costoadministrativo || 0, // Pasar el costo administrativo
     })
 
     if (res.data) {
@@ -378,21 +402,37 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
                   <Table>
                     <TableBody>
                       <TableRow>
-                        <TableCell className="font-medium">Costo Total:</TableCell>
-                        <TableCell>${selectedPlatilloDetailsForForm.costototal?.toFixed(2)}</TableCell>
-                      </TableRow>
-                      <TableRow>
                         <TableCell className="font-medium">Instrucciones:</TableCell>
                         <TableCell className="text-sm">
                           {selectedPlatilloDetailsForForm.instruccionespreparacion || "N/A"}
                         </TableCell>
                       </TableRow>
+                      <TableRow>
+                        <TableCell className="font-medium">Costo de Elaboracion:</TableCell>
+                        <TableCell>${selectedPlatilloDetailsForForm.costototal?.toFixed(2)}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell className="font-medium">Costo Total:</TableCell>
+                        <TableCell>
+                          ${selectedPlatilloDetailsForForm.costoadministrativo?.toFixed(2) || "0.00"}
+                        </TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell className="font-medium">% Administracion:</TableCell>
+                        <TableCell className="text-sm">75%</TableCell>
+                      </TableRow>
+                      {precioSugerido && ( // Mostrar solo si hay un precio sugerido
+                        <TableRow>
+                          <TableCell className="font-medium">Precio Sugerido:</TableCell>
+                          <TableCell>${precioSugerido}</TableCell>
+                        </TableRow>
+                      )}
                     </TableBody>
                   </Table>
                 </CardContent>
               </Card>
             )}
-            <div className="grid grid-cols-4 items-center gap-4">
+            {/*<div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="txtCostoPlatillo" className="text-right">
                 Costo Platillo
               </Label>
@@ -408,6 +448,21 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="txtCostoAdministrativo" className="text-right">
+                Costo Administrativo
+              </Label>
+              <Input
+                id="txtCostoAdministrativo"
+                name="txtCostoAdministrativo"
+                type="text"
+                value={costoAdministrativo}
+                onChange={(e) => setCostoAdministrativo(e.target.value)}
+                className="col-span-3"
+                placeholder="Costo administrativo del platillo"
+                readOnly
+              />
+            </div>*/}
+            <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="txtPrecioVenta" className="text-right">
                 Precio Venta
               </Label>
@@ -416,12 +471,21 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
                 name="txtPrecioVenta"
                 type="number"
                 value={precioVenta}
-                onChange={(e) => setPrecioVenta(e.target.value)}
+                onChange={(e) => {
+                  setPrecioVenta(e.target.value)
+                  setShowValidationAlert(false) // Ocultar la alerta al empezar a escribir
+                }}
                 className="col-span-3"
                 placeholder="Precio de venta del platillo"
               />
             </div>
           </div>
+          {showValidationAlert && (
+            <div className="flex items-center gap-2 p-3 mb-4 bg-yellow-100 text-yellow-800 rounded-md">
+              <TriangleAlert className="h-5 w-5" />
+              <p className="text-sm">Selecciona un platillo y/o ingresa un precio de venta válido.</p>
+            </div>
+          )}
           <DialogFooter>
             <Button
               id="btnAsignarPlatillo"
@@ -471,9 +535,19 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
                     <TableCell>{selectedPlatilloForDetails.instruccionespreparacion || "N/A"}</TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell className="font-medium">Costo Total:</TableCell>
+                    <TableCell className="font-medium">Costo de Elaboracion:</TableCell>
                     <TableCell>${selectedPlatilloForDetails.costototal?.toFixed(2) || "0.00"}</TableCell>
                   </TableRow>
+                  <TableRow>
+                    <TableCell className="font-medium">Costo Total:</TableCell>
+                    <TableCell>${selectedPlatilloForDetails.costoadministrativo?.toFixed(2) || "0.00"}</TableCell>
+                  </TableRow>
+                  {precioSugerido && ( // Mostrar solo si hay un precio sugerido
+                    <TableRow>
+                      <TableCell className="font-medium">Precio Sugerido:</TableCell>
+                      <TableCell>${precioSugerido}</TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </div>
@@ -530,6 +604,19 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
                 name="txtCostoPla"
                 type="text"
                 value={platilloToEdit?.platillos?.costototal?.toFixed(2) || ""}
+                className="col-span-3"
+                readOnly
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="txtCostoAdmin" className="text-right">
+                Costo Administrativo
+              </Label>
+              <Input
+                id="txtCostoAdmin"
+                name="txtCostoAdmin"
+                type="text"
+                value={platilloToEdit?.platillos?.costoadministrativo?.toFixed(2) || ""}
                 className="col-span-3"
                 readOnly
               />

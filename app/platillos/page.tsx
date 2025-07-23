@@ -34,8 +34,8 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog" // Importar componentes de Dialog
 import * as DialogPrimitive from "@radix-ui/react-dialog" // Importar DialogPrimitive directamente
-import { Eraser, Search, Eye, Edit, ToggleLeft, ToggleRight, Loader2, PlusCircle, Trash2 } from "lucide-react"
-import { getPlatilloDetailsForModal } from "@/app/actions/platillo-details-actions" // Importar la nueva acción
+import { Eraser, Search, Eye, Edit, ToggleLeft, ToggleRight, Loader2, PlusCircle } from "lucide-react"
+import { getPlatilloDetailsForModal } from "@/app/actions/platillos-details-actions" // Importar la nueva acción
 
 // --- Interfaces ---
 interface DropdownItem {
@@ -80,6 +80,8 @@ interface PlatilloDetail {
   CostoElaboracion: number
   precioventa: number | null
   margenutilidad: number | null
+  CostoTotal: number
+  PrecioSugerido: number // Nuevo campo
 }
 
 // --- Componente Principal ---
@@ -468,6 +470,7 @@ export default function PlatillosPage() {
     const { success, data, error } = await getPlatilloDetailsForModal(platilloId)
 
     // INICIO DE LA MODIFICACIÓN
+    
     console.log(`getPlatilloDetailsForModal - Success: ${success}, Error: ${error ? error : "No error"}`)
     // FIN DE LA MODIFICACIÓN
 
@@ -478,8 +481,9 @@ export default function PlatillosPage() {
       setSelectedPlatilloDetails([]) // Indicar que no se encontraron datos
     }
     setIsDetailsLoading(false)
+    
   }
-
+  
   // --- Paginación ---
   const platillosPaginados = useMemo(() => {
     const indiceInicio = (paginaActual - 1) * resultadosPorPagina
@@ -503,25 +507,21 @@ export default function PlatillosPage() {
         <div className="flex items-center justify-center min-h-screen">
           <div className="flex flex-col items-center justify-center p-8">
             <div className="relative w-24 h-24 mb-4">
-            <Image
-              src="https://nxtrsibnomdqmzcrwedc.supabase.co/storage/v1/object/public/imagenes/AnimationGif/CargarPage.gif"
-              alt="Procesando..."
-              width={300} // Ajusta el tamaño según sea necesario
-              height={300} // Ajusta el tamaño según sea necesario
-              unoptimized // Importante para GIFs externos
-              className="absolute inset-0 animate-bounce-slow"
-            />
+              <Image
+                src="https://nxtrsibnomdqmzcrwedc.supabase.co/storage/v1/object/public/imagenes/AnimationGif/CargarPage.gif"
+                alt="Procesando..."
+                width={300} // Ajusta el tamaño según sea necesario
+                height={300} // Ajusta el tamaño según sea necesario
+                unoptimized // Importante para GIFs externos
+                className="absolute inset-0 animate-bounce-slow"
+              />
             </div>
             <p className="text-lg font-semibold text-gray-800">Cargando Pagina...</p>
-           
+          </div>
         </div>
-      </div>
       </div>
     )
   }
-
-
-
 
   return (
     <div className="container mx-auto p-4 md:p-6 lg:p-8 space-y-6">
@@ -787,8 +787,8 @@ export default function PlatillosPage() {
                               <AlertDialogHeader>
                                 <AlertDialogTitle>¿Estás absolutamente seguro?</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  Esta acción desactivará la receta (el platillo). No se eliminará permanentemente de la base de
-                                  datos, pero ya no estará visible en la aplicación.
+                                  Esta acción desactivará la receta (el platillo). No se eliminará permanentemente de la
+                                  base de datos, pero ya no estará visible en la aplicación.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
@@ -874,27 +874,35 @@ export default function PlatillosPage() {
                   <img
                     src={selectedPlatilloDetails[0].imgurl || "/placeholder.svg"}
                     alt={selectedPlatilloDetails[0].Platillo}
-                    className="w-32 h-32 object-cover rounded-md"
+                    className="w-64 h-64 object-cover rounded-md"
                   />
                 )}
                 <div className="grid gap-1">
                   <h3 className="text-xl font-semibold">{selectedPlatilloDetails[0].Platillo}</h3>
                   <p className="text-muted-foreground">{selectedPlatilloDetails[0].descripcion}</p>
                   {selectedPlatilloDetails[0].instruccionespreparacion && (
-                    <p className="text-sm text-gray-600">
-                      <span className="font-medium">Instrucciones:</span>{" "}
+                    <p className="mt-2 text-sm text-gray-600">
+                      <span className="text-base text-black-600 font-medium">Instrucciones:</span>{" "}
                       {selectedPlatilloDetails[0].instruccionespreparacion}
                     </p>
                   )}
                   {selectedPlatilloDetails[0].tiempopreparacion && (
-                    <p className="text-sm text-gray-600">
-                      <span className="font-medium">Tiempo de Preparación:</span>{" "}
+                    <p className="mt-2 text-sm text-gray-600">
+                      <span className="text-base font-medium">Tiempo de Preparación:</span>{" "}
                       {selectedPlatilloDetails[0].tiempopreparacion}
                     </p>
                   )}
-                  <p className="text-sm text-gray-600">
-                    <span className="font-medium">Costo de Elaboración:</span>{" "}
+                  <p className="mt-3 text-sm text-gray-600">
+                    <span className="text-base font-medium">Costo de Elaboración:</span>{" "}
                     {formatCurrency(selectedPlatilloDetails[0].CostoElaboracion)}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    <span className="text-base font-medium">Costo Total:</span>{" "}
+                    {formatCurrency(selectedPlatilloDetails[0].CostoTotal)}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    <span className="text-base font-medium">Precio Sugerido:</span>{" "}
+                    {formatCurrency(selectedPlatilloDetails[0].PrecioSugerido)}
                   </p>
                 </div>
               </div>

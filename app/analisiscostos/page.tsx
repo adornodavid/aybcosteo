@@ -258,6 +258,14 @@ export default function AnalisisCostosPage() {
                     dot={true}
                     name="Precio Venta"
                   />
+                  <Line
+                    dataKey="margenutilidad"
+                    type="monotone"
+                    stroke="#46914c"
+                    strokeWidth={2}
+                    dot={true}
+                    name="Margen Utilidad"
+                  />
                   <ChartLegend content={<ChartLegend />} />
                 </LineChart>
               </ResponsiveContainer>

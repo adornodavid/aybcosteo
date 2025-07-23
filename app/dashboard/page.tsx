@@ -50,11 +50,13 @@ export default function DashboardPage() {
 
         // Validaciones de seguridad como especificas
         if (sesionActiva !== "true") {
+          console.log("Variable de sesion sesionActiva es falsa")
           router.push("/login")
           return
         }
 
         if (!rolId || rolId === "0" || rolId === "") {
+        console.log("Variable de sesion rolId es 0 o es ")
           router.push("/login")
           return
         }

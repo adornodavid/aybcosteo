@@ -36,7 +36,7 @@ BEGIN
         ALTER TABLE public.platillos
         ADD CONSTRAINT platillos_hotelid_fkey
         FOREIGN KEY (hotelid) REFERENCES public.hoteles(id);
-        RAISE NOTICE 'Clave foránea platillos_hotelid_fkey añadida.';
+        RAISE NOTICE 'Clave foránea platillos_hotelid_fkey a��adida.';
     ELSE
         RAISE NOTICE 'Clave foránea platillos_hotelid_fkey ya existe.';
     END IF;
