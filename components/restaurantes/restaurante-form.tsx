@@ -16,25 +16,14 @@ import { ImageUpload } from "@/components/ui/image-upload"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Switch } from "@/components/ui/switch"
 import type { Restaurante, DropdownOption } from "@/lib/types-sistema-costeo"
+import { TriangleAlert } from "lucide-react" // Importar el icono de alerta
 
 const formSchema = z.object({
   hddAccion: z.string().optional(),
   hddEdicionRestauranteId: z.string().optional(),
-  txtEdicionRestauranteNombre: z.string().min(1, "El nombre es requerido").max(150, "Máximo 150 caracteres"),
+  txtEdicionRestauranteNombre: z.string().max(150, "Máximo 150 caracteres"),
   txtEdicionRestauranteDireccion: z.string().max(255, "Máximo 255 caracteres").optional().nullable(),
-  txtEdicionRestauranteTelefono: z.string().max(20, "Máximo 20 caracteres").optional().nullable(),
-  txtEdicionRestauranteEmail: z
-    .string()
-    .email("Email inválido")
-    .max(100, "Máximo 100 caracteres")
-    .optional()
-    .nullable(),
-  ddlEdicionHotel: z
-    .string()
-    .min(1, "Debe seleccionar un hotel")
-    .refine((val) => val !== "0", {
-      message: "Debe seleccionar un hotel",
-    }),
+  ddlEdicionHotel: z.string(),
   hddEdicionImagen: z.string().optional().nullable(),
   activo: z.boolean().default(true), // Añadir el campo activo al esquema
 })
@@ -50,6 +39,7 @@ export function RestauranteForm({ isOpen, onClose, initialData, hotels }: Restau
   const { toast } = useToast()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [imageUrl, setImageUrl] = useState<string | null>(initialData?.imagen_url || null)
+  const [showTopLevelAlert, setShowTopLevelAlert] = useState(false) // Nuevo estado para la alerta superior
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -58,8 +48,6 @@ export function RestauranteForm({ isOpen, onClose, initialData, hotels }: Restau
       hddEdicionRestauranteId: initialData?.id ? String(initialData.id) : "0",
       txtEdicionRestauranteNombre: initialData?.nombre || "",
       txtEdicionRestauranteDireccion: initialData?.direccion || "",
-      txtEdicionRestauranteTelefono: initialData?.telefono || "",
-      txtEdicionRestauranteEmail: initialData?.email || "",
       ddlEdicionHotel: initialData?.hotel_id ? String(initialData.hotel_id) : "0",
       hddEdicionImagen: initialData?.imagen_url || null,
       activo: initialData?.activo ?? true, // Establecer el valor inicial para activo
@@ -73,25 +61,36 @@ export function RestauranteForm({ isOpen, onClose, initialData, hotels }: Restau
         hddEdicionRestauranteId: initialData?.id ? String(initialData.id) : "0",
         txtEdicionRestauranteNombre: initialData?.nombre || "",
         txtEdicionRestauranteDireccion: initialData?.direccion || "",
-        txtEdicionRestauranteTelefono: initialData?.telefono || "",
-        txtEdicionRestauranteEmail: initialData?.email || "",
         ddlEdicionHotel: initialData?.hotel_id ? String(initialData.hotel_id) : "0",
         hddEdicionImagen: initialData?.imagen_url || null,
         activo: initialData?.activo ?? true,
       })
       setImageUrl(initialData?.imagen_url || null)
+      setShowTopLevelAlert(false) // Reset alert on open
     }
   }, [isOpen, initialData, form])
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
+    // Validación manual para la alerta superior
+    const isNombreEmpty = !values.txtEdicionRestauranteNombre || values.txtEdicionRestauranteNombre.trim() === ""
+    const isHotelNotSelected = values.ddlEdicionHotel === "0"
+    const isDireccionEmpty =
+      !values.txtEdicionRestauranteDireccion || values.txtEdicionRestauranteDireccion.trim() === ""
+
+    if (isNombreEmpty || isHotelNotSelected || isDireccionEmpty) {
+      setShowTopLevelAlert(true)
+      setIsSubmitting(false) // Asegurar que el botón no se quede en estado de envío
+      return // Detener el envío del formulario
+    }
+
+    setShowTopLevelAlert(false) // Ocultar la alerta si la validación manual pasa
+
     setIsSubmitting(true)
     const formData = new FormData()
     formData.append("hddAccion", values.hddAccion || "")
     formData.append("hddEdicionRestauranteId", values.hddEdicionRestauranteId || "0")
     formData.append("txtEdicionRestauranteNombre", values.txtEdicionRestauranteNombre)
     formData.append("txtEdicionRestauranteDireccion", values.txtEdicionRestauranteDireccion || "")
-    formData.append("txtEdicionRestauranteTelefono", values.txtEdicionRestauranteTelefono || "")
-    formData.append("txtEdicionRestauranteEmail", values.txtEdicionRestauranteEmail || "")
     formData.append("ddlEdicionHotel", values.ddlEdicionHotel)
     formData.append("hddEdicionImagen", imageUrl || "") // Usar el estado de la imagen
     formData.append("activo", values.activo.toString()) // Añadir el estado activo al FormData
@@ -124,7 +123,7 @@ export function RestauranteForm({ isOpen, onClose, initialData, hotels }: Restau
           <DialogDescription>
             {initialData
               ? "Modifica los detalles del restaurante existente."
-              : "Ingresa la informaci��n para crear un nuevo restaurante."}
+              : "Ingresa la información para crear un nuevo restaurante."}
           </DialogDescription>
         </DialogHeader>
         <form
@@ -156,7 +155,9 @@ export function RestauranteForm({ isOpen, onClose, initialData, hotels }: Restau
               id="txtEdicionRestauranteNombre"
               className="col-span-3"
               maxLength={150}
-              {...form.register("txtEdicionRestauranteNombre")}
+              {...form.register("txtEdicionRestauranteNombre", {
+                onChange: () => setShowTopLevelAlert(false), // Ocultar alerta al cambiar
+              })}
             />
             {form.formState.errors.txtEdicionRestauranteNombre && (
               <p className="col-span-4 text-right text-red-500 text-xs">
@@ -170,7 +171,10 @@ export function RestauranteForm({ isOpen, onClose, initialData, hotels }: Restau
               Hotel
             </Label>
             <Select
-              onValueChange={(value) => form.setValue("ddlEdicionHotel", value)}
+              onValueChange={(value) => {
+                form.setValue("ddlEdicionHotel", value)
+                setShowTopLevelAlert(false) // Ocultar alerta al cambiar
+              }}
               value={form.watch("ddlEdicionHotel")}
             >
               <SelectTrigger id="ddlEdicionHotel" className="col-span-3">
@@ -200,46 +204,13 @@ export function RestauranteForm({ isOpen, onClose, initialData, hotels }: Restau
               id="txtEdicionRestauranteDireccion"
               className="col-span-3"
               maxLength={255}
-              {...form.register("txtEdicionRestauranteDireccion")}
+              {...form.register("txtEdicionRestauranteDireccion", {
+                onChange: () => setShowTopLevelAlert(false), // Ocultar alerta al cambiar
+              })}
             />
             {form.formState.errors.txtEdicionRestauranteDireccion && (
               <p className="col-span-4 text-right text-red-500 text-xs">
                 {form.formState.errors.txtEdicionRestauranteDireccion.message}
-              </p>
-            )}
-          </div>
-
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="txtEdicionRestauranteTelefono" className="text-right">
-              Teléfono
-            </Label>
-            <Input
-              id="txtEdicionRestauranteTelefono"
-              className="col-span-3"
-              maxLength={20}
-              {...form.register("txtEdicionRestauranteTelefono")}
-            />
-            {form.formState.errors.txtEdicionRestauranteTelefono && (
-              <p className="col-span-4 text-right text-red-500 text-xs">
-                {form.formState.errors.txtEdicionRestauranteTelefono.message}
-              </p>
-            )}
-          </div>
-
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="txtEdicionRestauranteEmail" className="text-right">
-              Email
-            </Label>
-            <Input
-              id="txtEdicionRestauranteEmail"
-              type="email"
-              className="col-span-3"
-              maxLength={100}
-              {...form.register("txtEdicionRestauranteEmail")}
-            />
-            {form.formState.errors.txtEdicionRestauranteEmail && (
-              <p className="col-span-4 text-right text-red-500 text-xs">
-                {form.formState.errors.txtEdicionRestauranteEmail.message}
               </p>
             )}
           </div>
@@ -278,6 +249,13 @@ export function RestauranteForm({ isOpen, onClose, initialData, hotels }: Restau
             </div>
           )}
 
+          {showTopLevelAlert && (
+            <div className="bg-yellow-100 text-yellow-800 p-3 mb-4 rounded-md flex items-center gap-2">
+              <TriangleAlert className="h-5 w-5" />
+              <span>Por favor, completa el nombre, hotel y dirección del restaurante.</span>
+            </div>
+          )}
+
           <div className="flex justify-end gap-2 mt-4">
             <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
               Cancelar
@@ -289,7 +267,7 @@ export function RestauranteForm({ isOpen, onClose, initialData, hotels }: Restau
                   Guardando...
                 </>
               ) : (
-                "Guardar cambios"
+                "Registrar Restaurante"
               )}
             </Button>
           </div>

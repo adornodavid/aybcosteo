@@ -19,7 +19,7 @@ export type CostHistoryItem = {
   platilloid: number // Cambiado a number para coincidir con el tipo de id de platillo
   costo: number
   precioventa: number
-  margenutilidad: number
+  margenutilidad: number // Aseguramos que el tipo incluye margenutilidad
 }
 
 export type PlatilloTooltipDetail = {
@@ -170,10 +170,6 @@ export async function getPlatilloCostHistory(
       return []
     }
 
-
-    const margenutilidadCost = data.precioventa - data.costo
-    console.log(margenutilidadCost)
-
     // Agrupar y sumar costos por fecha y platillo, y tomar el precioventa (asumiendo que es el mismo por fecha/platillo)
     const groupedData = data.reduce((acc: any, item: any) => {
       const key = `${item.fechacreacion}-${item.platilloid}`
@@ -183,7 +179,7 @@ export async function getPlatilloCostHistory(
           platilloid: item.platilloid,
           costo: 0,
           precioventa: item.precioventa, // Tomar el primer precio de venta encontrado para esa fecha/platillo
-          margenutilidad: margenutilidadCost,
+          margenutilidad: 0, // Inicializar, se calculará después
         }
       }
       acc[key].costo += item.costo
@@ -195,7 +191,7 @@ export async function getPlatilloCostHistory(
       costo: item.costo,
       precioventa: item.precioventa,
       platilloid: item.platilloid,
-      margenutilidad: margenutilidadCost,
+      margenutilidad: item.precioventa - item.costo, // Calcular el margen de utilidad
     }))
 
     return chartData

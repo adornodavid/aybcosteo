@@ -21,7 +21,7 @@ import {
 import { format } from "date-fns"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
-import { CalendarIcon, SearchIcon } from "lucide-react" // Se eliminó la importación duplicada de SearchIcon
+import { CalendarIcon, SearchIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 export default function AnalisisCostosPage() {
@@ -97,6 +97,10 @@ export default function AnalisisCostosPage() {
     },
     precioventa: {
       label: "Precio Venta",
+    },
+    margenutilidad: {
+      // Añadido para el margen de utilidad
+      label: "Margen Utilidad",
     },
   }
 
@@ -248,8 +252,9 @@ export default function AnalisisCostosPage() {
                     tickMargin={8}
                     tickFormatter={(value) => `$${value.toFixed(2)}`}
                   />
-                  <Tooltip formatter={(value: number) => [`$${value.toFixed(2)}`, "Costo p"]} />
-                  <Line dataKey="costo" type="monotone" stroke="#56a8b3" strokeWidth={2} dot={true} name="Costo" />
+                  <Tooltip formatter={(value: number, name: string) => [`$${value.toFixed(2)}`, name]} />{" "}
+                  {/* Actualizado para mostrar el nombre de la línea */}
+                  <Line dataKey="costo" type="monotone" stroke="#56a8b3" strokeWidth={2} dot={true} name="Costo Elaboracion" />
                   <Line
                     dataKey="precioventa"
                     type="monotone"
@@ -258,10 +263,10 @@ export default function AnalisisCostosPage() {
                     dot={true}
                     name="Precio Venta"
                   />
-                  <Line
+                  <Line // Nueva línea para el margen de utilidad
                     dataKey="margenutilidad"
                     type="monotone"
-                    stroke="#46914c"
+                    stroke="#8884d8" // Color distintivo para el margen de utilidad
                     strokeWidth={2}
                     dot={true}
                     name="Margen Utilidad"

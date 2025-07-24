@@ -13,7 +13,8 @@ export interface SessionData {
 }
 
 export async function getSession(): Promise<SessionData | null> {
-  try {
+try {
+    console.log("getSession (SERVER): Iniciando lectura de cookies...")
     const cookieStore = cookies()
 
     const usuarioId = cookieStore.get("UsuarioId")?.value
@@ -24,7 +25,17 @@ export async function getSession(): Promise<SessionData | null> {
     const permisos = cookieStore.get("Permisos")?.value
     const sesionActiva = cookieStore.get("SesionActiva")?.value
 
+    console.log("getSession (SERVER): Valores de cookies leídos:")
+    console.log("  UsuarioId:", usuarioId)
+    console.log("  Email:", email)
+    console.log("  NombreCompleto:", nombreCompleto)
+    console.log("  HotelId:", hotelId)
+    console.log("  RolId:", rolId)
+    console.log("  Permisos:", permisos)
+    console.log("  SesionActiva:", sesionActiva)
+
     if (!usuarioId || !email || sesionActiva !== "true") {
+      console.log("getSession (SERVER): Sesión incompleta o inactiva. Retornando null.")
       return null
     }
 
@@ -38,7 +49,7 @@ export async function getSession(): Promise<SessionData | null> {
       SesionActiva: sesionActiva === "true",
     }
   } catch (error) {
-    console.error("Error getting session:", error)
+    console.error("getSession (SERVER): Error capturado al obtener la sesión:", error)
     return null
   }
 }
@@ -51,8 +62,10 @@ export async function getSessionCookies(): Promise<SessionData | null> {
   return await getSession()
 }
 
-export async function clearSession(): Promise<void> {
+export async function clearSessionAction(): Promise<void> {
+  // Renombrado a clearSessionAction
   const cookieStore = cookies()
+  console.log("clearSessionAction (SERVER): Limpiando cookies de sesión...")
 
   cookieStore.delete("UsuarioId")
   cookieStore.delete("Email")
@@ -61,7 +74,10 @@ export async function clearSession(): Promise<void> {
   cookieStore.delete("RolId")
   cookieStore.delete("Permisos")
   cookieStore.delete("SesionActiva")
+  console.log("clearSessionAction (SERVER): Cookies de sesión limpiadas.")
 }
+
+
 
 export async function validateSession(): Promise<boolean> {
   const session = await getSession()

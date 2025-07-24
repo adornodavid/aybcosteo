@@ -17,6 +17,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  console.log("AuthProvider (CLIENT): Componente montado.")
   const [user, setUser] = useState<DatosSesion | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [selectedHotel, setSelectedHotel] = useState<number | null>(null)

@@ -63,25 +63,27 @@ export async function obtenerRestaurantesFiltrados(
     query = query.eq("id", restauranteId)
   }
 
-  const { data, error, count } = await query.order("nombre", { ascending: true }).range(offset, offset + pageSize - 1)
+ 
+    const { data, error, count } = await query.order("nombre", { ascending: true }).range(offset, offset + pageSize - 1)
 
-  if (error) {
-    console.error("Error al obtener restaurantes filtrados:", error)
-    return { data: [], count: 0, success: false, error: error.message }
-  }
+    if (error) {
+      console.error("Error al obtener restaurantes filtrados (Supabase error object):", error)
+      return { data: [], count: 0, success: false, error: errorMessage }
+    }
 
-  const mappedData: RestauranteTableRow[] = data.map((r: any) => ({
-    Folio: r.id,
-    Hotel: r.hoteles?.nombre || "N/A",
-    Nombre: r.nombre,
-    Direccion: r.direccion,
-    Imagen: r.imgurl,
-    Estatus: r.activo,
-    id: r.id, // Para uso interno en acciones
-    hotelid: r.hoteles?.id || null, // Para uso interno en formulario de edición
-  }))
+    const mappedData: RestauranteTableRow[] = data.map((r: any) => ({
+      Folio: r.id,
+      Hotel: r.hoteles?.nombre || "N/A",
+      Nombre: r.nombre,
+      Direccion: r.direccion,
+      Imagen: r.imgurl,
+      Estatus: r.activo,
+      id: r.id, // Para uso interno en acciones
+      hotelid: r.hoteles?.id || null, // Para uso interno en formulario de edición
+    }))
 
-  return { data: mappedData, count: count || 0, success: true }
+    return { data: mappedData, count: count || 0, success: true }
+  
 }
 
 export async function obtenerEstadisticasRestaurantes(): Promise<{ total: number; success: boolean; error?: string }> {

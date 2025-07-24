@@ -48,13 +48,13 @@ export async function obtenerVariablesSesion(): Promise<SessionData> {
   try {
     const cookieStore = cookies()
 
-    const UsuarioId = cookieStore.get("UsuarioId")?.value || null
-    const Email = cookieStore.get("Email")?.value || null
-    const NombreCompleto = cookieStore.get("NombreCompleto")?.value || null
-    const HotelId = Number(cookieStore.get("HotelId")?.value) || null
-    const RolId = Number(cookieStore.get("RolId")?.value) || null
-    const SesionActiva = cookieStore.get("SesionActiva")?.value === "true"
-    const ExpiresAt = cookieStore.get("ExpiresAt")?.value || null
+    const UsuarioId = cookies().get("UsuarioId")?.value || null
+    const Email = cookies().get("Email")?.value || null
+    const NombreCompleto = cookies().get("NombreCompleto")?.value || null
+    const HotelId = Number(cookies().get("HotelId")?.value) || null
+    const RolId = Number(cookies().get("RolId")?.value) || null
+    const SesionActiva = cookies().get("SesionActiva")?.value === "true"
+    const ExpiresAt = cookies().get("ExpiresAt")?.value || null
 
     let Permisos: string[] | null = null
     const PermisosRaw = cookieStore.get("Permisos")?.value || null

@@ -61,45 +61,46 @@ export default function RestaurantesClientPage({
   const [manualSearchTrigger, setManualSearchTrigger] = useState(0)
   const isInitialMount = useRef(true)
 
-  // fetchRestaurantes ahora no tiene los estados de filtro como dependencias directas en useCallback.
-  // En su lugar, leerá los valores actuales de los estados cuando sea llamada.
   const fetchRestaurantes = useCallback(async () => {
-   setIsLoading(true)
+    setIsLoading(true)
     const rolId = userSession?.rol_id || 0
     const sessionHotelId = userSession?.hotel_id || null
 
-    const { data, count, success, error } = await obtenerRestaurantesFiltrados(
-      searchTerm, // Lee el valor actual de searchTerm
-      selectedHotelId === "0" ? null : Number(selectedHotelId), // Lee el valor actual de selectedHotelId
-      selectedRestauranteId === "0" ? null : Number(selectedRestauranteId), // Lee el valor actual de selectedRestauranteId
-      currentPage,
-      pageSize,
-      rolId,
-      sessionHotelId,
-    )
+      const { data, count, success, error } = await obtenerRestaurantesFiltrados(
+        searchTerm,
+        selectedHotelId === "0" ? null : Number(selectedHotelId),
+        selectedRestauranteId === "0" ? null : Number(selectedRestauranteId),
+        currentPage,
+        pageSize,
+        rolId,
+        sessionHotelId,
+      )
 
-    if (success) {
-      setRestaurantes(data)
-      setTotalCount(count)
-    } else {
-      toast({
-        title: "Error",
-        description: error || "Error al cargar restaurantes.",
-        variant: "destructive",
-      })
-      setRestaurantes([])
-      setTotalCount(0)
-    }
-
-  }, [currentPage, pageSize, userSession, toast]) // Solo dependencias que realmente cambian la función
+      if (success) {
+        setRestaurantes(data)
+        setTotalCount(count)
+      } else {
+        toast({
+          title: "Error",
+          description: error || "Error al cargar restaurantes.",
+          variant: "destructive",
+        })
+        setRestaurantes([])
+        setTotalCount(0)
+      }
+      setIsLoading(false)
+  }, [currentPage, pageSize, userSession, toast])
 
   useEffect(() => {
     if (isInitialMount.current) {
       isInitialMount.current = false
-      return // Omitir la búsqueda inicial ya que los datos provienen de las props del servidor
+      // Omitir la búsqueda inicial ya que los datos provienen de las props del servidor
+      // y solo queremos que fetchRestaurantes se ejecute en cambios de filtro o paginación.
+      return
     }
+    
     fetchRestaurantes()
-  }, [manualSearchTrigger, currentPage]) // Este useEffect solo se dispara por el trigger manual o cambio de página
+  }, [manualSearchTrigger, currentPage])
 
   const handleSearch = () => {
     setCurrentPage(1) // Reset to first page on new search
@@ -107,7 +108,6 @@ export default function RestaurantesClientPage({
   }
 
   const handleEdit = async (id: number) => {
-  
     const { data, success, error } = await obtenerRestaurantePorId(id)
     if (success && data) {
       setEditingRestaurante(data)
@@ -119,7 +119,6 @@ export default function RestaurantesClientPage({
         variant: "destructive",
       })
     }
-  
   }
 
   const handleToggleStatus = (id: number, currentStatus: boolean) => {
@@ -128,10 +127,8 @@ export default function RestaurantesClientPage({
     setIsConfirmDialogOpen(true)
   }
 
-
   const confirmToggleStatus = async () => {
     if (actionRestauranteId !== null && actionNewStatus !== null) {
-    
       const { success, message, error } = await actualizarEstadoRestaurante(actionRestauranteId, actionNewStatus)
       if (success) {
         toast({
@@ -146,33 +143,11 @@ export default function RestaurantesClientPage({
           variant: "destructive",
         })
       }
-    
+
       setIsConfirmDialogOpen(false)
       setActionRestauranteId(null)
       setActionNewStatus(null)
     }
-  }
-
-  
-    if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-         <div className="flex flex-col items-center justify-center p-8">
-            <div className="relative w-24 h-24 mb-4">
-            <Image
-              src="https://nxtrsibnomdqmzcrwedc.supabase.co/storage/v1/object/public/imagenes/AnimationGif/CargarPage.gif"
-              alt="Procesando..."
-              width={300} // Ajusta el tamaño según sea necesario
-              height={300} // Ajusta el tamaño según sea necesario
-              unoptimized // Importante para GIFs externos
-              className="absolute inset-0 animate-bounce-slow"
-            />
-            </div>
-            <p className="text-lg font-semibold text-gray-800">Cargando Pagina...</p>
-           
-        </div>
-      </div>
-    )
   }
 
   const handleModalClose = () => {
@@ -234,7 +209,7 @@ export default function RestaurantesClientPage({
             ))}
           </SelectContent>
         </Select>
-        <Button id="btnRestaurantesBuscar" onClick={handleSearch} >
+        <Button id="btnRestaurantesBuscar" onClick={handleSearch}>
           {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
           Buscar
         </Button>
@@ -245,10 +220,10 @@ export default function RestaurantesClientPage({
           <TableHeader>
             <TableRow>
               <TableHead>Folio</TableHead>
+              <TableHead>Imagen</TableHead>
               <TableHead>Hotel</TableHead>
               <TableHead>Nombre</TableHead>
               <TableHead>Dirección</TableHead>
-              <TableHead>Imagen</TableHead>
               <TableHead>Estatus</TableHead>
               <TableHead className="text-center">Acciones</TableHead>
             </TableRow>
@@ -271,33 +246,27 @@ export default function RestaurantesClientPage({
               restaurantes.map((restaurante) => (
                 <TableRow key={restaurante.Folio}>
                   <TableCell>{restaurante.Folio}</TableCell>
-                  <TableCell>{restaurante.Hotel}</TableCell>
-                  <TableCell>{restaurante.Nombre}</TableCell>
-                  <TableCell>{restaurante.Direccion}</TableCell>
                   <TableCell>
                     {restaurante.Imagen ? (
                       <Image
                         src={restaurante.Imagen || "/placeholder.svg"}
                         alt={restaurante.Nombre}
-                        width={48}
-                        height={48}
+                        width={72}
+                        height={72}
                         className="rounded-md object-cover"
                       />
                     ) : (
-                      <div className="w-12 h-12 bg-gray-200 rounded-md flex items-center justify-center text-gray-500">
+                      <div className="w-16 h-16 bg-gray-200 rounded-md flex items-center justify-center text-gray-500">
                         <ImageIcon className="h-6 w-6" />
                       </div>
                     )}
                   </TableCell>
+                  <TableCell>{restaurante.Hotel}</TableCell>
+                  <TableCell>{restaurante.Nombre}</TableCell>
+                  <TableCell>{restaurante.Direccion}</TableCell>
                   <TableCell>{restaurante.Estatus ? "Activo" : "Inactivo"}</TableCell>
                   <TableCell className="flex items-center justify-center gap-2">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleEdit(restaurante.Folio)}
-                      title="Editar"
-                   
-                    >
+                    <Button variant="ghost" size="icon" onClick={() => handleEdit(restaurante.Folio)} title="Editar">
                       <Edit className="h-4 w-4" />
                     </Button>
                     <Button
@@ -305,7 +274,6 @@ export default function RestaurantesClientPage({
                       size="icon"
                       onClick={() => handleToggleStatus(restaurante.Folio, restaurante.Estatus)}
                       title={restaurante.Estatus ? "Inactivar" : "Activar"}
-                     
                     >
                       {restaurante.Estatus ? (
                         <ToggleLeft className="h-4 w-4 text-red-500" />
@@ -337,7 +305,7 @@ export default function RestaurantesClientPage({
           variant="outline"
           size="sm"
           onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-          disabled={currentPage === totalPages }
+          disabled={currentPage === totalPages}
         >
           Siguiente
         </Button>
