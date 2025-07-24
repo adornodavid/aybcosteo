@@ -63,11 +63,20 @@ export async function obtenerRestaurantesFiltrados(
     query = query.eq("id", restauranteId)
   }
 
- 
+  try {
     const { data, error, count } = await query.order("nombre", { ascending: true }).range(offset, offset + pageSize - 1)
 
     if (error) {
       console.error("Error al obtener restaurantes filtrados (Supabase error object):", error)
+      // Intenta obtener más detalles del error si están disponibles
+      let errorMessage = error.message
+      if (error.details) {
+        errorMessage += ` Detalles: ${error.details}`
+      }
+      if (error.hint) {
+        errorMessage += ` Sugerencia: ${error.hint}`
+      }
+      console.error("Mensaje de error detallado:", errorMessage)
       return { data: [], count: 0, success: false, error: errorMessage }
     }
 
@@ -83,7 +92,18 @@ export async function obtenerRestaurantesFiltrados(
     }))
 
     return { data: mappedData, count: count || 0, success: true }
-  
+  } catch (e: any) {
+    // Este bloque catch captura errores que ocurren fuera del objeto de respuesta de Supabase,
+    // como errores de red o errores de análisis JSON de la propia llamada fetch.
+    console.error("Error inesperado en obtenerRestaurantesFiltrados (catch block):", e)
+    let errorMessage = "Ocurrió un error inesperado al obtener restaurantes."
+    if (e instanceof SyntaxError) {
+      errorMessage = `Error de formato de datos del servidor: ${e.message}. Posiblemente "Too Many Requests" o respuesta no JSON.`
+    } else if (e.message) {
+      errorMessage = e.message
+    }
+    return { data: [], count: 0, success: false, error: errorMessage }
+  }
 }
 
 export async function obtenerEstadisticasRestaurantes(): Promise<{ total: number; success: boolean; error?: string }> {

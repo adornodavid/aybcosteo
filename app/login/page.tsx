@@ -2,8 +2,8 @@
 
 import { useState } from "react"
 import { procesarInicioSesion } from "@/app/actions/login-backend-actions"
-import { clearSessionAction } from "@/app/actions/session-actions" // Importar la nueva acción
 import { useRouter } from "next/navigation"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -41,6 +41,7 @@ export default function LoginPage() {
   const validateLogin = async () => {
     const txtCorreo = document.getElementById("txtCorreo") as HTMLInputElement
     const txtPassword = document.getElementById("txtPassword") as HTMLInputElement
+
     // Validar correo
     if (!txtCorreo.value.trim()) {
       showModalMessage("Por favor introduce tu Correo de acceso")
@@ -57,9 +58,7 @@ export default function LoginPage() {
     // Procesar en backend
     setLoading(true)
     try {
-      console.log("iniciando result")
       const result = await procesarInicioSesion(txtCorreo.value, txtPassword.value)
-      console.log("result", result.message)
 
       if (result.success) {
         showModalMessage(result.message, true)
@@ -71,7 +70,6 @@ export default function LoginPage() {
         showModalMessage(result.message)
       }
     } catch (error) {
-      console.error("Error inesperado en validateLogin:", error)
       showModalMessage("Error inesperado. Intenta nuevamente.")
     } finally {
       setLoading(false)
@@ -145,18 +143,13 @@ export default function LoginPage() {
                 />
               </div>
 
-              {/* Reemplazar el componente Button de shadcn/ui con un botón HTML nativo */}
-              <button
+              <Button
                 type="button"
                 id="btnValidar"
                 name="btnValidar"
                 onClick={validateLogin}
                 disabled={loading}
-                className="w-full z-30 relative
-                           inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium
-                           ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2
-                           focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50
-                           h-10 px-4 py-2 bg-black text-white hover:bg-black/90"
+                className="w-full bg-black text-white z-30 relative"
               >
                 {loading ? (
                   <div className="flex items-center space-x-2">
@@ -169,7 +162,7 @@ export default function LoginPage() {
                     <span>Validar</span>
                   </div>
                 )}
-              </button>
+              </Button>
             </form>
           </CardContent>
         </Card>

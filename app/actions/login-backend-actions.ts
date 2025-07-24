@@ -7,16 +7,9 @@ export interface LoginResult {
   success: boolean
   message: string
   redirect?: string
-  error?: any
 }
 
 export async function procesarInicioSesion(email: string, password: string): Promise<LoginResult> {
-  return {
-      success: true,
-      message: "Validación correcta en un momento serás dirigido a la página inicial de la aplicación.",
-      redirect: "/dashboard",
-    }
-  /*
   try {
     // Paso 1: Validar credenciales
     const { data: usuarios, error: loginError } = await supabase
@@ -80,7 +73,6 @@ export async function procesarInicioSesion(email: string, password: string): Pro
       Permisos: permisosString,
       SesionActiva: true,
     })
-    
 
     return {
       success: true,
@@ -92,8 +84,6 @@ export async function procesarInicioSesion(email: string, password: string): Pro
     return {
       success: false,
       message: "Error inesperado. Intenta nuevamente.",
-      error,
     }
   }
-  */
 }

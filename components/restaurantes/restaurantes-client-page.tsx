@@ -88,7 +88,7 @@ export default function RestaurantesClientPage({
         setRestaurantes([])
         setTotalCount(0)
       }
-      setIsLoading(false)
+      setIsLoading(false) // Asegura que isLoading siempre se resetee a false
   }, [currentPage, pageSize, userSession, toast])
 
   useEffect(() => {

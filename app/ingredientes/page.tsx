@@ -274,12 +274,12 @@ export default function IngredientesPage() {
           <p className="text-base text-muted-foreground mt-2">Gestión completa de ingredientes por hotel</p>
         </div>
         {/* 2. Botones con alineación derecha */}
-        <div className="flex gap-2">
+        {/*<div className="flex gap-2">
           <Button onClick={() => router.push("/ingredientes/nuevo")}>Registrar Ingrediente</Button>
           <Button variant="outline" onClick={handleBtnImportarExcel}>
             Importar Excel
           </Button>
-        </div>
+        </div>*/}
       </div>
 
       {/* 3. Resumen de estadísticas generales */}

@@ -133,7 +133,7 @@ export default function PlatillosPage() {
     try {
       // Usar consulta directa con JOINs
       let query = supabase.from("platillos").select(`
-          id, nombre, descripcion, tiempopreparacion, costototal, activo, imgurl,
+          id, nombre, descripcion, tiempopreparacion, costototal, costoadministrativo, activo, imgurl,
           platillosxmenu!inner(
             menus!inner(
               id, nombre,
@@ -167,6 +167,7 @@ export default function PlatillosPage() {
           PlatilloDescripcion: p.descripcion,
           PlatilloTiempo: p.tiempopreparacion,
           PlatilloCosto: p.costototal,
+          PlatilloCostoAdministrativo : p.costoadministrativo,
           PlatilloActivo: p.activo,
           PlatilloImagenUrl: p.imgurl, // Mapear la URL de la imagen
           HotelId: x.menus.restaurantes.hoteles.id,
@@ -697,7 +698,8 @@ export default function PlatillosPage() {
                   <TableHead className="hidden md:table-cell">Hotel</TableHead>
                   <TableHead className="hidden lg:table-cell">Restaurante</TableHead>
                   <TableHead className="hidden lg:table-cell">Menú</TableHead>
-                  <TableHead>Costo</TableHead>
+                  <TableHead>Costo elaboración</TableHead>
+                  <TableHead>Costo total</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
@@ -729,6 +731,7 @@ export default function PlatillosPage() {
                       <TableCell className="hidden lg:table-cell">{p.RestauranteNombre}</TableCell>
                       <TableCell className="hidden lg:table-cell">{p.MenuNombre}</TableCell>
                       <TableCell>{formatCurrency(p.PlatilloCosto)}</TableCell>
+                      <TableCell>{formatCurrency(p.PlatilloCostoAdministrativo)}</TableCell>
                       <TableCell>
                         <span
                           className={`px-2 py-1 text-xs rounded-full ${p.PlatilloActivo ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}
