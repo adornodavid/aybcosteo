@@ -42,13 +42,13 @@ export default function DashboardPage() {
           .split("; ")
           .find((row) => row.startsWith("SesionActiva="))
           ?.split("=")[1]
-        console.log(sesionActiva)
+        console.log("sesionActiva: ", sesionActiva)
         
         const rolId = document.cookie
           .split("; ")
           .find((row) => row.startsWith("RolId="))
           ?.split("=")[1]
-        console.log(rolId)
+        console.log("rolId: ", rolId)
 
         // Validaciones de seguridad como especificas
         if (sesionActiva !== "true") {
