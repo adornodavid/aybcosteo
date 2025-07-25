@@ -4,20 +4,20 @@ import { useUserSession } from "@/hooks/use-user-session"
 import { UserInfo } from "@/components/user-info"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { useAuth } from "@/contexts/auth-context"
-import { useRouter } from "next/navigation"
+//import { useAuth } from "@/contexts/auth-context"
+//import { useRouter } from "next/navigation"
 
 export default function PerfilPage() {
   const { profile, user, loading } = useUserSession() // Destructuramos 'user' también
-  const { signOut } = useAuth()
-  const router = useRouter()
+  //const { signOut } = useAuth()
+  //const router = useRouter()
 
-  console.log(document.cookie)
-
+  /*
   const handleSignOut = async () => {
     await signOut()
     router.push("/login")
   }
+  */
 
   if (loading) {
     return <div>Cargando perfil...</div>
@@ -25,12 +25,14 @@ export default function PerfilPage() {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
+      {/*
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Mi Perfil</h1>
         <Button onClick={handleSignOut} variant="outline">
           Cerrar Sesión
         </Button>
       </div>
+      */}
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {" "}
@@ -44,6 +46,8 @@ export default function PerfilPage() {
             <UserInfo />
           </CardContent>
         </Card>
+
+        {/*
         <Card>
           <CardHeader>
             <CardTitle>Variables de Sesión (Perfil Enriquecido)</CardTitle>
@@ -72,13 +76,17 @@ export default function PerfilPage() {
               <div>
                 <strong>Permisos:</strong> {profile?.permisos ? profile.permisos.join(", ") : "No asignado"}
               </div>
+              */}
               {/* Asumiendo que SesionActiva podría ser parte del perfil enriquecido si se añade */}
               {/* <div>
                 <strong>Sesión Activa:</strong> {profile?.SesionActiva ? "Sí" : "No"}
               </div> */}
+            {/*
             </div>
           </CardContent>
         </Card>
+        */}
+
         {/* Nueva tarjeta para mostrar los valores directos de la cookie de sesión */}
         <Card>
           <CardHeader>
