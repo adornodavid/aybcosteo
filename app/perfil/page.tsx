@@ -12,6 +12,8 @@ export default function PerfilPage() {
   const { signOut } = useAuth()
   const router = useRouter()
 
+  console.log(document.cookie)
+
   const handleSignOut = async () => {
     await signOut()
     router.push("/login")

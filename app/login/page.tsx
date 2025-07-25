@@ -79,7 +79,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen relative overflow-hidden bg-[url('https://nxtrsibnomdqmzcrwedc.supabase.co/storage/v1/object/public/imagenes/Backgrouds/FondoInicioSesion.jpg')] bg-cover bg-center">
       {/* Iconos de fondo */}
-      <div className="absolute inset-0 pointer-events-none z-0">
+      {/*<div className="absolute inset-0 pointer-events-none z-0">
         <div className="absolute top-10 left-10 text-blue-700/20">
           <Icons.Lock className="w-16 h-16" />
         </div>
@@ -98,7 +98,7 @@ export default function LoginPage() {
         <div className="absolute top-1/3 right-1/3 text-blue-700/10">
           <Icons.KeyRound className="w-16 h-16" />
         </div>
-      </div>
+      </div>*/}
 
       {/* Contenido principal */}
       <div className="relative z-10 flex flex-col items-center justify-center min-h-screen p-4">

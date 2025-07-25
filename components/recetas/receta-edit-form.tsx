@@ -396,7 +396,11 @@ export function RecetaEditForm({ recetaId }: RecetaEditFormProps) {
     }
   }
 
+
   return (
+  <main className="container mx-auto max-w-5xl p-8">
+  <div className="rounded-xl border bg-card text-card-foreground shadow">
+  <main className="flex-1 p-4 md:p-6">
     <div className="space-y-6 p-6">
       {isUpdating && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -458,6 +462,7 @@ export function RecetaEditForm({ recetaId }: RecetaEditFormProps) {
             </Button>
           </div>
         </div>
+  
       )}
 
       {/* Step 2: Ingredient Management */}
@@ -659,5 +664,8 @@ export function RecetaEditForm({ recetaId }: RecetaEditFormProps) {
         </DialogContent>
       </Dialog>
     </div>
+      </main>
+     </div>
+      </main>
   )
 }

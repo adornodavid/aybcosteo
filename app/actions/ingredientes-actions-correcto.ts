@@ -1,6 +1,7 @@
 "use server"
 
-import { createServerSupabaseClientWrapper } from "@/lib/supabase"
+//import { createServerSupabaseClientWrapper } from "@/lib/supabase"
+import { createServerComponentClient } from "@supabase/auth-helpers-nextjs"
 import { revalidatePath } from "next/cache"
 import { cookies } from "next/headers"
 
@@ -27,7 +28,7 @@ export async function crearIngrediente(prevState: any, formData: FormData) {
       return { success: false, error: "La unidad de medida es requerida." }
     }
 
-    const supabase = createServerSupabaseClientWrapper(cookies())
+    const supabase = createServerComponentClient(cookies())
     const { data, error } = await supabase
       .from("ingredientes")
       .insert({
@@ -57,7 +58,7 @@ export async function crearIngrediente(prevState: any, formData: FormData) {
 }
 
 export async function obtenerIngredientes() {
-  const supabase = createServerSupabaseClientWrapper(cookies())
+  const supabase = createServerComponentClient(cookies())
   try {
     const { data, error } = await supabase
       .from("ingredientes")
@@ -100,7 +101,7 @@ export async function actualizarIngrediente(id: number, prevState: any, formData
       return { success: false, error: "La unidad de medida es requerida." }
     }
 
-    const supabase = createServerSupabaseClientWrapper(cookies())
+    const supabase = createServerComponentClient(cookies())
     const { error } = await supabase
       .from("ingredientes")
       .update({
@@ -129,7 +130,7 @@ export async function actualizarIngrediente(id: number, prevState: any, formData
 
 export async function eliminarIngrediente(id: number) {
   try {
-    const supabase = createServerSupabaseClientWrapper(cookies())
+    const supabase = createServerComponentClient(cookies())
     const { error } = await supabase.from("ingredientes").update({ activo: false }).eq("id", id)
 
     if (error) {

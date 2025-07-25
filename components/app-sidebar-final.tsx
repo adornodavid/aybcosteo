@@ -141,6 +141,7 @@ export function AppSidebar() {
 
       {/* Navegación */}
       <nav className="flex-1 overflow-y-auto">
+      
         <div className="p-2 space-y-1">
           {menuItems.map((item) => (
             <div key={item.name}>
@@ -192,7 +193,6 @@ export function AppSidebar() {
               )}
             </div>
           ))}
-        </div>
       </nav>
     </div>
   )

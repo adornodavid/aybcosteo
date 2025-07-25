@@ -9,6 +9,7 @@ import { Loader2, Hotel, Building, Menu, Utensils, Package, TrendingUp, Activity
 import { obtenerResumenesDashboard } from "@/app/actions/dashboard-actions"
 import Link from "next/link"
 import Image from "next/image" // Importar Image de next/image
+import { useAuth } from "@/contexts/auth-context"
 
 interface ResumenesDashboard {
   hoteles: number
@@ -33,12 +34,14 @@ export default function DashboardPage() {
   const [sesion, setSesion] = useState<DatosSesion | null>(null)
   const [loading, setLoading] = useState(true)
   const router = useRouter()
+  const { user, isLoading: authLoading } = useAuth()
 
   useEffect(() => {
     const validarSeguridadYCargarDatos = async () => {
       try {
-      console.log(document.cookie)
         // Validar cookies de sesión del lado del cliente
+        console.log("Sesion de user: ", user.SesionActiva)
+        /*
         const sesionActiva = document.cookie
           .split("; ")
           .find((row) => row.startsWith("SesionActiva="))
@@ -50,8 +53,22 @@ export default function DashboardPage() {
           .find((row) => row.startsWith("RolId="))
           ?.split("=")[1]
         console.log("rolId: ", rolId)
+        */
 
         // Validaciones de seguridad como especificas
+        if (user.SesionActiva !== true) {
+          console.log("Variable de user: SesionActiva es falsa")
+          router.push("/login")
+          return
+        }
+
+        if (!user.RolId || user.RolId === "0" || user.RolId === "") {
+        console.log("Variable de user: RolId es 0 o es ")
+          router.push("/login")
+          return
+        }
+
+        /*
         if (sesionActiva !== "true") {
           console.log("Variable de sesion sesionActiva es falsa")
           router.push("/login")
@@ -63,8 +80,10 @@ export default function DashboardPage() {
           router.push("/login")
           return
         }
+        */
 
         // Obtener datos de sesión
+        /*
         const nombreCompleto = document.cookie
           .split("; ")
           .find((row) => row.startsWith("NombreCompleto="))
@@ -89,8 +108,18 @@ export default function DashboardPage() {
           .split("; ")
           .find((row) => row.startsWith("Permisos="))
           ?.split("=")[1]
+          */
 
         setSesion({
+          UsuarioId: user.UsuarioId,
+          Email: user.Email,
+          NombreCompleto: user.NombreCompleto,
+          HotelId: user.HotelId,
+          RolId: user.RolId,
+          Permisos: user.Permisos,
+          SesionActiva: user.SesionActiva,
+
+          /*
           UsuarioId: Number.parseInt(usuarioId || "0"),
           Email: decodeURIComponent(email || ""),
           NombreCompleto: decodeURIComponent(nombreCompleto || ""),
@@ -98,6 +127,7 @@ export default function DashboardPage() {
           RolId: Number.parseInt(rolId || "0"),
           Permisos: decodeURIComponent(permisos || ""),
           SesionActiva: true,
+          */
         })
 
         // Cargar resúmenes del dashboard

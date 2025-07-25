@@ -736,9 +736,9 @@ export default function RecetasPage() {
             </div>
           ) : selectedRecetaDetails?.receta ? (
             <ScrollArea className="flex-1 pr-4">
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 py-4">
+              <div className="grid grid-cols-1 lg:grid-cols-6 gap-4 py-4">
                 {/* Sección de Detalles de la Receta */}
-                <Card className="lg:col-span-2 shadow-lg border-t-4 border-[#cfa661]">
+                <Card className="lg:col-span-3 w-[410px] shadow-lg border-t-4 border-[#cfa661]">
                   <CardHeader>
                     <CardTitle className="text-xl">{selectedRecetaDetails.receta.nombre}</CardTitle>
                     <CardDescription>Información general de la sub-receta</CardDescription>
@@ -779,18 +779,18 @@ export default function RecetasPage() {
                 </Card>
 
                 {/* Sección de Ingredientes */}
-                <Card className="lg:col-span-1 shadow-lg border-t-4 border-[#cfa661]">
+                <Card className="lg:col-span-3 w-[400px] shadow-lg border-t-4 border-[#cfa661]">
                   <CardHeader>
                     <CardTitle className="text-xl">Ingredientes</CardTitle>
                     <CardDescription>Componentes de esta sub-receta</CardDescription>
                   </CardHeader>
                   <CardContent>
                     {selectedRecetaDetails.ingredientes.length > 0 ? (
-                      <ScrollArea className="h-[200px] w-full rounded-md border">
+                      <ScrollArea className="h-[400px] w-full rounded-md border">
                         <Table>
                           <TableHeader>
                             <TableRow>
-                              <TableHead>Ingrediente</TableHead>
+                              <TableHead >Ingrediente</TableHead>
                               <TableHead className="text-right">Cantidad</TableHead>
                               <TableHead className="text-right">Costo Parcial</TableHead>
                             </TableRow>
@@ -798,7 +798,7 @@ export default function RecetasPage() {
                           <TableBody>
                             {selectedRecetaDetails.ingredientes.map((ingrediente) => (
                               <TableRow key={ingrediente.id}>
-                                <TableCell>{ingrediente.Ingrediente}</TableCell>
+                                <TableCell className="text-xs">{ingrediente.Ingrediente}</TableCell>
                                 <TableCell className="text-right">{ingrediente.cantidad}</TableCell>
                                 <TableCell className="text-right">
                                   ${ingrediente.ingredientecostoparcial?.toFixed(2) || "0.00"}
@@ -815,7 +815,7 @@ export default function RecetasPage() {
                 </Card>
 
                 {/* Sección de Platillos que usan esta Receta */}
-                <Card className="lg:col-span-3 shadow-lg border-t-4 border-[#cfa661]">
+                <Card className="lg:col-span-6 shadow-lg border-t-4 border-[#cfa661]">
                   <CardHeader>
                     <CardTitle className="text-xl">Platillos que usan esta Sub-Receta</CardTitle>
                     <CardDescription>Platillos donde se utiliza esta sub-receta</CardDescription>
@@ -823,7 +823,7 @@ export default function RecetasPage() {
                   <CardContent>
                     {selectedRecetaDetails.platillos.length > 0 ? (
                       <ScrollArea className="h-[200px] w-full rounded-md border">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 p-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 p-2">
                           {selectedRecetaDetails.platillos.map((platillo) => (
                             <Card key={platillo.id} className="flex flex-col items-center text-center p-2">
                               <AspectRatio ratio={1 / 1} className="w-24 h-24 mb-2">
