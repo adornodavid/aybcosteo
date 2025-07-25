@@ -37,6 +37,7 @@ export default function DashboardPage() {
   useEffect(() => {
     const validarSeguridadYCargarDatos = async () => {
       try {
+      console.log(document.cookie)
         // Validar cookies de sesión del lado del cliente
         const sesionActiva = document.cookie
           .split("; ")
