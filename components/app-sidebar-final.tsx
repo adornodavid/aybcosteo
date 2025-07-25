@@ -193,6 +193,7 @@ export function AppSidebar() {
               )}
             </div>
           ))}
+          </div>
       </nav>
     </div>
   )
