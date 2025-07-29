@@ -762,7 +762,7 @@ export default function RecetasPage() {
                     <div className="grid grid-cols-2 gap-2">
                       <div className="font-medium">Folio:</div>
                       <div>{selectedRecetaDetails.receta.id}</div>
-                      <div className="font-medium">Costo de Elaboración:</div>
+                      <div className="font-medium">Costo de Total:</div>
                       <div>${selectedRecetaDetails.receta.costo?.toFixed(2) || "0.00"}</div>
                       <div className="font-medium">Estatus:</div>
                       <div>{selectedRecetaDetails.receta.activo ? "Activa" : "Inactiva"}</div>

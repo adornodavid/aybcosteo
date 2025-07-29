@@ -491,7 +491,7 @@ export default function IngredientesPage() {
                         </td>
                         <td className="p-4 align-middle text-right">
                           <div className="flex justify-end gap-2">
-                            <Button variant="ghost" size="sm" asChild>
+                           {/* <Button variant="ghost" size="sm" asChild>
                               <Link href={`/ingredientes/${ingrediente.id}`}>
                                 <Eye className="h-4 w-4" />
                               </Link>
@@ -508,7 +508,7 @@ export default function IngredientesPage() {
                               className="text-red-500 hover:text-red-700"
                             >
                               <Trash2 className="h-4 w-4" />
-                            </Button>
+                            </Button>*/}
                           </div>
                         </td>
                       </tr>

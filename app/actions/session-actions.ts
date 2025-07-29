@@ -87,3 +87,6 @@ export async function setSessionCookies(sessionData: SessionData): Promise<void>
   cookieStore.set("Permisos", sessionData.Permisos, cookieOptions)
   cookieStore.set("SesionActiva", sessionData.SesionActiva.toString(), cookieOptions)
 }
+
+// Nueva función para obtener variables de sesión (alias de getSession)
+export const obtenerVariablesSesion = getSession

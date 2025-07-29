@@ -471,7 +471,13 @@ export async function finalizarRegistro(platilloId: number, menuId: number) {
       .eq("platilloid", platilloId)
     if (ingCostError) throw ingCostError
 
-    const totalCost = ingredientesCost.reduce((sum, item) => sum + (item.ingredientecostoparcial || 0), 0)
+    const { data: recetasCost, error: recCostError } = await supabase
+      .from("recetasxplatillo")
+      .select("recetacostoparcial")
+      .eq("platilloid", platilloId)
+    if (recCostError) throw recCostError
+
+    const totalCost = ingredientesCost.reduce((sum, item) => sum + (item.ingredientecostoparcial || 0), 0) + recetasCost.reduce((sum, item) => sum + (item.recetacostoparcial || 0), 0)
 
     const { error: updateCostoError } = await supabase
       .from("platillos")

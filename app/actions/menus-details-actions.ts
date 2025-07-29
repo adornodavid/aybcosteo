@@ -45,6 +45,7 @@ export async function getMenuDetails(menuId: string) {
         platillo:platilloid(
           nombre,
           costototal,
+          costoadministrativo,
           imgurl
         )
       `,

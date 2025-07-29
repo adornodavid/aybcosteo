@@ -1514,7 +1514,7 @@ export default function EditarPlatilloPage() {
                 <h3 className="text-right text-base font-semibold text-gray-700">Variacion de Precios: 5%</h3>
                 <p className="mt-6 text-right text-2xl font-bold border-t-4 border-[#58e0be] pt-4">Costo Total: {formatCurrency(costoAdministrativoPlatillo)}</p>
                 <p className="mt-6 text-right text-lg text-black-600">
-                 <span className = "text-yellow-600">*</span>Precio Sugerido: {formatCurrency(precioSugeridoPlatillo)}
+                 <span className = "text-yellow-600">*</span>Precio Mínimo: {formatCurrency(precioSugeridoPlatillo)}
                 </p>
               </div>
             </CardContent>

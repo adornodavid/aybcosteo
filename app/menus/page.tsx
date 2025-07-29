@@ -797,79 +797,81 @@ export default function MenusPage() {
           ) : (
             <>
               <div className="overflow-x-auto">
-                <Table id="tblMenuResultados">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Folio</TableHead>
-                      <TableHead>Menú</TableHead>
-                      <TableHead>Restaurante</TableHead>
-                      <TableHead>Hotel</TableHead>
-                      <TableHead>Descripción</TableHead>
-                      <TableHead className="text-center">Acciones</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {menus.map((menu) => (
-                      <TableRow key={menu.id}>
-                        <TableCell>{menu.id.substring(0, 8)}...</TableCell>
-                        <TableCell>{menu.nombre}</TableCell>
-                        <TableCell>{menu.restaurante?.nombre || "N/A"}</TableCell>
-                        <TableCell>{menu.restaurante?.hotel?.nombre || "N/A"}</TableCell>
-                        <TableCell>{menu.descripcion || "Sin descripción"}</TableCell>
-                        <TableCell className="flex justify-center gap-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label="Ver detalles del menú"
-                            onClick={() => handleViewMenuDetails(menu.id)}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Link href={`/menus/${menu.id}/agregar`} passHref>
-                            <Button variant="ghost" size="icon" aria-label="Agregar">
-                              <HandPlatter className="h-4 w-4" />
-                            </Button>
-                          </Link>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label="Editar menú"
-                            onClick={() => handleOpenEditDialog(menu.id)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className={menu.activo ? "text-red-500" : "text-green-500"}
-                                aria-label={menu.activo ? "Inactivar menú" : "Activar menú"}
-                              >
-                                {menu.activo ? <PowerOff className="h-4 w-4" /> : <Power className="h-4 w-4" />}
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  Esta acción {menu.activo ? "inactivará" : "activará"} el menú "{menu.nombre}". ¿Deseas
-                                  continuar?
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => handleStatusToggle(menu.id, menu.activo)}>
-                                  {menu.activo ? "Inactivar" : "Activar"}
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </TableCell>
+                <ScrollArea className="max-h-[500px]">
+                  <Table id="tblMenuResultados">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Folio</TableHead>
+                        <TableHead>Menú</TableHead>
+                        <TableHead>Restaurante</TableHead>
+                        <TableHead>Hotel</TableHead>
+                        <TableHead>Descripción</TableHead>
+                        <TableHead className="text-center">Acciones</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {menus.map((menu) => (
+                        <TableRow key={menu.id}>
+                          <TableCell>{menu.id.substring(0, 8)}...</TableCell>
+                          <TableCell>{menu.nombre}</TableCell>
+                          <TableCell>{menu.restaurante?.nombre || "N/A"}</TableCell>
+                          <TableCell>{menu.restaurante?.hotel?.nombre || "N/A"}</TableCell>
+                          <TableCell>{menu.descripcion || "Sin descripción"}</TableCell>
+                          <TableCell className="flex justify-center gap-2">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label="Ver detalles del menú"
+                              onClick={() => handleViewMenuDetails(menu.id)}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Link href={`/menus/${menu.id}/agregar`} passHref>
+                              <Button variant="ghost" size="icon" aria-label="Agregar">
+                                <HandPlatter className="h-4 w-4" />
+                              </Button>
+                            </Link>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label="Editar menú"
+                              onClick={() => handleOpenEditDialog(menu.id)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className={menu.activo ? "text-red-500" : "text-green-500"}
+                                  aria-label={menu.activo ? "Inactivar menú" : "Activar menú"}
+                                >
+                                  {menu.activo ? <PowerOff className="h-4 w-4" /> : <Power className="h-4 w-4" />}
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Esta acción {menu.activo ? "inactivará" : "activará"} el menú "{menu.nombre}".
+                                    ¿Deseas continuar?
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => handleStatusToggle(menu.id, menu.activo)}>
+                                    {menu.activo ? "Inactivar" : "Activar"}
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
               </div>
               <Pagination className="mt-4">
                 <PaginationContent>
@@ -932,7 +934,7 @@ export default function MenusPage() {
               <p>{detailsError}</p>
             </div>
           ) : selectedMenuDetails ? (
-            <ScrollArea className="flex-1 pr-4">
+            <ScrollArea className="flex-1 pr-4 max-h-[60vh] overflow-y-auto">
               <div className="grid gap-6 py-4">
                 {/* Sección de Información General del Menú */}
                 <Card className="shadow-lg border-l-4 border-[#986ec2]">
@@ -994,7 +996,7 @@ export default function MenusPage() {
                             <TableRow>
                               <TableHead className="w-[80px]">Imagen</TableHead>
                               <TableHead>Platillo</TableHead>
-                              <TableHead>Costo Elaboración</TableHead>
+                              <TableHead>Costo Total</TableHead>
                               <TableHead>Precio Venta</TableHead>
                               <TableHead>Margen Utilidad</TableHead>
                             </TableRow>
@@ -1016,9 +1018,9 @@ export default function MenusPage() {
                                   </div>
                                 </TableCell>
                                 <TableCell className="font-medium">{item.platillo?.nombre || "N/A"}</TableCell>
-                                <TableCell>${(item.platillo?.costototal || 0).toFixed(2)}</TableCell>
+                                <TableCell>${(item.platillo?.costoadministrativo || 0).toFixed(2)}</TableCell>
                                 <TableCell>${(item.precioventa || 0).toFixed(2)}</TableCell>
-                                <TableCell>{(item.margenutilidad || 0).toFixed(2)}%</TableCell>
+                                <TableCell>{(item.margenutilidad || 0).toFixed(2)}</TableCell>
                               </TableRow>
                             ))}
                           </TableBody>

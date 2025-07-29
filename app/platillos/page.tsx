@@ -698,7 +698,7 @@ export default function PlatillosPage() {
                   <TableHead className="hidden md:table-cell">Hotel</TableHead>
                   <TableHead className="hidden lg:table-cell">Restaurante</TableHead>
                   <TableHead className="hidden lg:table-cell">Menú</TableHead>
-                  <TableHead>Costo elaboración</TableHead>
+                  {/*<TableHead>Costo elaboración</TableHead>*/}
                   <TableHead>Costo total</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
@@ -730,7 +730,7 @@ export default function PlatillosPage() {
                       <TableCell className="hidden md:table-cell">{p.HotelNombre}</TableCell>
                       <TableCell className="hidden lg:table-cell">{p.RestauranteNombre}</TableCell>
                       <TableCell className="hidden lg:table-cell">{p.MenuNombre}</TableCell>
-                      <TableCell>{formatCurrency(p.PlatilloCosto)}</TableCell>
+                      {/*<TableCell>{formatCurrency(p.PlatilloCosto)}</TableCell>*/}
                       <TableCell>{formatCurrency(p.PlatilloCostoAdministrativo)}</TableCell>
                       <TableCell>
                         <span
@@ -895,16 +895,18 @@ export default function PlatillosPage() {
                       {selectedPlatilloDetails[0].tiempopreparacion}
                     </p>
                   )}
+                  {/*
                   <p className="mt-3 text-sm text-gray-600">
                     <span className="text-base font-medium">Costo de Elaboración:</span>{" "}
                     {formatCurrency(selectedPlatilloDetails[0].CostoElaboracion)}
                   </p>
+                  */}
                   <p className="text-sm text-gray-600">
                     <span className="text-base font-medium">Costo Total:</span>{" "}
                     {formatCurrency(selectedPlatilloDetails[0].CostoTotal)}
                   </p>
                   <p className="text-sm text-gray-600">
-                    <span className="text-base font-medium">Precio Sugerido:</span>{" "}
+                    <span className="text-base font-medium">Precio Mínimo:</span>{" "}
                     {formatCurrency(selectedPlatilloDetails[0].PrecioSugerido)}
                   </p>
                 </div>
@@ -931,7 +933,7 @@ export default function PlatillosPage() {
                         </p>
                         <p className="text-sm">
                           <span className="font-medium">Margen de Utilidad:</span>{" "}
-                          {detail.margenutilidad !== null ? `${detail.margenutilidad}%` : "N/A"}
+                          {detail.margenutilidad !== null ? `${detail.margenutilidad}` : "N/A"}
                         </p>
                       </Card>
                     ))}
