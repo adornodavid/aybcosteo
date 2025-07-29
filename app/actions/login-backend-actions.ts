@@ -2,7 +2,6 @@
 
 import { supabase } from "@/lib/supabase"
 import { setSessionCookies } from "./session-actions"
-import { cerrarSesion } from "./session-actions-with-expiration" // Importar cerrarSesion
 
 export interface LoginResult {
   success: boolean
@@ -87,9 +86,4 @@ export async function procesarInicioSesion(email: string, password: string): Pro
       message: "Error inesperado. Intenta nuevamente.",
     }
   }
-}
-
-// Nueva función para cerrar sesión
-export async function logout(): Promise<void> {
-  await cerrarSesion()
 }
