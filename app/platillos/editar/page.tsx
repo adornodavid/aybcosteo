@@ -701,7 +701,7 @@ export default function EditarPlatilloPage() {
             id: data.id,
             recetaid: data.recetas.id,
             nombre: data.recetas.nombre,
-            recetacostoparcial: data.recetas.recetacostoparcial,
+            recetacostoparcial: data.recetacostoparcial,
           },
         ])
         toast.success("Sub-Receta agregada correctamente.")

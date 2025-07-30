@@ -711,7 +711,6 @@ export default function RecetasPage() {
           <DialogHeader className="flex flex-row items-center justify-between pb-4 border-b">
             <DialogTitle className="text-2xl font-bold text-[#cfa661]">Detalles de Sub-Receta</DialogTitle>
             <DialogPrimitive.Close asChild>
-              {" "}
               {/* Usado DialogPrimitive.Close */}
               <Button variant="ghost" size="icon" className="rounded-full">
                 <X className="h-5 w-5" />

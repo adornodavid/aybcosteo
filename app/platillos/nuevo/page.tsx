@@ -1108,7 +1108,7 @@ export default function NuevoPlatilloPage() {
               {/* Línea 1107 del código anterior, el nuevo contenido va después de este div */}
               {precioSugeridoPlatillo !== null && (
                 <div className="mt-6 text-right text-lg text-black-600">
-                  <span className = "text-yellow-600">*</span> Precio Sugerido: ${precioSugeridoPlatillo.toFixed(2)}
+                  <span className = "text-yellow-600">*</span> Precio Mínimo: ${precioSugeridoPlatillo.toFixed(2)}
                 </div>
               )}
             </CardContent>
