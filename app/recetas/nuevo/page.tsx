@@ -655,7 +655,7 @@ export default function NuevaRecetaPage() {
   }
 
   return (
-    <div className="container mx-auto p-6 max-w-5xl">
+    <main className="container mx-auto p-6 max-w-5xl">
       {/* Overlay de animación de carga */}
       {showLoadingAnimation && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -674,7 +674,7 @@ export default function NuevaRecetaPage() {
             <p className="text-sm text-gray-600">Esto puede tomar unos segundos.</p>
           </div>
       )}
-       </div>
+       </main>
 
 
 
