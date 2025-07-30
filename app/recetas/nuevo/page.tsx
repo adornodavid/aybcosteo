@@ -673,9 +673,8 @@ export default function NuevaRecetaPage() {
             <p className="text-lg font-semibold text-gray-800">Registrando Sub-receta...</p>
             <p className="text-sm text-gray-600">Esto puede tomar unos segundos.</p>
           </div>
-        </div>
       )}
-
+       </div>
 
 
 
