@@ -196,7 +196,7 @@ export default function NuevaRecetaPage() {
       }
       return true // Permitir la navegación
     },
-    [recetaId.current, validaRegistroId, setMostrarModalConfirmacion],
+    [recetaId, validaRegistroId, setMostrarModalConfirmacion],
   )
 
   // Registrar la función de guardia con el contexto
@@ -743,7 +743,7 @@ export default function NuevaRecetaPage() {
           <div
             className="h-3 rounded-full transition-all duration-500"
             style={{ width: `${(etapaActual / 3) * 100}%`, backgroundColor: "#ade06e" }}
-          />
+          ></div>
         </div>
         <p className="text-right text-sm text-muted-foreground mt-1">Etapa {etapaActual} de 3</p>
       </div>
