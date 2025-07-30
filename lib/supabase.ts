@@ -53,8 +53,8 @@ export const createClient = () => createClientComponentClient<Database>()
 // Instancia principal de Supabase (para uso en cliente)
 export const supabase = createClient()
 
-// Nueva función para crear un cliente Supabase para Server Components
+{/*// Nueva función para crear un cliente Supabase para Server Components
 export const createServerSupabaseClientWrapper = () => createServerComponentClient<Database>({ cookies })
-
+*/}
 // Exportación por defecto
 export default supabase

@@ -676,6 +676,8 @@ export default function NuevaRecetaPage() {
         </div>
       )}
 
+
+
       {/* Modal de confirmación para abandonar registro */}
       <AlertDialog open={mostrarModalConfirmacion} onOpenChange={setMostrarModalConfirmacion}>
         <AlertDialogContent>
