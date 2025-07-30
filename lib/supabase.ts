@@ -1,6 +1,6 @@
 import { createClientComponentClient, createServerComponentClient } from "@supabase/auth-helpers-nextjs" // Importar createServerComponentClient
 import type { Database } from "@/lib/types-sistema-costeo" // Asegúrate de que esta ruta sea correcta
-import { cookies } from "next/headers" // Importar cookies para el cliente de servidor
+//import { cookies } from "next/headers" // Importar cookies para el cliente de servidor
 
 // Define the database schema types
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
