@@ -914,7 +914,7 @@ export default function NuevaRecetaPage() {
                     value={ddlUnidadMedida}
                     onValueChange={setDdlUnidadMedida}
                     //disabled={isUnidadMedidaDisabled}
-                    disabled=true
+                    disabled
                   >
                     <SelectTrigger id="ddlUnidadMedida">
                       <SelectValue placeholder="Seleccionar unidad" />
