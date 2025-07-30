@@ -196,7 +196,7 @@ export default function NuevaRecetaPage() {
       }
       return true // Permitir la navegación
     },
-    [recetaId, validaRegistroId, setMostrarModalConfirmacion],
+    [recetaId.current, validaRegistroId, setMostrarModalConfirmacion],
   )
 
   // Registrar la función de guardia con el contexto
@@ -655,7 +655,7 @@ export default function NuevaRecetaPage() {
   }
 
   return (
-    <div className="container mx-auto p-6 max-w-5xl">
+  <div className="container mx-auto p-6 max-w-5xl">
       {/* Overlay de animación de carga */}
       {showLoadingAnimation && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
