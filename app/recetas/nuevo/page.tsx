@@ -196,7 +196,7 @@ export default function NuevaRecetaPage() {
       }
       return true // Permitir la navegación
     },
-    [recetaId.current, validaRegistroId, setMostrarModalConfirmacion],
+    [recetaId, validaRegistroId, setMostrarModalConfirmacion],
   )
 
   // Registrar la función de guardia con el contexto
@@ -661,24 +661,20 @@ export default function NuevaRecetaPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="flex flex-col items-center justify-center p-8 bg-white rounded-lg shadow-xl">
             <div className="relative w-24 h-24 mb-4">
-            <Image
-              src="https://nxtrsibnomdqmzcrwedc.supabase.co/storage/v1/object/public/imagenes/AnimationGif/RegistrarSubReceta.gif"
-              alt="Procesando..."
-              width={400} // Ajusta el tamaño según sea necesario
-              height={400} // Ajusta el tamaño según sea necesario
-              unoptimized // Importante para GIFs externos
-              className="absolute inset-0 animate-bounce-slow"
-            />
+              <Image
+                src="https://nxtrsibnomdqmzcrwedc.supabase.co/storage/v1/object/public/imagenes/AnimationGif/RegistrarSubReceta.gif"
+                alt="Procesando..."
+                width={400} // Ajusta el tamaño según sea necesario
+                height={400} // Ajusta el tamaño según sea necesario
+                unoptimized // Importante para GIFs externos
+                className="absolute inset-0 animate-bounce-slow"
+              />
             </div>
             <p className="text-lg font-semibold text-gray-800">Registrando Sub-receta...</p>
             <p className="text-sm text-gray-600">Esto puede tomar unos segundos.</p>
           </div>
         </div>
       )}
-       
-
-
-
 
       {/* Modal de confirmación para abandonar registro */}
       <AlertDialog open={mostrarModalConfirmacion} onOpenChange={setMostrarModalConfirmacion}>
