@@ -638,7 +638,7 @@ export default function MenusPage() {
   }
 
   return (
-  <div className="container flex-1 space-y-4 p-4 md:p-8 pt-6">
+  <div className="container-fluid flex-1 space-y-4 p-4 md:p-8 pt-6">
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-3xl font-bold">Menús</h1>
@@ -656,7 +656,7 @@ export default function MenusPage() {
       </div>
 
       {/* Resumen de estadísticas */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 pl-4 md:pl-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 pl-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total de Menús</CardTitle>

@@ -483,7 +483,7 @@ export default function RecetasPage() {
   }
 
   return (
-    <div className="container mx-auto p-6">
+    <div className="container-fluid mx-auto p-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>

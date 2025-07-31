@@ -525,7 +525,7 @@ export default function PlatillosPage() {
   }
 
   return (
-    <div className="container mx-auto p-4 md:p-6 lg:p-8 space-y-6">
+    <div className="container-fluid mx-auto p-4 md:p-6 lg:p-8 space-y-6">
       {/* 1. Título y Botón */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
