@@ -34,7 +34,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog" // Importar componentes de Dialog
 import * as DialogPrimitive from "@radix-ui/react-dialog" // Importar DialogPrimitive directamente
-import { Eraser, Search, Eye, Edit, ToggleLeft, ToggleRight, Loader2, PlusCircle } from "lucide-react"
+import { Eraser, Search, Eye, Edit, ToggleLeft, ToggleRight, Loader2, PlusCircle, RotateCcw } from "lucide-react"
 import { getPlatilloDetailsForModal } from "@/app/actions/platillos-details-actions" // Importar la nueva acción
 
 // --- Interfaces ---
@@ -533,7 +533,7 @@ export default function PlatillosPage() {
           <p className="text-muted-foreground">Gestión completa de Recetas</p>
         </div>
         <Link href="/platillos/nuevo" passHref>
-          <Button id="btnPlatilloNuevo" name="btnPlatilloNuevo" className="bg-green-800 hover:bg-green-900 text-white">
+          <Button id="btnPlatilloNuevo" name="btnPlatilloNuevo" className="bg-[#5d8f72] hover:bg-[#44785a] text-white">
             <PlusCircle className="mr-2 h-4 w-4" />
             Crear Nueva Receta
           </Button>
@@ -659,17 +659,17 @@ export default function PlatillosPage() {
                 name="btnPlatillosLimpiar"
                 type="button"
                 variant="outline"
-                className="w-full bg-black text-white hover:bg-gray-800"
+                className="w-full bg-[#4a4a4a] text-white hover:bg-[#333333]"
                 style={{ fontSize: "12px" }}
                 onClick={clearPlatillosBusqueda}
               >
-                <Eraser className="mr-2 h-3 w-3" /> Limpiar
+                <RotateCcw className="mr-2 h-3 w-3" /> Limpiar
               </Button>
               <Button
                 id="btnPlatillosBuscar"
                 name="btnPlatillosBuscar"
                 type="submit"
-                className="w-full bg-black text-white hover:bg-gray-800"
+                className="w-full bg-[#4a4a4a] text-white hover:bg-[#333333]"
                 style={{ fontSize: "12px" }}
                 disabled={isSearching}
               >

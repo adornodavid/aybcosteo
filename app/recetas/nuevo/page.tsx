@@ -29,12 +29,10 @@ import { useNavigationGuard } from "@/contexts/navigation-guard-context"
 import { getUnidadMedidaForRecetaIngrediente } from "@/app/actions/recetas-wizard-actions"
 import Image from "next/image"
 
-// Configuración de Supabase
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 const supabaseClient = createClient(supabaseUrl, supabaseAnonKey)
 
-// Interfaces para tipado
 interface SessionData {
   UsuarioId: string | null
   Email: string | null
@@ -59,11 +57,12 @@ interface Ingrediente {
   id: number
   nombre: string
   costo: number | null
+  codigo: string
 }
 
 interface IngredienteRecetaDisplay {
-  id: number // Este es el ID del registro en ingredientesxreceta
-  ingredienteId: number // Este es el ID del ingrediente real
+  id: number
+  ingredienteId: number
   nombre: string
   cantidad: number
   ingredientecostoparcial: number
@@ -73,30 +72,30 @@ export default function NuevaRecetaPage() {
   const router = useRouter()
   const { setGuard, attemptNavigation } = useNavigationGuard()
 
-  // Estados de sesión y carga
   const [sesion, setSesion] = useState<SessionData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [showLoadingAnimation, setShowLoadingAnimation] = useState(false) // Nuevo estado para la animación
+  const [showLoadingAnimation, setShowLoadingAnimation] = useState(false)
 
-  // Estados de etapas y flujo
+  // Estados para AlertDialog de errores
+  const [showErrorDialog, setShowErrorDialog] = useState(false)
+  const [errorMessage, setErrorMessage] = useState("")
+
   const [etapaActual, setEtapaActual] = useState(1)
   const recetaId = useRef<number | null>(null)
   const urlName = useRef<string | null>(null)
-  const [validaRegistroId, setValidaRegistroId] = useState(0) // 0: incompleto, 1: completo
+  const [validaRegistroId, setValidaRegistroId] = useState(0)
 
-  // Estados para modales
   const [mostrarModalConfirmacion, setMostrarModalConfirmacion] = useState(false)
   const [mostrarModalExito, setMostrarModalExito] = useState(false)
   const [mostrarModalIngredienteDuplicado, setMostrarModalIngredienteDuplicado] = useState(false)
+  const [mostrarModalFaltanDatosEtapa2, setMostrarModalFaltanDatosEtapa2] = useState(false)
   const navegacionPendiente = useRef<string | null>(null)
 
-  // Estados de datos para dropdowns
   const [hoteles, setHoteles] = useState<DropdownItem[]>([])
   const [ingredientes, setIngredientes] = useState<Ingrediente[]>([])
   const [unidadesMedida, setUnidadesMedida] = useState<UnidadMedida[]>([])
   const [ingredientesReceta, setIngredientesReceta] = useState<IngredienteRecetaDisplay[]>([])
 
-  // Estados del formulario - Etapa 1
   const [txtNombreRecetaNuevo, setTxtNombreRecetaNuevo] = useState("")
   const [txtNotasReceta, setTxtNotasReceta] = useState("")
   const [ddlHotel, setDdlHotel] = useState("")
@@ -104,16 +103,19 @@ export default function NuevaRecetaPage() {
   const [imagenPreview, setImagenPreview] = useState<string | null>(null)
   const [etapa1Bloqueada, setEtapa1Bloqueada] = useState(false)
 
-  // Estados del formulario - Etapa 2
+  const [txtCantidadSubReceta, setTxtCantidadSubReceta] = useState("")
+  const [ddlUnidadBaseSubReceta, setDdlUnidadBaseSubReceta] = useState("")
+
+  const [ingredienteSearchTerm, setIngredienteSearchTerm] = useState("")
+  const [filteredIngredientes, setFilteredIngredientes] = useState<Ingrediente[]>([])
+  const [showIngredienteDropdown, setShowIngredienteDropdown] = useState(false)
+
   const [ddlIngredientes, setDdlIngredientes] = useState("")
   const [txtCantidadIngrediente, setTxtCantidadIngrediente] = useState("")
   const [ddlUnidadMedida, setDdlUnidadMedida] = useState("")
   const [txtCostoIngrediente, setTxtCostoIngrediente] = useState("")
   const [isUnidadMedidaDisabled, setIsUnidadMedidaDisabled] = useState(false)
 
-  // --- EFECTOS Y CARGA DE DATOS ---
-
-  // Seguridad: Cargar sesión y validaciones iniciales
   useEffect(() => {
     const cargarSesionYValidar = async () => {
       try {
@@ -140,7 +142,6 @@ export default function NuevaRecetaPage() {
     cargarSesionYValidar()
   }, [router])
 
-  // Cargar datos iniciales una vez que la sesión está lista
   useEffect(() => {
     if (sesion) {
       cargarHoteles(sesion)
@@ -148,14 +149,12 @@ export default function NuevaRecetaPage() {
     }
   }, [sesion])
 
-  // Cargar ingredientes cuando cambia el hotel
   useEffect(() => {
     if (ddlHotel) {
       cargarIngredientes(ddlHotel)
     }
   }, [ddlHotel])
 
-  // Actualizar costo y unidad de medida cuando cambia la selección de ingrediente
   const actualizarCostoIngrediente = useCallback(
     (ingredienteId: string) => {
       const ingrediente = ingredientes.find((i) => i.id.toString() === ingredienteId)
@@ -171,41 +170,66 @@ export default function NuevaRecetaPage() {
         const unidades = await getUnidadMedidaForRecetaIngrediente(Number(ddlIngredientes))
         if (unidades.length > 0) {
           setDdlUnidadMedida(unidades[0].id.toString())
-          setIsUnidadMedidaDisabled(false) // Deshabilitar el dropdown
+          setIsUnidadMedidaDisabled(false)
         } else {
           setDdlUnidadMedida("")
         }
       }
       fetchAndSetUnidad()
     } else {
-      // Si no hay ingrediente seleccionado, limpiar unidad y habilitar dropdown
       setDdlUnidadMedida("")
       setIsUnidadMedidaDisabled(false)
     }
   }, [ddlIngredientes, actualizarCostoIngrediente])
 
-  // Función de guardia para la navegación
+  useEffect(() => {
+    const delayDebounceFn = setTimeout(async () => {
+      if (ddlHotel && ingredienteSearchTerm.length >= 2) {
+        const results = await searchIngredientes(Number(ddlHotel), ingredienteSearchTerm)
+        setFilteredIngredientes(results)
+        setShowIngredienteDropdown(true)
+      } else {
+        setFilteredIngredientes([])
+        // setShowIngredienteDropdown(false) // Se elimina esta línea
+      }
+    }, 300)
+
+    return () => clearTimeout(delayDebounceFn)
+  }, [ingredienteSearchTerm, ddlHotel])
+
+  useEffect(() => {
+    if (ddlIngredientes) {
+      const selected =
+        ingredientes.find((i) => i.id.toString() === ddlIngredientes) ||
+        filteredIngredientes.find((i) => i.id.toString() === ddlIngredientes)
+      if (selected) {
+        setIngredienteSearchTerm(`${selected.codigo} - ${selected.nombre}`)
+        setTxtCostoIngrediente(selected.costo?.toString() || "0")
+      }
+    } else {
+      // Mantener el término de búsqueda si no hay un ingrediente seleccionado
+      // setIngredienteSearchTerm("")
+      // setTxtCostoIngrediente("")
+    }
+  }, [ddlIngredientes, ingredientes, filteredIngredientes])
+
   const checkLeaveAndConfirm = useCallback(
     async (targetPath: string): Promise<boolean> => {
-      // El proceso de registro está activo si recetaId.current tiene un valor
-      // y validaRegistroId es 0 (incompleto)
       if (recetaId.current && validaRegistroId === 0) {
         navegacionPendiente.current = targetPath
         setMostrarModalConfirmacion(true)
-        return false // Prevenir la navegación
+        return false
       }
-      return true // Permitir la navegación
+      return true
     },
-    [recetaId, validaRegistroId, setMostrarModalConfirmacion],
+    [recetaId.current, validaRegistroId, setMostrarModalConfirmacion],
   )
 
-  // Registrar la función de guardia con el contexto
   useEffect(() => {
     setGuard(checkLeaveAndConfirm)
-    return () => setGuard(null) // Limpiar la guardia al desmontar el componente
+    return () => setGuard(null)
   }, [setGuard, checkLeaveAndConfirm])
 
-  // Interceptar navegación para mostrar modal de confirmación (solo para beforeunload)
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (recetaId.current && validaRegistroId === 0) {
@@ -221,8 +245,6 @@ export default function NuevaRecetaPage() {
       window.removeEventListener("beforeunload", handleBeforeUnload)
     }
   }, [recetaId.current, validaRegistroId])
-
-  // --- FUNCIONES DE CARGA DE DATOS ---
 
   const cargarHoteles = useCallback(async (sessionData: SessionData) => {
     try {
@@ -265,7 +287,7 @@ export default function NuevaRecetaPage() {
     try {
       const { data, error } = await supabaseClient
         .from("ingredientes")
-        .select("id, nombre, costo")
+        .select("id, nombre, codigo, costo")
         .eq("hotelid", Number(hotelId))
         .eq("activo", true)
         .order("nombre", { ascending: true })
@@ -281,6 +303,22 @@ export default function NuevaRecetaPage() {
       console.error("Error cargando ingredientes:", error)
       toast.error("Error al cargar ingredientes")
     }
+  }, [])
+
+  const searchIngredientes = useCallback(async (hotelId: number, searchTerm: string): Promise<Ingrediente[]> => {
+    let query = supabaseClient.from("ingredientes").select("id, nombre, codigo, costo").eq("hotelid", hotelId)
+
+    if (searchTerm) {
+      const lowerCaseSearchTerm = searchTerm.toLowerCase()
+      query = query.or(`nombre.ilike.%${lowerCaseSearchTerm}%,codigo.ilike.%${lowerCaseSearchTerm}%`)
+    }
+
+    const { data, error } = await query.order("nombre", { ascending: true })
+    if (error) {
+      console.error("Error searching ingredientes:", error)
+      return []
+    }
+    return data || []
   }, [])
 
   const cargarUnidadesMedida = useCallback(async () => {
@@ -299,8 +337,6 @@ export default function NuevaRecetaPage() {
       toast.error("Error al cargar unidades de medida")
     }
   }, [])
-
-  // --- MANEJO DE IMAGEN ---
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -346,11 +382,10 @@ export default function NuevaRecetaPage() {
     toast.info("Imagen eliminada")
   }
 
-  // --- LÓGICA DE LAS ETAPAS ---
-
   const btnRegistrarReceta = async () => {
     if (!txtNombreRecetaNuevo.trim() || !txtNotasReceta.trim() || !ddlHotel) {
-      toast.error("Favor de llenar la información faltante.")
+      setErrorMessage("Favor de llenar la información faltante.")
+      setShowErrorDialog(true)
       return
     }
 
@@ -384,6 +419,8 @@ export default function NuevaRecetaPage() {
           activo: true,
           fechacreacion: new Date().toISOString(),
           imgurl: currentUrlName,
+          cantidad: null,
+          unidadbaseid: null,
         })
         .select("id")
         .single()
@@ -408,14 +445,14 @@ export default function NuevaRecetaPage() {
       const { data, error } = await supabaseClient
         .from("ingredientesxreceta")
         .select(`
-          id,
-          ingredienteid,
-          cantidad,
-          ingredientecostoparcial,
-          ingredientes (
-            nombre
-          )
-        `)
+        id,
+        ingredienteid,
+        cantidad,
+        ingredientecostoparcial,
+        ingredientes (
+          nombre
+        )
+      `)
         .eq("recetaid", recetaId.current)
 
       if (error) {
@@ -438,9 +475,33 @@ export default function NuevaRecetaPage() {
     }
   }, [])
 
+  const handleIngredienteSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const term = e.target.value
+    setIngredienteSearchTerm(term)
+    const selectedIng =
+      ingredientes.find((i) => i.id.toString() === ddlIngredientes) ||
+      filteredIngredientes.find((i) => i.id.toString() === ddlIngredientes)
+    if (term === "") {
+      // Si el término de búsqueda está vacío, limpiar selección
+      setDdlIngredientes("")
+      setTxtCostoIngrediente("")
+    } else if (ddlIngredientes && selectedIng && term !== `${selectedIng.codigo} - ${selectedIng.nombre}`) {
+      setDdlIngredientes("")
+      setTxtCostoIngrediente("")
+    }
+  }
+
+  const handleSelectIngredienteFromDropdown = (ing: Ingrediente) => {
+    setDdlIngredientes(ing.id.toString())
+    setIngredienteSearchTerm(`${ing.codigo} - ${ing.nombre}`)
+    setTxtCostoIngrediente(ing.costo?.toString() || "0")
+    setShowIngredienteDropdown(false)
+  }
+
   const btnAgregarIngrediente = async () => {
     if (!ddlIngredientes || !txtCantidadIngrediente || !ddlUnidadMedida) {
-      toast.error("Favor de llenar la información faltante")
+      setErrorMessage("Favor de llenar la información faltante")
+      setShowErrorDialog(true)
       return
     }
 
@@ -501,10 +562,11 @@ export default function NuevaRecetaPage() {
       await cargarIngredientesReceta()
 
       setDdlIngredientes("")
+      setIngredienteSearchTerm("")
       setTxtCantidadIngrediente("")
       setTxtCostoIngrediente("")
       setDdlUnidadMedida("")
-      setIsUnidadMedidaDisabled(false) // Reset disabled state after adding ingredient
+      setIsUnidadMedidaDisabled(false)
 
       toast.success("Ingrediente agregado")
     } catch (error: any) {
@@ -533,7 +595,7 @@ export default function NuevaRecetaPage() {
       }
 
       toast.success("Ingrediente eliminado de la sub-receta.")
-      await cargarIngredientesReceta() // Recargar la tabla
+      await cargarIngredientesReceta()
     } catch (error: any) {
       console.error("Error inesperado al eliminar ingrediente:", error)
       toast.error("Error inesperado al eliminar ingrediente.")
@@ -546,12 +608,12 @@ export default function NuevaRecetaPage() {
       return
     }
 
-    setShowLoadingAnimation(true) // Mostrar la animación
+    setShowLoadingAnimation(true)
 
     try {
       const [sumDataResult] = await Promise.all([
         supabaseClient.from("ingredientesxreceta").select("ingredientecostoparcial").eq("recetaid", recetaId.current),
-        new Promise((resolve) => setTimeout(resolve, 5000)), // Asegurar mínimo 5 segundos de animación
+        new Promise((resolve) => setTimeout(resolve, 5000)),
       ])
 
       const { data: sumData, error: sumError } = sumDataResult
@@ -566,7 +628,11 @@ export default function NuevaRecetaPage() {
 
       const { error: updateError } = await supabaseClient
         .from("recetas")
-        .update({ costo: costoTotal })
+        .update({
+          costo: costoTotal,
+          cantidad: Number.parseFloat(txtCantidadSubReceta),
+          unidadbaseid: Number.parseInt(ddlUnidadBaseSubReceta),
+        })
         .eq("id", recetaId.current)
 
       if (updateError) {
@@ -578,18 +644,14 @@ export default function NuevaRecetaPage() {
       toast.success("Platillo registrado correctamente")
 
       setValidaRegistroId(1)
-
-      // El modal de éxito se mostrará después de que la animación se oculte
     } catch (error: any) {
       console.error("Error inesperado al completar registro:", error)
       toast.error("Error inesperado al completar el registro")
     } finally {
-      setShowLoadingAnimation(false) // Ocultar la animación
-      setMostrarModalExito(true) // Mostrar el modal de éxito
+      setShowLoadingAnimation(false)
+      setMostrarModalExito(true)
     }
   }
-
-  // --- FUNCIONES DE NAVEGACIÓN Y MODALES ---
 
   const btnRegresarReceta = async () => {
     const canProceed = await attemptNavigation("/recetas")
@@ -644,8 +706,6 @@ export default function NuevaRecetaPage() {
     if (etapaActual > 1) setEtapaActual(etapaActual - 1)
   }
 
-  // --- RENDERIZADO ---
-
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -655,8 +715,7 @@ export default function NuevaRecetaPage() {
   }
 
   return (
-  <div className="container mx-auto p-6 max-w-5xl">
-      {/* Overlay de animación de carga */}
+    <div className="container mx-auto p-6 max-w-5xl">
       {showLoadingAnimation && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="flex flex-col items-center justify-center p-8 bg-white rounded-lg shadow-xl">
@@ -664,9 +723,9 @@ export default function NuevaRecetaPage() {
               <Image
                 src="https://nxtrsibnomdqmzcrwedc.supabase.co/storage/v1/object/public/imagenes/AnimationGif/RegistrarSubReceta.gif"
                 alt="Procesando..."
-                width={400} // Ajusta el tamaño según sea necesario
-                height={400} // Ajusta el tamaño según sea necesario
-                unoptimized // Importante para GIFs externos
+                width={400}
+                height={400}
+                unoptimized
                 className="absolute inset-0 animate-bounce-slow"
               />
             </div>
@@ -676,9 +735,19 @@ export default function NuevaRecetaPage() {
         </div>
       )}
 
+      {/* AlertDialog para errores */}
+      <AlertDialog open={showErrorDialog} onOpenChange={setShowErrorDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Error de Validación</AlertDialogTitle>
+            <AlertDialogDescription>{errorMessage}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setShowErrorDialog(false)}>Aceptar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
-
-      {/* Modal de confirmación para abandonar registro */}
       <AlertDialog open={mostrarModalConfirmacion} onOpenChange={setMostrarModalConfirmacion}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -692,7 +761,6 @@ export default function NuevaRecetaPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Modal de éxito para registro completado */}
       <AlertDialog open={mostrarModalExito} onOpenChange={setMostrarModalExito}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -707,7 +775,6 @@ export default function NuevaRecetaPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Modal de advertencia para ingrediente duplicado */}
       <AlertDialog open={mostrarModalIngredienteDuplicado} onOpenChange={setMostrarModalIngredienteDuplicado}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -722,7 +789,20 @@ export default function NuevaRecetaPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Título y botón regresar */}
+      <AlertDialog open={mostrarModalFaltanDatosEtapa2} onOpenChange={setMostrarModalFaltanDatosEtapa2}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Datos Faltantes</AlertDialogTitle>
+            <AlertDialogDescription>
+              Por favor, ingresa la cantidad y selecciona la unidad base de la sub-receta para poder continuar.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setMostrarModalFaltanDatosEtapa2(false)}>Aceptar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center space-x-4">
           <Button
@@ -739,25 +819,22 @@ export default function NuevaRecetaPage() {
         </div>
       </div>
 
-      {/* Barra de progreso */}
       <div className="mb-8">
         <div className="w-full bg-gray-200 rounded-full h-3">
           <div
             className="h-3 rounded-full transition-all duration-500"
             style={{ width: `${(etapaActual / 3) * 100}%`, backgroundColor: "#ade06e" }}
-          ></div>
+          />
         </div>
         <p className="text-right text-sm text-muted-foreground mt-1">Etapa {etapaActual} de 3</p>
       </div>
 
-      {/* Botón Anterior */}
       {etapaActual > 1 && (
         <Button onClick={btnAnterior} variant="secondary" size="sm" className="mb-4">
           Anterior
         </Button>
       )}
 
-      {/* ETAPA 1: Información básica */}
       {etapaActual === 1 && (
         <Card>
           <CardHeader>
@@ -869,7 +946,6 @@ export default function NuevaRecetaPage() {
         </Card>
       )}
 
-      {/* ETAPA 2: Registrar ingredientes */}
       {etapaActual === 2 && (
         <Card>
           <CardHeader>
@@ -877,23 +953,67 @@ export default function NuevaRecetaPage() {
             <CardDescription>Agregue al menos 2 ingredientes para poder continuar.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="p-4 border rounded-lg">
-              <h3 className="font-semibold mb-4">Agregar Ingrediente</h3>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 items-end">
+            <div className="p-4 border rounded-lg bg-slate-50">
+              <h3 className="font-semibold mb-4">Cantidad y Tipo de Unidad de la Sub-Receta</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <div>
-                  <Label htmlFor="ddlIngredientes">Ingrediente</Label>
-                  <Select name="ddlIngredientes" value={ddlIngredientes} onValueChange={setDdlIngredientes}>
-                    <SelectTrigger id="ddlIngredientes">
-                      <SelectValue placeholder="Seleccionar ingrediente" />
+                  <Label htmlFor="txtCantidad">Cantidad</Label>
+                  <Input
+                    type="number"
+                    id="txtCantidad"
+                    name="txtCantidad"
+                    value={txtCantidadSubReceta}
+                    onChange={(e) => setTxtCantidadSubReceta(e.target.value)}
+                    min="0"
+                    step="any"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="ddlUnidadBase">Unidad Base</Label>
+                  <Select name="ddlUnidadBase" value={ddlUnidadBaseSubReceta} onValueChange={setDdlUnidadBaseSubReceta}>
+                    <SelectTrigger id="ddlUnidadBase">
+                      <SelectValue placeholder="Seleccionar unidad base" />
                     </SelectTrigger>
                     <SelectContent>
-                      {ingredientes.map((ingrediente) => (
-                        <SelectItem key={ingrediente.id} value={ingrediente.id.toString()}>
-                          {ingrediente.nombre}
+                      {unidadesMedida.map((unidad) => (
+                        <SelectItem key={unidad.id} value={unidad.id.toString()}>
+                          {unidad.descripcion}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 border rounded-lg">
+              <h3 className="font-semibold mb-4">Agregar Ingrediente</h3>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 items-end">
+                <div className="md:col-span-2 relative">
+                  <Label htmlFor="txtIngredienteSearch">Ingrediente</Label>
+                  <Input
+                    id="txtIngredienteSearch"
+                    name="txtIngredienteSearch"
+                    value={ingredienteSearchTerm}
+                    onChange={handleIngredienteSearchChange}
+                    onFocus={() => setShowIngredienteDropdown(true)}
+                    onBlur={() => setTimeout(() => setShowIngredienteDropdown(false), 100)}
+                    placeholder="Buscar por código o nombre..."
+                    autoComplete="off"
+                  />
+                  {showIngredienteDropdown && filteredIngredientes.length > 0 && (
+                    <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-y-auto mt-1">
+                      {filteredIngredientes.map((ing) => (
+                        <div
+                          key={ing.id}
+                          className="px-4 py-2 cursor-pointer hover:bg-gray-100"
+                          onMouseDown={() => handleSelectIngredienteFromDropdown(ing)}
+                        >
+                          {ing.codigo} - {ing.nombre}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div>
                   <Label htmlFor="txtCantidadIngrediente">Cantidad</Label>
@@ -913,8 +1033,7 @@ export default function NuevaRecetaPage() {
                     name="ddlUnidadMedida"
                     value={ddlUnidadMedida}
                     onValueChange={setDdlUnidadMedida}
-                    //disabled={isUnidadMedidaDisabled}
-                    disabled
+                    disabled={true}
                   >
                     <SelectTrigger id="ddlUnidadMedida">
                       <SelectValue placeholder="Seleccionar unidad" />
@@ -952,7 +1071,6 @@ export default function NuevaRecetaPage() {
               </div>
             </div>
 
-            {/* Tabla de ingredientes agregados */}
             {ingredientesReceta.length > 0 && (
               <div className="mt-4">
                 <Table>
@@ -993,7 +1111,13 @@ export default function NuevaRecetaPage() {
                 type="button"
                 id="btnContinuarIngrediente"
                 name="btnContinuarIngrediente"
-                onClick={() => setEtapaActual(3)}
+                onClick={() => {
+                  if (!txtCantidadSubReceta || !ddlUnidadBaseSubReceta) {
+                    setMostrarModalFaltanDatosEtapa2(true)
+                    return
+                  }
+                  setEtapaActual(3)
+                }}
                 disabled={ingredientesReceta.length < 2}
               >
                 Continuar
@@ -1003,7 +1127,6 @@ export default function NuevaRecetaPage() {
         </Card>
       )}
 
-      {/* ETAPA 3: Resumen y Confirmación */}
       {etapaActual === 3 && (
         <Card>
           <CardHeader>
@@ -1011,7 +1134,6 @@ export default function NuevaRecetaPage() {
             <CardDescription>Revise la información antes de finalizar el registro.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Resumen de información básica */}
             <div className="p-6 border rounded-lg space-y-4 bg-slate-50">
               <h3 className="text-xl font-semibold border-b pb-2">Detalles de la Sub-Receta</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
@@ -1023,6 +1145,16 @@ export default function NuevaRecetaPage() {
                   <p className="text-sm font-medium text-gray-500">Hotel</p>
                   <p className="text-lg text-gray-800">
                     {hoteles.find((h) => h.id.toString() === ddlHotel)?.nombre || "N/A"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-500">Cantidad de Sub-Receta</p>
+                  <p className="text-lg text-gray-800">{txtCantidadSubReceta || "N/A"}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-500">Unidad Base de Sub-Receta</p>
+                  <p className="text-lg text-gray-800">
+                    {unidadesMedida.find((u) => u.id.toString() === ddlUnidadBaseSubReceta)?.descripcion || "N/A"}
                   </p>
                 </div>
                 <div className="md:col-span-2">
@@ -1042,7 +1174,6 @@ export default function NuevaRecetaPage() {
               )}
             </div>
 
-            {/* Resumen de ingredientes */}
             <div className="p-6 border rounded-lg space-y-4 bg-slate-50">
               <h3 className="text-xl font-semibold border-b pb-2">Ingredientes</h3>
               <Table>
@@ -1073,7 +1204,6 @@ export default function NuevaRecetaPage() {
               </div>
             </div>
 
-            {/* Botón de registro completo */}
             <Button
               type="button"
               id="btnRegistroCompletoReceta"

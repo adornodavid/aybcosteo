@@ -647,7 +647,7 @@ export default function MenusPage() {
         <Button
           type="button"
           onClick={() => router.push("/menus/nuevo")}
-          style={{ backgroundColor: "#986ec2", color: "white" }}
+          style={{ backgroundColor: "#5d8f72", color: "white" hover: "#44785a"}}
           id="btnMenuNuevo"
           name="btnMenuNuevo"
         >
@@ -678,7 +678,7 @@ export default function MenusPage() {
           <form
             id="frmMenusBuscar"
             name="frmMenusBuscar"
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end"
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 items-end"
           >
             <div className="space-y-2">
               <label htmlFor="txtMenuNombre" className="text-sm font-medium">
@@ -761,7 +761,8 @@ export default function MenusPage() {
               <Button
                 type="button"
                 onClick={handleClearFilters}
-                style={{ backgroundColor: "#c49deb", color: "black", fontSize: "12px" }}
+                className="bg-[#4a4a4a] text-white hover:bg-[#333333]"
+                style={{ fontSize: "12px" }}
                 id="btnMenuLimpiar"
                 name="btnMenuLimpiar"
               >
@@ -770,7 +771,8 @@ export default function MenusPage() {
               <Button
                 type="button"
                 onClick={handleSearch}
-                style={{ backgroundColor: "#c49deb", color: "black", fontSize: "12px" }}
+                className="bg-[#4a4a4a] text-white hover:bg-[#333333]"
+                style={{ fontSize: "12px" }}
                 id="btnMenuBuscar"
                 name="btnMenuBuscar"
               >

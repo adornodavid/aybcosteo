@@ -48,11 +48,17 @@ interface Ingrediente {
   id: number
   nombre: string
   costo: number | null
+  codigo: string // Añadido el campo codigo
 }
 interface Receta {
   id: number
   nombre: string
   costo: number | null
+  cantidad: number | null // Añadido para la cantidad base de la receta
+  unidadbaseid: number | null // Añadido para la unidad base de la receta
+  tipounidadmedida: {
+    descripcion: string
+  } | null // Añadido para la descripción de la unidad base
 }
 interface UnidadMedida {
   id: number
@@ -93,9 +99,11 @@ export default function NuevoPlatilloPage() {
   const [showSuccessModal, setShowSuccessModal] = useState(false) // Nuevo estado para el modal de éxito
   const [showDuplicateRecetaModal, setShowDuplicateRecetaModal] = useState(false) // Nuevo estado para el modal de duplicidad de receta
   const [showDuplicateIngredienteModal, setShowDuplicateIngredienteModal] = useState(false) // Nuevo estado para el modal de duplicidad de ingrediente
-  const nextPath = useRef("")
+  const [nextPath, setNextPath] = useState("")
   const resolveNavigationRef = useRef<((value: boolean) => void) | null>(null) // Para resolver la promesa de navegación
   const [countdown, setCountdown] = useState(10) // Nuevo estado para el contador
+  const [showErrorDialog, setShowErrorDialog] = useState(false) // Nuevo estado para el AlertDialog de error
+  const [errorMessage, setErrorMessage] = useState("") // Nuevo estado para el mensaje de error
 
   // --- ETAPA 1: INFO BÁSICA ---
   const [nombre, setNombre] = useState("")
@@ -114,13 +122,17 @@ export default function NuevoPlatilloPage() {
   const [menuId, setMenuId] = useState<string>("")
 
   // --- ETAPA 3: CONTENIDO ---
-  const [ingredientes, setIngredientes] = useState<Ingrediente[]>([])
+  const [ingredientes, setIngredientes] = useState<Ingrediente[]>([]) // Todos los ingredientes para el hotel
   const [recetas, setRecetas] = useState<Receta[]>([])
   const [unidades, setUnidades] = useState<UnidadMedida[]>([]) // Ahora se carga dinámicamente
   const [ingredientesAgregados, setIngredientesAgregados] = useState<IngredienteAgregado[]>([])
   const [recetasAgregadas, setRecetasAgregadas] = useState<RecetaAgregada[]>([])
 
-  // Formulario de ingredientes
+  // Formulario de ingredientes (para el nuevo input de búsqueda)
+  const [ingredienteSearchTerm, setIngredienteSearchTerm] = useState("")
+  const [filteredIngredientes, setFilteredIngredientes] = useState<Ingrediente[]>([]) // Resultados de la búsqueda
+  const [showIngredienteDropdown, setShowIngredienteDropdown] = useState(false)
+
   const [selIngredienteId, setSelIngredienteId] = useState("")
   const [selIngredienteCantidad, setSelIngredienteCantidad] = useState("")
   const [selIngredienteUnidad, setSelIngredienteUnidad] = useState("")
@@ -129,6 +141,11 @@ export default function NuevoPlatilloPage() {
   // Formulario de recetas
   const [selRecetaId, setSelRecetaId] = useState("")
   const [selRecetaCosto, setSelRecetaCosto] = useState("")
+  // NUEVOS ESTADOS PARA SUB-RECETAS
+  const [selRecetaCantidad, setSelRecetaCantidad] = useState("1") // Para txtCantidad (number)
+  const [selRecetaCant, setSelRecetaCant] = useState("1") // Para txtCant (range)
+  const [selRecetaUnidadBase, setSelRecetaUnidadBase] = useState("") // Para txtUnidadBase (text)
+  const [maxRangeReceta, setMaxRangeReceta] = useState(1) // Para el max del input range
 
   // --- ETAPA 4: RESUMEN ---
   const [totalCostoPlatillo, setTotalCostoPlatillo] = useState<number | null>(null) // Nuevo estado para el costo total
@@ -148,13 +165,9 @@ export default function NuevoPlatilloPage() {
         }
 
         const auxHotelid = [1, 2, 3, 4].includes(Number(sessionData.RolId)) ? -1 : Number(sessionData.HotelId)
-        const [hotelesData] = await Promise.all([
-          actions.getHoteles(auxHotelid),
-          // actions.getUnidadesMedida(), // Ya no se carga aquí, ahora es dinámico
-        ])
+        const [hotelesData] = await Promise.all([actions.getHoteles(auxHotelid)])
 
         setHoteles(hotelesData)
-        // setUnidades(unidadesData) // Ya no se carga aquí
 
         if (hotelesData.length > 0) {
           setHotelId(hotelesData[0].id.toString())
@@ -180,7 +193,7 @@ export default function NuevoPlatilloPage() {
       setRestauranteId(data[0]?.id.toString() || "")
     })
 
-    actions.getIngredientes(hotelNum).then(setIngredientes)
+    actions.getIngredientes(hotelNum).then(setIngredientes) // Carga todos los ingredientes para el hotel
     actions.getRecetas(hotelNum).then(setRecetas)
   }, [hotelId])
 
@@ -222,6 +235,25 @@ export default function NuevoPlatilloPage() {
     loadUnits()
   }, [selIngredienteId])
 
+  // NUEVO EFECTO: Actualizar inputs de cantidad y unidad base para sub-recetas
+  useEffect(() => {
+    if (!selRecetaId) {
+      setMaxRangeReceta(1)
+      setSelRecetaCantidad("1")
+      setSelRecetaCant("1")
+      setSelRecetaUnidadBase("")
+      return
+    }
+    const selectedReceta = recetas.find((r) => r.id.toString() === selRecetaId)
+    if (selectedReceta) {
+      const baseCantidad = selectedReceta.cantidad && selectedReceta.cantidad > 0 ? selectedReceta.cantidad : 1
+      setMaxRangeReceta(baseCantidad)
+      setSelRecetaCantidad("1") // Reset to 1 when new recipe is selected
+      setSelRecetaCant("1") // Reset to 1 when new recipe is selected
+      setSelRecetaUnidadBase(selectedReceta.tipounidadmedida?.descripcion || "N/A")
+    }
+  }, [selRecetaId, recetas])
+
   // NUEVO EFECTO: Cargar costo total del platillo en la etapa de resumen
   useEffect(() => {
     if (etapa === 4 && platilloId !== null) {
@@ -253,6 +285,35 @@ export default function NuevoPlatilloPage() {
     }
     return () => clearInterval(timer) // Limpiar el intervalo al salir de la etapa o desmontar
   }, [etapa, router])
+
+  // NUEVO EFECTO: Debounce para la búsqueda de ingredientes
+  useEffect(() => {
+    const delayDebounceFn = setTimeout(async () => {
+      if (hotelId && ingredienteSearchTerm.length >= 2) {
+        // Solo buscar si hay al menos 2 caracteres
+        const results = await actions.searchIngredientes(Number(hotelId), ingredienteSearchTerm)
+        setFilteredIngredientes(results)
+        setShowIngredienteDropdown(true)
+      } else {
+        setFilteredIngredientes([])
+        setShowIngredienteDropdown(false)
+      }
+    }, 300) // Debounce de 300ms
+
+    return () => clearTimeout(delayDebounceFn)
+  }, [ingredienteSearchTerm, hotelId])
+
+  // NUEVO EFECTO: Sincronizar el input de búsqueda con el ingrediente seleccionado
+  useEffect(() => {
+    if (selIngredienteId) {
+      const selected = ingredientes.find((i) => i.id.toString() === selIngredienteId)
+      if (selected) {
+        setIngredienteSearchTerm(`${selected.codigo} - ${selected.nombre}`)
+      }
+    } else {
+      setIngredienteSearchTerm("") // Limpiar el término de búsqueda si selIngredienteId se limpia
+    }
+  }, [selIngredienteId, ingredientes])
 
   // 4. Lógica para evitar abandono de página (para F5 y cierre de pestaña)
   const handleBeforeUnload = useCallback(
@@ -315,7 +376,8 @@ export default function NuevoPlatilloPage() {
 
   const handleRegistrarPlatillo = async () => {
     if (!nombre || !descripcion) {
-      toast.error("Favor de llenar la información faltante (Nombre y Descripción son obligatorios).")
+      setErrorMessage("Favor de llenar la información faltante (Nombre y Descripción son obligatorios).")
+      setShowErrorDialog(true)
       return
     }
 
@@ -335,7 +397,8 @@ export default function NuevoPlatilloPage() {
       toast.success("Información básica guardada. Continue con el siguiente paso.")
       setEtapa(2)
     } else {
-      toast.error(result.error || "Ocurrió un error al registrar la receta.")
+      setErrorMessage(result.error || "Ocurrió un error al registrar la receta.")
+      setShowErrorDialog(true)
     }
     setIsSubmitting(false)
   }
@@ -350,9 +413,27 @@ export default function NuevoPlatilloPage() {
     setEtapa(3)
   }
 
+  const handleIngredienteSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const term = e.target.value
+    setIngredienteSearchTerm(term)
+    // Si el usuario empieza a escribir después de haber seleccionado un ingrediente,
+    // se asume que quiere buscar uno nuevo, así que se limpia el ID seleccionado.
+    const selectedIng = ingredientes.find((i) => i.id.toString() === selIngredienteId)
+    if (selIngredienteId && selectedIng && term !== `${selectedIng.codigo} - ${selectedIng.nombre}`) {
+      setSelIngredienteId("")
+    }
+  }
+
+  const handleSelectIngredienteFromDropdown = (ing: Ingrediente) => {
+    setSelIngredienteId(ing.id.toString())
+    setIngredienteSearchTerm(`${ing.codigo} - ${ing.nombre}`)
+    setShowIngredienteDropdown(false)
+  }
+
   const handleAgregarIngrediente = async () => {
     if (!selIngredienteId || !selIngredienteCantidad || !selIngredienteUnidad) {
-      toast.error("Favor de llenar la información faltante del ingrediente.")
+      setErrorMessage("Favor de llenar la información faltante del ingrediente.")
+      setShowErrorDialog(true)
       return
     }
 
@@ -368,7 +449,7 @@ export default function NuevoPlatilloPage() {
       setIngredientesAgregados(result.ingredientes)
       toast.success("Ingrediente agregado.")
       // Limpiar inputs
-      setSelIngredienteId("")
+      setSelIngredienteId("") // Esto activará el useEffect para limpiar ingredienteSearchTerm
       setSelIngredienteCantidad("")
       setSelIngredienteUnidad("")
       setSelIngredienteCosto("")
@@ -377,26 +458,55 @@ export default function NuevoPlatilloPage() {
       if (result.error === "No es posible agregar este ingrediente, puesto que ya se encuentra agregado a la receta.") {
         setShowDuplicateIngredienteModal(true)
       } else {
-        toast.error(result.error || "No se pudo agregar el ingrediente.")
+        setErrorMessage(result.error || "No se pudo agregar el ingrediente.")
+        setShowErrorDialog(true)
       }
     }
     setIsSubmitting(false)
   }
 
+  // NUEVO MANEJADOR: Para el input numérico de cantidad de sub-receta
+  const handleCantidadRecetaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let value = Number(e.target.value)
+    if (isNaN(value) || value < 1) {
+      value = 1
+    }
+    if (value > maxRangeReceta) {
+      value = maxRangeReceta
+    }
+    setSelRecetaCantidad(value.toString())
+    setSelRecetaCant(value.toString()) // Sincronizar con el input de rango
+  }
+
+  // NUEVO MANEJADOR: Para el input de rango de cantidad de sub-receta
+  const handleCantRecetaRangeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value
+    setSelRecetaCant(value)
+    setSelRecetaCantidad(value) // Sincronizar con el input numérico
+  }
+
   const handleAgregarReceta = async () => {
-    if (!selRecetaId) {
-      toast.error("Favor de seleccionar una sub-receta.")
+    if (!selRecetaId || !selRecetaCantidad || Number(selRecetaCantidad) < 1) {
+      toast.error("Favor de seleccionar una sub-receta e ingresar una cantidad válida.")
+      return
+    }
+    if (Number(selRecetaCantidad) > maxRangeReceta) {
+      toast.error(`La cantidad no puede ser mayor a la cantidad base de la sub-receta (${maxRangeReceta}).`)
       return
     }
 
     setIsSubmitting(true)
-    const result = await actions.agregarReceta(platilloId!, Number(selRecetaId))
+    const result = await actions.agregarReceta(platilloId!, Number(selRecetaId), Number(selRecetaCantidad))
 
     if (result.success && result.recetas) {
       setRecetasAgregadas(result.recetas)
       toast.success("Sub-Receta agregada.")
       setSelRecetaId("")
       setSelRecetaCosto("")
+      setSelRecetaCantidad("1") // Reset
+      setSelRecetaCant("1") // Reset
+      setSelRecetaUnidadBase("") // Reset
+      setMaxRangeReceta(1) // Reset
     } else {
       // Si el error es el de duplicidad, mostrar el AlertDialog
       if (result.error === "No es posible agregar esta Sub-Receta, puesto que ya se encuentra agregada a la receta.") {
@@ -496,7 +606,7 @@ export default function NuevoPlatilloPage() {
         return new Promise<boolean>((resolve) => {
           resolveNavigationRef.current = resolve // Almacenar la función resolve de la promesa
           setShowLeaveConfirm(true) // Mostrar el modal
-          nextPath.current = targetPath // Guardar la ruta a la que se intenta navegar
+          setNextPath(targetPath) // Guardar la ruta a la que se intenta navegar
         })
       }
       return true // No hay proceso incompleto, se puede navegar libremente
@@ -583,6 +693,19 @@ export default function NuevoPlatilloPage() {
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogAction onClick={() => setShowDuplicateIngredienteModal(false)}>Aceptar</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Nuevo Modal de error de validación (para handleRegistrarPlatillo y handleAgregarIngrediente) */}
+        <AlertDialog open={showErrorDialog} onOpenChange={setShowErrorDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Error de Validación</AlertDialogTitle>
+              <AlertDialogDescription>{errorMessage}</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogAction onClick={() => setShowErrorDialog(false)}>Aceptar</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
@@ -808,20 +931,37 @@ export default function NuevoPlatilloPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                  <div className="md:col-span-2">
-                    <Label htmlFor="ddlIngredientes">Ingrediente</Label>
-                    <Select value={selIngredienteId} onValueChange={setSelIngredienteId}>
-                      <SelectTrigger id="ddlIngredientes" name="ddlIngredientes">
-                        <SelectValue placeholder="Seleccione..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ingredientes.map((i) => (
-                          <SelectItem key={i.id} value={i.id.toString()}>
-                            {i.nombre}
-                          </SelectItem>
+                  <div className="md:col-span-2 relative">
+                    {" "}
+                    {/* Añadido relative para el posicionamiento del dropdown */}
+                    <Label htmlFor="txtIngredienteSearch">Ingrediente</Label>
+                    <Input
+                      id="txtIngredienteSearch"
+                      name="txtIngredienteSearch"
+                      value={ingredienteSearchTerm}
+                      onChange={handleIngredienteSearchChange}
+                      onFocus={() =>
+                        ingredienteSearchTerm.length >= 2 &&
+                        filteredIngredientes.length > 0 &&
+                        setShowIngredienteDropdown(true)
+                      }
+                      onBlur={() => setTimeout(() => setShowIngredienteDropdown(false), 100)} // Pequeño delay para permitir el click
+                      placeholder="Buscar por código o nombre..."
+                      autoComplete="off"
+                    />
+                    {showIngredienteDropdown && filteredIngredientes.length > 0 && (
+                      <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-y-auto mt-1">
+                        {filteredIngredientes.map((ing) => (
+                          <div
+                            key={ing.id}
+                            className="px-4 py-2 cursor-pointer hover:bg-gray-100"
+                            onMouseDown={() => handleSelectIngredienteFromDropdown(ing)} // Usar onMouseDown
+                          >
+                            {ing.codigo} - {ing.nombre}
+                          </div>
                         ))}
-                      </SelectContent>
-                    </Select>
+                      </div>
+                    )}
                   </div>
                   <div>
                     <Label htmlFor="txtCantidadIngrediente">Cantidad</Label>
@@ -909,11 +1049,15 @@ export default function NuevoPlatilloPage() {
                 <CardTitle>Agregar Sub-Recetas</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <div>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-6">
+                  <div className="col-span-6">
                     <Label htmlFor="ddlReceta">Sub-Receta</Label>
                     <Select value={selRecetaId} onValueChange={setSelRecetaId}>
-                      <SelectTrigger id="ddlReceta" name="ddlReceta">
+                      <SelectTrigger
+                        id="ddlReceta"
+                        name="ddlReceta"
+                        className="flex h-10 w-96 items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1"
+                      >
                         <SelectValue placeholder="Seleccione..." />
                       </SelectTrigger>
                       <SelectContent>
@@ -925,6 +1069,46 @@ export default function NuevoPlatilloPage() {
                       </SelectContent>
                     </Select>
                   </div>
+                  {/* NUEVOS INPUTS PARA CANTIDAD Y UNIDAD BASE DE SUB-RECETA */}
+                  <div>
+                    <Label htmlFor="txtCantidad">Cantidad</Label>
+                    <Input
+                      id="txtCantidad"
+                      name="txtCantidad"
+                      type="number"
+                      value={selRecetaCantidad}
+                      onChange={handleCantidadRecetaChange}
+                      min="1"
+                      max={maxRangeReceta}
+                      disabled={!selRecetaId || maxRangeReceta === 0}
+                      className="flex h-10 w-32 rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <Label htmlFor="txtCant">Rango de Cantidad</Label>
+                    <Input
+                      id="txtCant"
+                      name="txtCant"
+                      type="range"
+                      value={selRecetaCant}
+                      onChange={handleCantRecetaRangeChange}
+                      min="1"
+                      max={maxRangeReceta}
+                      disabled={!selRecetaId || maxRangeReceta === 0}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="txtUnidadBase">Unidad Base</Label>
+                    <Input
+                      id="txtUnidadBase"
+                      name="txtUnidadBase"
+                      className="flex h-10 w-32 rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+                      type="text"
+                      value={selRecetaUnidadBase}
+                      disabled
+                    />
+                  </div>
+                  {/* FIN NUEVOS INPUTS */}
                   <div>
                     <Label htmlFor="txtCostoReceta">Costo Sub-Receta</Label>
                     <Input id="txtCostoReceta" name="txtCostoReceta" value={selRecetaCosto} disabled />
@@ -935,7 +1119,12 @@ export default function NuevoPlatilloPage() {
                     id="btnAgregarReceta"
                     name="btnAgregarReceta"
                     onClick={handleAgregarReceta}
-                    disabled={isSubmitting}
+                    disabled={
+                      isSubmitting ||
+                      !selRecetaId ||
+                      Number(selRecetaCantidad) < 1 ||
+                      Number(selRecetaCantidad) > maxRangeReceta
+                    }
                   >
                     {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Agregar Receta
@@ -1108,7 +1297,7 @@ export default function NuevoPlatilloPage() {
               {/* Línea 1107 del código anterior, el nuevo contenido va después de este div */}
               {precioSugeridoPlatillo !== null && (
                 <div className="mt-6 text-right text-lg text-black-600">
-                  <span className = "text-yellow-600">*</span> Precio Mínimo: ${precioSugeridoPlatillo.toFixed(2)}
+                  <span className="text-yellow-600">*</span> Precio Mínimo: ${precioSugeridoPlatillo.toFixed(2)}
                 </div>
               )}
             </CardContent>

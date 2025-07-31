@@ -57,15 +57,7 @@ export function AppSidebar() {
       icon: Icons.LayoutDashboard,
       hasSubmenu: false,
     },
-    {
-      name: "Gestión Hotelera",
-      icon: Icons.Hotel,
-      hasSubmenu: true,
-      submenu: [
-        { name: "Hoteles", href: "/hoteles", icon: Icons.Hotel },
-        { name: "Restaurantes", href: "/restaurantes", icon: Icons.Building },
-      ],
-    },
+    
     {
       name: "Insumos",
       icon: Icons.Package,
@@ -100,6 +92,17 @@ export function AppSidebar() {
         //{ name: "Reporte Comparativo", href: "/reportecomparativo", icon: Icons.FileBarChart },
       ],
     },
+
+    {
+      name: "Gestión Hotelera",
+      icon: Icons.Hotel,
+      hasSubmenu: true,
+      submenu: [
+        { name: "Hoteles", href: "/hoteles", icon: Icons.Hotel },
+        { name: "Restaurantes", href: "/restaurantes", icon: Icons.Building },
+      ],
+    },
+    
     /*
     {
       name: "Administración",
@@ -120,9 +123,9 @@ export function AppSidebar() {
   ]
 
   return (
-    <div id="SideBar" className="w-64 h-screen bg-blue-900 text-white flex flex-col">
+    <div id="SideBar" className="w-64 h-screen bg-[#528A94] text-white flex flex-col">
       {/* Logo */}
-      <div className="p-4 border-b border-blue-800">
+      <div className="p-4 border-b border-[#a6d1cc]">
         <div className="flex items-center space-x-3">
           <div className="w-8 h-8 bg-white rounded flex items-center justify-center">
             <Icons.Utensils className="w-5 h-5 text-black" />
@@ -132,7 +135,7 @@ export function AppSidebar() {
       </div>
 
       {/* Nombre del usuario */}
-      <div className="p-4 border-b border-blue-800">
+      <div className="p-4 border-b border-[#a6d1cc]">
         <div className="flex items-center space-x-2">
           <Icons.User className="w-5 h-5 text-white" />
           <span className="text-sm font-medium">{sessionData?.NombreCompleto || "Usuario"}</span>
@@ -150,7 +153,7 @@ export function AppSidebar() {
                 <button
                   onClick={() => handleNavigationClick(item.href!)}
                   className={`flex items-center space-x-3 px-3 py-2 rounded-md text-sm font-medium transition-colors w-full ${
-                    isActive(item.href!) ? "bg-blue-800 text-white" : "text-blue-100 hover:bg-blue-800 hover:text-white"
+                    isActive(item.href!) ? "bg-[#56706e] text-white" : "text-white hover:bg-[#56706e] hover:text-white"
                   }`}
                 >
                   <item.icon className="w-5 h-5 text-white" />
@@ -161,7 +164,7 @@ export function AppSidebar() {
                   <CollapsibleTrigger asChild>
                     <Button
                       variant="ghost"
-                      className="w-full justify-start space-x-3 px-3 py-2 text-sm font-medium text-blue-100 hover:bg-blue-800 hover:text-white"
+                      className="w-full justify-start space-x-3 px-3 py-2 text-sm font-medium text-white hover:bg-[#56706e] hover:text-white"
                     >
                       <item.icon className="w-5 h-5 text-white" />
                       <span className="flex-1 text-left">{item.name}</span>
@@ -180,8 +183,8 @@ export function AppSidebar() {
                         onClick={() => handleNavigationClick(subItem.href)}
                         className={`flex items-center space-x-3 px-3 py-2 rounded-md text-sm transition-colors w-full ${
                           isActive(subItem.href)
-                            ? "bg-blue-800 text-white"
-                            : "text-blue-200 hover:bg-blue-800 hover:text-white"
+                            ? "bg-[#56706e] text-white"
+                            : "text-white hover:bg-[#56706e] hover:text-white"
                         }`}
                       >
                         <subItem.icon className="w-4 h-4 text-white" />

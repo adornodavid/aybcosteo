@@ -4,14 +4,26 @@ import { supabase } from "@/lib/supabase"
 import { revalidatePath } from "next/cache"
 import type { MenuPlatillo, Platillo, ApiResponse } from "@/lib/types-sistema-costeo"
 
-export async function agregarPlatilloAMenu(data: {
+interface AgregarPlatilloData {
   menuid: number
   platilloid: number
   precioventa: number
   costoplatillo: number // Mantener por si se usa en otro lado, aunque el margen usará costoadministrativo
   costoadministrativo: number // Nuevo parámetro para el costo administrativo
   activo?: boolean
-}) {
+  costoporcentual: number // Nuevo parámetro para el costo porcentual
+}
+
+interface ActualizarPrecioVentaData {
+  menuid: number
+  platilloid: number
+  precioventa: number
+  costoplatillo: number // Mantener por si se usa en otro lado
+  costoadministrativo: number // Añadido para calcular margen
+  costoporcentual: number // Nuevo parámetro para el costo porcentual
+}
+
+export async function agregarPlatilloAMenu(data: AgregarPlatilloData) {
   try {
     // Modificación aquí: margenUtilidad ahora usa costoadministrativo
     const margenUtilidad = data.precioventa - data.costoadministrativo
@@ -40,6 +52,131 @@ export async function agregarPlatilloAMenu(data: {
     revalidatePath(`/menus/${data.menuid}/agregar`) // Revalidar la página de agregar
     revalidatePath("/menus")
     revalidatePath("/platillos")
+
+    // --- INICIO: Lógica de Histórico para agregarPlatilloAMenu ---
+    const today = new Date().toISOString().split("T")[0] // Obtener fecha en formato YYYY-MM-DD
+
+    // 1. Verificar si ya existe un registro para este platillo y la fecha de hoy en 'historico'
+    const { data: existingHistorico, error: checkError } = await supabase
+      .from("historico")
+      .select("idrec") // Solo necesitamos saber si existe
+      .eq("platilloid", data.platilloid)
+      .eq("menuid", data.menuid)
+      .eq("fechacreacion", today)
+
+    if (checkError) {
+      console.error("Error al verificar registro histórico existente (agregar):", checkError)
+      // Puedes decidir cómo manejar este error, por ahora, solo se registrará
+    }
+
+    if (existingHistorico && existingHistorico.length > 0) {
+      // Si existe, realizar UPDATE
+      console.log(`Actualizando registro histórico para platillo ${data.platilloid} en la fecha ${today} (agregar)`)
+      const { error: updateHistoricoError } = await supabase
+        .from("historico")
+        .update({
+          precioventa: data.precioventa,
+          costoporcentual: data.costoporcentual,
+        })
+        .eq("platilloid", data.platilloid)
+        .eq("fechacreacion", today)
+
+      if (updateHistoricoError) {
+        console.error("Error al actualizar histórico (agregar):", updateHistoricoError)
+        // Manejar error
+      }
+    } else {
+      // Si no existe, realizar INSERTs
+      console.log(
+        `Insertando nuevos registros históricos para platillo ${data.platilloid} en la fecha ${today} (agregar)`,
+      )
+
+      // Primero, obtener hotelid y restauranteid
+      const { data: menuDetails, error: menuDetailsError } = await supabase
+        .from("menus")
+        .select("restauranteid, restaurantes(hotelid)")
+        .eq("id", data.menuid)
+        .single()
+
+      if (menuDetailsError || !menuDetails || !menuDetails.restaurantes) {
+        console.error("Error al obtener detalles del menú para inserción histórica (agregar):", menuDetailsError)
+        // No retornamos un error aquí para no detener la actualización principal,
+        // pero el insert en histórico no se realizará.
+      } else {
+        const restauranteId = menuDetails.restauranteid
+        const hotelId = menuDetails.restaurantes.hotelid
+
+        // Insertar para recetasxplatillo
+        const { data: recetasData, error: recetasError } = await supabase
+          .from("recetasxplatillo")
+          .select("recetaid, recetacostoparcial")
+          .eq("platilloid", data.platilloid)
+
+        if (recetasError) {
+          console.error("Error al obtener recetasxplatillo para inserción histórica (agregar):", recetasError)
+          // Continuar, pero registrar el error
+        }
+
+        if (recetasData && recetasData.length > 0) {
+          const historicoRecetasToInsert = recetasData.map((r) => ({
+            hotelid: hotelId,
+            restauranteid: restauranteId,
+            menuid: data.menuid,
+            platilloid: data.platilloid,
+            ingredienteid: null,
+            recetaid: r.recetaid,
+            cantidad: null, // Según la consulta SQL, es null para recetas
+            costo: r.recetacostoparcial,
+            activo: true,
+            fechacreacion: today,
+            precioventa: data.precioventa,
+            costoporcentual: data.costoporcentual,
+          }))
+          const { error: insertRecetasError } = await supabase.from("historico").insert(historicoRecetasToInsert)
+          if (insertRecetasError) {
+            console.error("Error al insertar histórico (recetas - agregar):", insertRecetasError)
+            // Manejar error
+          }
+        }
+
+        // Insertar para ingredientesxplatillo
+        const { data: ingredientesData, error: ingredientesError } = await supabase
+          .from("ingredientesxplatillo")
+          .select("ingredienteid, cantidad, ingredientecostoparcial")
+          .eq("platilloid", data.platilloid)
+
+        if (ingredientesError) {
+          console.error("Error al obtener ingredientesxplatillo para inserción histórica (agregar):", ingredientesError)
+          // Continuar, pero registrar el error
+        }
+
+        if (ingredientesData && ingredientesData.length > 0) {
+          const historicoIngredientesToInsert = ingredientesData.map((i) => ({
+            hotelid: hotelId,
+            restauranteid: restauranteId,
+            menuid: data.menuid,
+            platilloid: data.platilloid,
+            ingredienteid: i.ingredienteid,
+            recetaid: null,
+            cantidad: i.cantidad,
+            costo: i.ingredientecostoparcial,
+            activo: true,
+            fechacreacion: today,
+            precioventa: data.precioventa,
+            costoporcentual: data.costoporcentual,
+          }))
+          const { error: insertIngredientesError } = await supabase
+            .from("historico")
+            .insert(historicoIngredientesToInsert)
+          if (insertIngredientesError) {
+            console.error("Error al insertar histórico (ingredientes - agregar):", insertIngredientesError)
+            // Manejar error
+          }
+        }
+      }
+    }
+    // --- FIN: Lógica de Histórico para agregarPlatilloAMenu ---
+
     return { data: result, error: null }
   } catch (error: any) {
     console.error("Error en agregarPlatilloAMenu:", error)
@@ -108,13 +245,7 @@ export async function actualizarDisponibilidadPlatillo(data: {
   }
 }
 
-export async function actualizarPrecioVenta(data: {
-  menuid: number
-  platilloid: number
-  precioventa: number
-  costoplatillo: number // Mantener por si se usa en otro lado
-  costoadministrativo: number // Añadido para calcular margen
-}) {
+export async function actualizarPrecioVenta(data: ActualizarPrecioVentaData) {
   try {
     // Modificación aquí: margenUtilidad ahora usa costoadministrativo
     const margenUtilidad = data.precioventa - data.costoadministrativo
@@ -132,13 +263,137 @@ export async function actualizarPrecioVenta(data: {
       .single()
 
     if (error) {
-      console.error("Error al actualizar precio de venta:", error)
+      console.error("Error al actualizar precio de venta en platillosxmenu:", error)
       return { data: null, error: error.message }
     }
 
     revalidatePath(`/menus/${data.menuid}/agregar`) // Revalidar la página de agregar
     revalidatePath("/menus")
     revalidatePath("/platillos")
+
+    // --- INICIO: Lógica de Histórico ---
+    const today = new Date().toISOString().split("T")[0] // Obtener fecha en formato YYYY-MM-DD
+    console.log("today: ", today)
+
+    // 1. Verificar si ya existe un registro para este platillo y la fecha de hoy en 'historico'
+    const { data: existingHistorico, error: checkError } = await supabase
+      .from("historico")
+      .select("idrec") // Solo necesitamos saber si existe
+      .eq("platilloid", data.platilloid)
+      .eq("menuid", data.menuid)
+      .eq("fechacreacion", today)
+
+    if (checkError) {
+      console.error("Error al verificar registro histórico existente:", checkError)
+      // Puedes decidir cómo manejar este error, por ahora, solo se registrará
+    }
+
+    if (existingHistorico && existingHistorico.length > 0) {
+      // Si existe, realizar UPDATE
+      console.log(`Actualizando registro histórico para platillo ${data.platilloid} en la fecha ${today}`)
+      const { error: updateHistoricoError } = await supabase
+        .from("historico")
+        .update({
+          precioventa: data.precioventa,
+          costoporcentual: data.costoporcentual,
+        })
+        .eq("platilloid", data.platilloid)
+        .eq("fechacreacion", today)
+
+      if (updateHistoricoError) {
+        console.error("Error al actualizar histórico:", updateHistoricoError)
+        // Manejar error
+      }
+    } else {
+      // Si no existe, realizar INSERTs
+      console.log(`Insertando nuevos registros históricos para platillo ${data.platilloid} en la fecha ${today}`)
+
+      // Primero, obtener hotelid y restauranteid
+      const { data: menuDetails, error: menuDetailsError } = await supabase
+        .from("menus")
+        .select("restauranteid, restaurantes(hotelid)")
+        .eq("id", data.menuid)
+        .single()
+
+      if (menuDetailsError || !menuDetails || !menuDetails.restaurantes) {
+        console.error("Error al obtener detalles del menú para inserción histórica:", menuDetailsError)
+        // No retornamos un error aquí para no detener la actualización principal,
+        // pero el insert en histórico no se realizará.
+      } else {
+        const restauranteId = menuDetails.restauranteid
+        const hotelId = menuDetails.restaurantes.hotelid
+
+        // Insertar para recetasxplatillo
+        const { data: recetasData, error: recetasError } = await supabase
+          .from("recetasxplatillo")
+          .select("recetaid, recetacostoparcial")
+          .eq("platilloid", data.platilloid)
+
+        if (recetasError) {
+          console.error("Error al obtener recetasxplatillo para inserción histórica:", recetasError)
+          // Continuar, pero registrar el error
+        }
+
+        if (recetasData && recetasData.length > 0) {
+          const historicoRecetasToInsert = recetasData.map((r) => ({
+            hotelid: hotelId,
+            restauranteid: restauranteId,
+            menuid: data.menuid,
+            platilloid: data.platilloid,
+            ingredienteid: null,
+            recetaid: r.recetaid,
+            cantidad: null, // Según la consulta SQL, es null para recetas
+            costo: r.recetacostoparcial,
+            activo: true,
+            fechacreacion: today,
+            precioventa: data.precioventa,
+            costoporcentual: data.costoporcentual,
+          }))
+          const { error: insertRecetasError } = await supabase.from("historico").insert(historicoRecetasToInsert)
+          if (insertRecetasError) {
+            console.error("Error al insertar histórico (recetas):", insertRecetasError)
+            // Manejar error
+          }
+        }
+
+        // Insertar para ingredientesxplatillo
+        const { data: ingredientesData, error: ingredientesError } = await supabase
+          .from("ingredientesxplatillo")
+          .select("ingredienteid, cantidad, ingredientecostoparcial")
+          .eq("platilloid", data.platilloid)
+
+        if (ingredientesError) {
+          console.error("Error al obtener ingredientesxplatillo para inserción histórica:", ingredientesError)
+          // Continuar, pero registrar el error
+        }
+
+        if (ingredientesData && ingredientesData.length > 0) {
+          const historicoIngredientesToInsert = ingredientesData.map((i) => ({
+            hotelid: hotelId,
+            restauranteid: restauranteId,
+            menuid: data.menuid,
+            platilloid: data.platilloid,
+            ingredienteid: i.ingredienteid,
+            recetaid: null,
+            cantidad: i.cantidad,
+            costo: i.ingredientecostoparcial,
+            activo: true,
+            fechacreacion: today,
+            precioventa: data.precioventa,
+            costoporcentual: data.costoporcentual,
+          }))
+          const { error: insertIngredientesError } = await supabase
+            .from("historico")
+            .insert(historicoIngredientesToInsert)
+          if (insertIngredientesError) {
+            console.error("Error al insertar histórico (ingredientes):", insertIngredientesError)
+            // Manejar error
+          }
+        }
+      }
+    }
+    // --- FIN: Lógica de Histórico ---
+
     return { data: result, error: null }
   } catch (error: any) {
     console.error("Error en actualizarPrecioVenta:", error)
@@ -148,6 +403,21 @@ export async function actualizarPrecioVenta(data: {
 
 export async function obtenerPlatillosDeMenu(menuid: number): Promise<ApiResponse<MenuPlatillo[]>> {
   try {
+    // 1. Obtener el valor de configuraciones.valorfloat (id = 2)
+    const { data: configData, error: configError } = await supabase
+      .from("configuraciones")
+      .select("valorfloat")
+      .eq("id", 2)
+      .single()
+
+    if (configError) {
+      console.error("Error al obtener configuración para precio sugerido:", configError)
+      // Si hay un error, el valorfloat será 0 o null, lo que resultará en precioSugerido = 0
+    }
+
+    const valorFloatConfig = configData?.valorfloat || 0
+
+    // 2. Obtener los platillos del menú con sus costos
     const { data, error } = await supabase
       .from("platillosxmenu") // Usar 'platillosxmenu'
       .select(
@@ -162,7 +432,7 @@ export async function obtenerPlatillosDeMenu(menuid: number): Promise<ApiRespons
           descripcion,
           instruccionespreparacion,
           costototal,
-          costoadministrativo, 
+          costoadministrativo,
           imgurl,
           activo
         )
@@ -176,26 +446,33 @@ export async function obtenerPlatillosDeMenu(menuid: number): Promise<ApiRespons
       return { data: null, error: error.message }
     }
 
-    // Mapear los datos para que coincidan con la estructura solicitada
-    const mappedData = data.map((item: any) => ({
-      id: item.id,
-      menuid: menuid, // Asegurar que menuid esté presente
-      platilloid: item.platilloid,
-      precioventa: item.precioventa,
-      fechacreacion: item.fechacreacion,
-      activo: item.platillos.activo, // Asumiendo que activo viene del platillo o de platillosxmenu
-      platillos: {
-        // Mantener la estructura anidada para el componente
-        id: item.platillos.id,
-        nombre: item.platillos.nombre,
-        descripcion: item.platillos.descripcion,
-        instruccionespreparacion: item.platillos.instruccionespreparacion,
-        imgurl: item.platillos.imgurl,
-        costototal: item.platillos.costototal,
-        costoadministrativo: item.platillos.costoadministrativo, // Mapear costoadministrativo
+    // 3. Mapear los datos y calcular precioSugerido para cada platillo
+    const mappedData = data.map((item: any) => {
+      let precioSugeridoCalculado = 0
+      if (item.platillos?.costoadministrativo !== null && valorFloatConfig !== 0) {
+        precioSugeridoCalculado = item.platillos.costoadministrativo / valorFloatConfig
+      }
+
+      return {
+        id: item.id,
+        menuid: menuid,
+        platilloid: item.platilloid,
+        precioventa: item.precioventa,
+        fechacreacion: item.fechacreacion,
         activo: item.platillos.activo,
-      },
-    }))
+        platillos: {
+          id: item.platillos.id,
+          nombre: item.platillos.nombre,
+          descripcion: item.platillos.descripcion,
+          instruccionespreparacion: item.platillos.instruccionespreparacion,
+          imgurl: item.platillos.imgurl,
+          costototal: item.platillos.costototal,
+          costoadministrativo: item.platillos.costoadministrativo,
+          activo: item.platillos.activo,
+          precioSugerido: precioSugeridoCalculado, // <--- AQUI SE AGREGA EL CAMPO CALCULADO
+        },
+      }
+    })
 
     return { data: mappedData as MenuPlatillo[], error: null }
   } catch (error: any) {

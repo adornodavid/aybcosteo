@@ -496,11 +496,11 @@ export default function RecetasPage() {
           type="button"
           onClick={btnRecetaNuevo}
           style={{
-            backgroundColor: "#cfa661",
+            backgroundColor: "#5d8f72",
             color: "white",
             border: "none",
           }}
-          className="hover:opacity-90 transition-opacity"
+          className="hover:bg-[#44785a] transition-opacity"
         >
           <BookOpen className="h-4 w-4 mr-2" />
           Nueva Sub-Receta
@@ -574,12 +574,8 @@ export default function RecetasPage() {
               name="btnRecetaLimpiar"
               type="button"
               onClick={clearPlatillosBusqueda}
-              style={{
-                backgroundColor: "#edc787",
-                color: "black",
-                fontSize: "12px",
-              }}
-              className="hover:opacity-90"
+              className="bg-[#4a4a4a] text-white hover:bg-[#333333]"
+              style={{ fontSize: "12px", }}
             >
               <RotateCcw className="h-3 w-3 mr-1" />
               Limpiar filtros
@@ -591,12 +587,8 @@ export default function RecetasPage() {
               type="button"
               onClick={btnRecetaBuscar}
               disabled={searching}
-              style={{
-                backgroundColor: "#edc787",
-                color: "black",
-                fontSize: "12px",
-              }}
-              className="hover:opacity-90"
+              className="bg-[#4a4a4a] text-white hover:bg-[#333333]"
+              style={{ fontSize: "12px", }}
             >
               {searching ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Search className="h-3 w-3 mr-1" />}
               Buscar

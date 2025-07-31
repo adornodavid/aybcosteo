@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase"
 import { revalidatePath } from "next/cache"
 import { cookies } from "next/headers"
-import type { IngredienteReceta, UnidadMedidaDropdown } from "@/lib/types-sistema-costeo"
+import type { IngredienteReceta } from "@/lib/types-sistema-costeo"
 
 // Helper to get Supabase client with cookies
 const getSupabaseClient = () => {
@@ -135,7 +135,7 @@ export async function getIngredientesForDropdown(hotelId: number) {
   try {
     const { data, error } = await supabase
       .from("ingredientes")
-      .select("id, nombre")
+      .select("id, nombre, codigo, costo") // Incluir codigo y costo
       .eq("hotelid", hotelId)
       .order("nombre", { ascending: true })
 
@@ -150,34 +150,49 @@ export async function getIngredientesForDropdown(hotelId: number) {
   }
 }
 
+// NUEVA FUNCIÓN: Buscar ingredientes por término de búsqueda (para recetas/editar)
+export async function searchIngredientes(
+  hotelId: number,
+  searchTerm: string,
+): Promise<{ id: number; nombre: string; codigo: string; costo: number | null; unidadmedidaid: number | null }[]> {
+  // Added unidadmedidaid to return type
+  const supabase = getSupabaseClient()
+  let query = supabase.from("ingredientes").select("id, nombre, codigo, costo, unidadmedidaid").eq("hotelid", hotelId) // Added unidadmedidaid to select
+
+  if (searchTerm) {
+    const lowerCaseSearchTerm = searchTerm.toLowerCase()
+    query = query.or(`nombre.ilike.%${lowerCaseSearchTerm}%,codigo.ilike.%${lowerCaseSearchTerm}%`)
+  }
+
+  const { data, error } = await query.order("nombre", { ascending: true })
+  if (error) {
+    console.error("Error searching ingredientes:", error)
+    return []
+  }
+  return data || []
+}
+
 // Función para obtener la unidad de medida de un ingrediente
-export async function getUnidadMedidaForDropdown(ingredienteId: number) {
+export async function getUnidadMedidaForDropdown() {
   const supabase = getSupabaseClient()
   try {
     const { data, error } = await supabase
-      .from("ingredientes")
+      .from("tipounidadmedida")
       .select(
         `
-      unidadmedidaid,
-      tipounidadmedida (
-        id,
-        descripcion
-      )
+      id,
+      descripcion,
+      calculoconversion
     `,
       )
-      .eq("id", ingredienteId)
-      .single()
+      .order("descripcion", { ascending: true })
 
     if (error) {
       console.error("Error fetching unidad de medida for dropdown:", error.message)
       return { data: null, error }
     }
 
-    const formattedData: UnidadMedidaDropdown[] = data.tipounidadmedida
-      ? [{ id: data.tipounidadmedida.id, descripcion: data.tipounidadmedida.descripcion }]
-      : []
-
-    return { data: formattedData, error: null }
+    return { data: data, error: null }
   } catch (e: any) {
     console.error("Exception fetching unidad de medida for dropdown:", e)
     return { data: null, error: { message: e.message || "An unexpected error occurred" } }
@@ -201,6 +216,29 @@ export async function getCostoIngrediente(ingredienteId: number) {
   }
 }
 
+// Función para verificar si un ingrediente ya existe en la receta
+export async function checkIngredienteExistsInReceta(recetaId: string, ingredienteId: number) {
+  const supabase = getSupabaseClient()
+  try {
+    const { data, error } = await supabase
+      .from("ingredientesxreceta")
+      .select("id")
+      .eq("recetaid", recetaId)
+      .eq("ingredienteid", ingredienteId)
+      .single()
+
+    if (error && error.code !== "PGRST116") {
+      // PGRST116 means "No rows found"
+      console.error("Error checking existing ingredient in receta:", error.message)
+      return { data: null, error }
+    }
+    return { data: data, error: null }
+  } catch (e: any) {
+    console.error("Exception checking existing ingredient in receta:", e)
+    return { data: null, error: { message: e.message || "An unexpected error occurred" } }
+  }
+}
+
 // Función para agregar ingrediente a la receta
 export async function addIngredienteToReceta(
   recetaId: string,
@@ -211,7 +249,15 @@ export async function addIngredienteToReceta(
 ) {
   const supabase = getSupabaseClient()
   try {
-    const ingredientecostoparcial = cantidad * costoUnitario
+    const { data: unidadData, error: unidadError } = await supabase
+      .from("tipounidadmedida")
+      .select("calculoconversion")
+      .eq("id", Number(unidadMedidaId))
+      .single()
+    if (unidadError || !unidadData) throw new Error("No se encontró la unidad de medida o su conversión.")
+
+    const calculoConversion = unidadData.calculoconversion || 1
+    const ingredientecostoparcial = cantidad * calculoConversion * costoUnitario
 
     const { data, error } = await supabase
       .from("ingredientesxreceta")
@@ -461,8 +507,6 @@ export async function updateRecetaCostoAndHistorico(recetaId: string) {
           return { success: false, error: updateMargenUtilidadError }
         }
       }
-
-     
     }
 
     // 4. Insertar en la tabla 'historico' (primera inserción - costos de receta por platillo)

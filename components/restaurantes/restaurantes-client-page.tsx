@@ -164,7 +164,7 @@ export default function RestaurantesClientPage({
         <h1 className="text-2xl font-bold">Gestión de Restaurantes</h1>
         <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
           <DialogTrigger asChild>
-            <Button onClick={() => setEditingRestaurante(null)}>Crear Nuevo Restaurante</Button>
+            <Button className="bg-[#5d8f72] hover:bg-[#44785a] text-white" onClick={() => setEditingRestaurante(null)}>Crear Nuevo Restaurante</Button>
           </DialogTrigger>
           <RestauranteForm
             isOpen={isModalOpen}
@@ -209,7 +209,7 @@ export default function RestaurantesClientPage({
             ))}
           </SelectContent>
         </Select>
-        <Button id="btnRestaurantesBuscar" onClick={handleSearch}>
+        <Button  className="bg-[#4a4a4a] text-white hover:bg-[#333333]" id="btnRestaurantesBuscar" onClick={handleSearch}>
           {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
           Buscar
         </Button>

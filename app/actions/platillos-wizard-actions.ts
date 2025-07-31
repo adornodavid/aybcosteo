@@ -9,8 +9,17 @@ import { obtenerVariablesSesion as getSessionData } from "./session-actions-with
 type Hotel = { id: number; nombre: string }
 type Restaurante = { id: number; nombre: string }
 type Menu = { id: number; nombre: string }
-type Ingrediente = { id: number; nombre: string; costo: number | null }
-type Receta = { id: number; nombre: string; costo: number | null }
+type Ingrediente = { id: number; nombre: string; costo: number | null; codigo: string } // Añadido el campo codigo
+type Receta = {
+  id: number
+  nombre: string
+  costo: number | null
+  cantidad: number | null // Añadido para la cantidad base de la receta
+  unidadbaseid: number | null // Añadido para la unidad base de la receta
+  tipounidadmedida: {
+    descripcion: string
+  } | null // Añadido para la descripción de la unidad base
+}
 type UnidadMedida = { id: number; descripcion: string; calculoconversion: number | null }
 type IngredienteAgregado = {
   id: number
@@ -66,14 +75,16 @@ export async function getMenus(restauranteId: number, hotelId: number): Promise<
   // Adaptado a tu SQL: SELECT a.id, a.nombre from menus a inner join restaurantes b on a.restauranteid = b.id inner join hoteles c on b.hotelid = c.id where b.id =[ddlRestaurante.value] and c.id = [ddlHotel.value]
   const { data, error } = await supabase
     .from("menus")
-    .select(`
+    .select(
+      `
+    id,
+    nombre,
+    restaurantes!inner(
       id,
-      nombre,
-      restaurantes!inner(
-        id,
-        hotelid
-      )
-    `)
+      hotelid
+    )
+  `,
+    )
     .eq("restaurantes.id", restauranteId)
     .eq("restaurantes.hotelid", hotelId)
     .order("nombre")
@@ -91,7 +102,7 @@ export async function getIngredientes(hotelId: number): Promise<Ingrediente[]> {
   // Incluyo 'costo' para el campo bloqueado 'txtCostoIngrediente'
   const { data, error } = await supabase
     .from("ingredientes")
-    .select("id, nombre, costo") // Asegúrate de que 'nombre' y 'costo' existan en tu tabla 'ingredientes'
+    .select("id, nombre, codigo, costo") // Asegúrate de que 'nombre', 'codigo' y 'costo' existan en tu tabla 'ingredientes'
     .eq("hotelid", hotelId) // Asegúrate de que 'hotelid' exista en tu tabla 'ingredientes'
     .order("nombre", { ascending: true })
   if (error) {
@@ -101,17 +112,46 @@ export async function getIngredientes(hotelId: number): Promise<Ingrediente[]> {
   return data || []
 }
 
+// NUEVA FUNCIÓN: Buscar ingredientes por término de búsqueda
+export async function searchIngredientes(hotelId: number, searchTerm: string): Promise<Ingrediente[]> {
+  const supabase = createServerComponentClient({ cookies })
+  let query = supabase
+    .from("ingredientes")
+    .select("id, nombre, codigo, costo") // Incluir 'codigo'
+    .eq("hotelid", hotelId)
+
+  if (searchTerm) {
+    const lowerCaseSearchTerm = searchTerm.toLowerCase()
+    query = query.or(`nombre.ilike.%${lowerCaseSearchTerm}%,codigo.ilike.%${lowerCaseSearchTerm}%`)
+  }
+
+  const { data, error } = await query.order("nombre", { ascending: true })
+  if (error) {
+    console.error("Error searching ingredientes:", error)
+    return []
+  }
+  return data || []
+}
+
 export async function getRecetas(hotelId: number): Promise<Receta[]> {
   const supabase = createServerComponentClient({ cookies })
   // Adaptado a tu SQL: SELECT distinct a.id, a.nombre from recetas a inner join ingredientesxreceta b on a.id = b.recetaid inner join ingredientes c on b.ingredienteid = c.id inner join hoteles d on c.hotelid = d.id WHERE d.id = [ddlHotel.value] AND a.activo = true;
-  // Incluyo 'costo' para el campo bloqueado 'txtCostoReceta'
+  // Incluyo 'costo', 'cantidad' y 'unidadbaseid' con su descripción para los campos bloqueados
+  // ASUMPTION: 'recetas' table has 'cantidad' and 'unidadbaseid' columns.
   const { data, error } = await supabase
     .from("recetas")
-    .select(`
-      id,
-      nombre,
-      costo
-    `) // Asegúrate de que 'costo' exista en tu tabla 'recetas'
+    .select(
+      `
+    id,
+    nombre,
+    costo,
+    cantidad,
+    unidadbaseid,
+    tipounidadmedida(
+      descripcion
+    )
+  `,
+    ) // Asegúrate de que 'costo', 'cantidad', 'unidadbaseid' existan en tu tabla 'recetas'
     .eq("activo", true)
     .order("nombre", { ascending: true })
   // Nota: La lógica de filtrar por hotel_id a través de ingredientesxreceta e ingredientes
@@ -133,14 +173,16 @@ export async function getUnidadesMedidaByIngrediente(ingredienteId: number): Pro
   // SQL proporcionado: SELECT b.id, b.descripcion from ingredientes a inner join tipounidadmedida b on a.unidadmedidaid = b.id where a.id = [ddlIngredientes.value]
   const { data, error } = await supabase
     .from("ingredientes")
-    .select(`
-      unidadmedidaid,
-      tipounidadmedida(
-        id,
-        descripcion,
-        calculoconversion
-      )
-    `)
+    .select(
+      `
+    unidadmedidaid,
+    tipounidadmedida(
+      id,
+      descripcion,
+      calculoconversion
+    )
+  `,
+    )
     .eq("id", ingredienteId)
     .single() // Asumiendo que ingrediente.id es único y tiene una sola unidad asociada
 
@@ -397,7 +439,7 @@ export async function agregarIngrediente(
   }
 }
 
-export async function agregarReceta(platilloId: number, recetaId: number) {
+export async function agregarReceta(platilloId: number, recetaId: number, cantidadIngresada: number) {
   const supabase = createServerComponentClient({ cookies })
   try {
     // Validar si la sub-receta ya existe en el platillo
@@ -422,19 +464,25 @@ export async function agregarReceta(platilloId: number, recetaId: number) {
       }
     }
 
+    // Obtener costo y cantidad base de la receta
     const { data: recetaData, error: recetaError } = await supabase
       .from("recetas")
-      .select("costo") // Asegúrate de que 'costo' exista en tu tabla 'recetas'
+      .select("costo, cantidad") // Asegúrate de que 'costo' y 'cantidad' existan en tu tabla 'recetas'
       .eq("id", recetaId)
       .single()
-    if (recetaError || !recetaData) throw new Error("No se encontró la receta o su costo.")
+    if (recetaError || !recetaData) throw new Error("No se encontró la receta o su costo/cantidad base.")
 
-    const costoReceta = recetaData.costo || 0
+    const costoBaseReceta = recetaData.costo || 0
+    const cantidadBaseReceta = recetaData.cantidad || 1 // Evitar división por cero
+
+    // Calcular recetacostoparcial: costo/(cantidad/[txtCant]) => costo * (cantidadIngresada / cantidadBaseReceta)
+    const recetacostoparcial = (costoBaseReceta / cantidadBaseReceta) * cantidadIngresada
 
     const { error: insertError } = await supabase.from("recetasxplatillo").insert({
       platilloid: platilloId,
       recetaid: recetaId,
-      recetacostoparcial: costoReceta,
+      recetacostoparcial: recetacostoparcial, // Usar el costo parcial calculado
+      cantidad: cantidadIngresada, // Guardar la cantidad usada
       activo: true,
       fechacreacion: new Date().toISOString(),
       fechamodificacion: new Date().toISOString(),
@@ -444,7 +492,7 @@ export async function agregarReceta(platilloId: number, recetaId: number) {
     // Devolver la lista actualizada de recetas
     const { data: recetasActualizadas, error: fetchError } = await supabase
       .from("recetasxplatillo")
-      .select("id, recetacostoparcial, recetas(nombre)") // Asegúrate de que 'nombre' exista en 'recetas'
+      .select("id, recetacostoparcial, cantidad, recetas(nombre)") // Asegúrate de que 'nombre' exista en 'recetas' y 'cantidad'
       .eq("platilloid", platilloId)
     if (fetchError) throw fetchError
 
@@ -452,6 +500,7 @@ export async function agregarReceta(platilloId: number, recetaId: number) {
       id: r.id,
       nombre: r.recetas?.nombre || "Desconocido",
       recetacostoparcial: r.recetacostoparcial,
+      cantidad: r.cantidad, // Mapear la cantidad
     }))
 
     return { success: true, recetas }
@@ -477,7 +526,9 @@ export async function finalizarRegistro(platilloId: number, menuId: number) {
       .eq("platilloid", platilloId)
     if (recCostError) throw recCostError
 
-    const totalCost = ingredientesCost.reduce((sum, item) => sum + (item.ingredientecostoparcial || 0), 0) + recetasCost.reduce((sum, item) => sum + (item.recetacostoparcial || 0), 0)
+    const totalCost =
+      ingredientesCost.reduce((sum, item) => sum + (item.ingredientecostoparcial || 0), 0) +
+      recetasCost.reduce((sum, item) => sum + (item.recetacostoparcial || 0), 0)
 
     const { error: updateCostoError } = await supabase
       .from("platillos")
@@ -525,10 +576,12 @@ export async function finalizarRegistro(platilloId: number, menuId: number) {
     // 3. Obtener hotelid y restauranteid a partir del menuId
     const { data: menuData, error: menuDataError } = await supabase
       .from("menus")
-      .select(`
-        restauranteid,
-        restaurantes(hotelid)
-      `)
+      .select(
+        `
+      restauranteid,
+      restaurantes(hotelid)
+    `,
+      )
       .eq("id", menuId)
       .single()
 
@@ -542,7 +595,7 @@ export async function finalizarRegistro(platilloId: number, menuId: number) {
     // 4. Insertar en historico (recetas)
     const { data: recetasData, error: recetasDataError } = await supabase
       .from("recetasxplatillo")
-      .select("recetaid, recetacostoparcial")
+      .select("recetaid, recetacostoparcial, cantidad") // Incluir cantidad
       .eq("platilloid", platilloId)
     if (recetasDataError) throw recetasDataError
 
@@ -554,7 +607,7 @@ export async function finalizarRegistro(platilloId: number, menuId: number) {
         platilloid: platilloId,
         ingredienteid: null,
         recetaid: r.recetaid,
-        cantidad: null,
+        cantidad: r.cantidad, // Usar la cantidad de la sub-receta
         costo: r.recetacostoparcial,
         activo: true,
         fechacreacion: new Date().toISOString(),

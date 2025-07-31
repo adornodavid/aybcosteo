@@ -46,23 +46,7 @@ const data = {
       icon: Home,
       isActive: true,
     },
-    {
-      title: "Gestión Hotelera",
-      url: "#",
-      icon: Hotel,
-      items: [
-        {
-          title: "Hoteles",
-          url: "/hoteles",
-          icon: Building2,
-        },
-        {
-          title: "Restaurantes",
-          url: "/restaurantes",
-          icon: Utensils,
-        },
-      ],
-    },
+    
     {
       title: "Insumos",
       url: "#",
@@ -131,6 +115,25 @@ const data = {
         },
       ],
     },
+
+    {
+      title: "Gestión Hotelera",
+      url: "#",
+      icon: Hotel,
+      items: [
+        {
+          title: "Hoteles",
+          url: "/hoteles",
+          icon: Building2,
+        },
+        {
+          title: "Restaurantes",
+          url: "/restaurantes",
+          icon: Utensils,
+        },
+      ],
+    },
+
     {
       title: "Administración",
       url: "#",

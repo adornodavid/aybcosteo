@@ -5,7 +5,7 @@ import Image from "next/image" // Importar Image de next/image
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Filter, Edit, Trash2, Package, Loader2, Eye, Calendar, AlertCircle } from "lucide-react"
+import { Filter, Edit, Trash2, Package, Loader2, Eye, Calendar, AlertCircle, RotateCcw } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -393,6 +393,7 @@ export default function IngredientesPage() {
 
             <div className="space-y-2">
               <Button variant="outline" onClick={handleBtnLimpiar} className="w-full bg-transparent">
+                <RotateCcw className="h-3 w-3 mr-1" />
                 Limpiar Filtros
               </Button>
             </div>
