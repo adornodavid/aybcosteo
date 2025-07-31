@@ -16,7 +16,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Icons } from "@/components/icons"
-import { Send } from "lucide-react"
+import { Send, UserCheck } from "lucide-react"
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false)
@@ -149,7 +149,7 @@ export default function LoginPage() {
                 name="btnValidar"
                 onClick={validateLogin}
                 disabled={loading}
-                className="w-full bg-black text-white z-30 relative"
+                className="w-full bg-[#333333] text-white z-30 relative"
               >
                 {loading ? (
                   <div className="flex items-center space-x-2">
@@ -158,7 +158,7 @@ export default function LoginPage() {
                   </div>
                 ) : (
                   <div className="flex items-center space-x-2">
-                    <Send className="w-4 h-4" />
+                    <UserCheck className="w-4 h-4" />
                     <span>Validar</span>
                   </div>
                 )}
@@ -169,7 +169,7 @@ export default function LoginPage() {
 
         {/* Pie de página */}
         <div className="mt-8 text-center text-white/80">
-          <p className="text-sm">
+          <p className="text-sm bg-gray-500/90">
             {new Date().toLocaleDateString("es-ES", {
               weekday: "long",
               year: "numeric",
@@ -177,7 +177,7 @@ export default function LoginPage() {
               day: "numeric",
             })}
           </p>
-          <p className="text-xs mt-1">Sistema de Gestión de Restaurantes</p>
+          <p className="text-xs mt-1 bg-gray-500/90">Sistema de Gestión de Restaurantes</p>
         </div>
       </div>
 
