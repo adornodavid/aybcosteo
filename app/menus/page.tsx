@@ -638,7 +638,7 @@ export default function MenusPage() {
   }
 
   return (
-    <div className="container flex-1 space-y-4 p-4 md:p-8 pt-6">
+  <div className="container flex-1 space-y-4 p-4 md:p-8 pt-6">
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-3xl font-bold">Menús</h1>
@@ -647,7 +647,7 @@ export default function MenusPage() {
         <Button
           type="button"
           onClick={() => router.push("/menus/nuevo")}
-          style={{ backgroundColor: "#5d8f72", color: "white" hover: "#44785a"}}
+          style={{ backgroundColor: "#5d8f72", color: "white"}}
           id="btnMenuNuevo"
           name="btnMenuNuevo"
         >
