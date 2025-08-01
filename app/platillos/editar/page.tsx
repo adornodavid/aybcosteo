@@ -31,6 +31,7 @@ import {
   getPlatilloTotalCost,
   searchIngredientes as searchPlatilloIngredientes,
   getRecetas as getRecetasForDropdown, // Importar la función getRecetas de platillos-wizard-actions
+  getUnidadesMedidaByIngrediente, // Importar la función para obtener la unidad de medida del ingrediente
 } from "@/app/actions/platillos-wizard-actions"
 import { Label } from "@/components/ui/label"
 
@@ -235,9 +236,9 @@ export default function EditarPlatilloPage() {
           .from("ingredientesxplatillo")
           .select(
             `
-            id, cantidad, ingredientecostoparcial,
-            ingredientes(id, nombre, tipounidadmedida(descripcion), codigo, costo)
-          `,
+          id, cantidad, ingredientecostoparcial,
+          ingredientes(id, nombre, tipounidadmedida(descripcion), codigo, costo)
+        `,
           )
           .eq("platilloid", platilloId)
 
@@ -261,9 +262,9 @@ export default function EditarPlatilloPage() {
           .from("recetasxplatillo")
           .select(
             `
-            id, recetacostoparcial, cantidad,
-            recetas(id, nombre)
-          `,
+          id, recetacostoparcial, cantidad,
+          recetas(id, nombre)
+        `,
           ) // Asegurarse de seleccionar 'cantidad'
           .eq("platilloid", platilloId)
 
@@ -469,19 +470,34 @@ export default function EditarPlatilloPage() {
     if (selectedIngredienteId && selectedIng && term !== `${selectedIng.codigo} - ${selectedIng.nombre}`) {
       setSelectedIngredienteId("") // Esto limpia el ID seleccionado
       setCostoIngrediente("") // También limpia el costo asociado
+      setSelectedUnidadMedidaId("") // Limpiar la unidad de medida también
     }
     // Si el término de búsqueda es vacío, también limpiar el ID seleccionado
     if (term === "") {
       setSelectedIngredienteId("")
       setCostoIngrediente("")
+      setSelectedUnidadMedidaId("") // Limpiar la unidad de medida también
     }
   }
 
-  const handleSelectIngredienteFromDropdown = (ing: DropdownItem) => {
+  const handleSelectIngredienteFromDropdown = async (ing: DropdownItem) => {
     setSelectedIngredienteId(ing.id.toString())
     setIngredienteSearchTerm(`${ing.codigo} - ${ing.nombre}`)
     setCostoIngrediente(ing.costo?.toString() || "0")
     setShowIngredienteDropdown(false)
+
+    // NUEVO: Obtener y establecer la unidad de medida del ingrediente seleccionado
+    try {
+      const units = await getUnidadesMedidaByIngrediente(ing.id)
+      if (units.length > 0) {
+        setSelectedUnidadMedidaId(units[0].id.toString())
+      } else {
+        setSelectedUnidadMedidaId("") // Limpiar si no se encuentra la unidad
+      }
+    } catch (error) {
+      console.error("Error al obtener la unidad para el ingrediente seleccionado:", error)
+      setSelectedUnidadMedidaId("") // Limpiar en caso de error
+    }
   }
 
   // NUEVO MANEJADOR: Para el input numérico de cantidad de sub-receta
@@ -607,9 +623,9 @@ export default function EditarPlatilloPage() {
         })
         .select(
           `
-          id, cantidad, ingredientecostoparcial,
-          ingredientes(id, nombre, tipounidadmedida(descripcion))
-        `,
+        id, cantidad, ingredientecostoparcial,
+        ingredientes(id, nombre, tipounidadmedida(descripcion))
+      `,
         )
         .single()
 

@@ -159,7 +159,7 @@ export async function getPlatilloCostHistory(
   try {
     const { data, error } = await supabase
       .from("historico")
-      .select("fechacreacion, platilloid, costo, precioventa")
+      .select("fechacreacion, platilloid, costo, precioventa, costoporcentual")
       .eq("platilloid", platilloId)
       .gte("fechacreacion", fechaInicial)
       .lte("fechacreacion", fechaFinal)

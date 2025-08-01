@@ -3,6 +3,7 @@
 import type React from "react"
 import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
+import { supabase } from "@/lib/supabase" // Ensure supabase is imported
 import { toast } from "sonner"
 import Image from "next/image"
 
@@ -193,12 +194,18 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
 
       setLoading(true)
       try {
-        const { data, error } = await actions.getRecetaDetails(recetaId)
-        if (error) {
-          console.error("Error al cargar costo total para la Etapa 3:", error)
-          toast.error("Error al cargar costo total para el resumen.")
+        // Fetch the sum of recetacostoparcial from recetasxplatillo
+        const { data: sumData, error: sumError } = await supabase
+          .from("ingredientesxreceta")
+          .select("ingredientecostoparcial")
+          .eq("recetaid", recetaId)
+
+        if (sumError) {
+          console.error("Error al cargar costo total de sub-recetas:", sumError)
+          toast.error("Error al cargar costo total de sub-recetas.")
         } else {
-          setTotalCostoReceta(data?.costo || 0)
+          const calculatedTotal = (sumData || []).reduce((sum, item) => sum + (item.ingredientecostoparcial || 0), 0)
+          setTotalCostoReceta(calculatedTotal)
         }
       } catch (error) {
         console.error("Error inesperado al cargar costos para la Etapa 3:", error)
@@ -252,7 +259,7 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
       // Mantener el término de búsqueda si no hay un ingrediente seleccionado
       // setIngredienteSearchTerm("")
       // setCostoIngrediente("")
-      setSelectedUnidadMedidaId("") // Clear unidadmedidaid if no ingredient is selected
+      setSelectedUnidadMedidaId("") // Clear unidadmedidaid
     }
   }, [selectedIngredienteId, ingredientesDropdown, filteredIngredientes])
 

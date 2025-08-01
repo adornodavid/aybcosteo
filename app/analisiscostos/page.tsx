@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartLegend } from "@/components/ui/chart"
-import { Line, LineChart, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip } from "recharts"
+import { Line, LineChart, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip, ReferenceLine } from "recharts"
 import {
   getMenusForAnalisis,
   getPlatillosForAnalisis,
@@ -101,6 +101,9 @@ export default function AnalisisCostosPage() {
     margenutilidad: {
       // Añadido para el margen de utilidad
       label: "Margen Utilidad",
+    },
+    costoporcentual: {
+      label: "Costo %",
     },
   }
 
@@ -254,24 +257,25 @@ export default function AnalisisCostosPage() {
                   />
                   <Tooltip formatter={(value: number, name: string) => [`$${value.toFixed(2)}`, name]} />{" "}
                   {/* Actualizado para mostrar el nombre de la línea */}
-                  <Line dataKey="costo" type="monotone" stroke="#56a8b3" strokeWidth={2} dot={true} name="Costo Elaboracion" />
+                  <Line dataKey="costo" type="monotone" stroke="#56a8b3" strokeWidth={2} dot={{ fill: "hsl(var(--primary))", strokeWidth: 2, r: 6 }} name="Costo Elaboracion" />
                   <Line
                     dataKey="precioventa"
                     type="monotone"
                     stroke="#46914c"
                     strokeWidth={2}
-                    dot={true}
+                    dot={{ fill: "hsl(var(--primary))", strokeWidth: 2, r: 6 }}
                     name="Precio Venta"
                   />
                   <Line // Nueva línea para el margen de utilidad
-                    dataKey="margenutilidad"
+                    dataKey="costoporcentual"
                     type="monotone"
                     stroke="#8884d8" // Color distintivo para el margen de utilidad
                     strokeWidth={2}
-                    dot={true}
+                    dot={{ fill: "hsl(var(--primary))", strokeWidth: 2, r: 6 }}
                     name="Margen Utilidad"
                   />
                   <ChartLegend content={<ChartLegend />} />
+                  <ReferenceLine y={30} stroke="#ef4444" strokeDasharray="5 5" label="Objetivo (30%)" />
                 </LineChart>
               </ResponsiveContainer>
             </div>

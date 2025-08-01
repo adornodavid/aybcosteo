@@ -445,14 +445,14 @@ export default function NuevaRecetaPage() {
       const { data, error } = await supabaseClient
         .from("ingredientesxreceta")
         .select(`
-        id,
-        ingredienteid,
-        cantidad,
-        ingredientecostoparcial,
-        ingredientes (
-          nombre
-        )
-      `)
+      id,
+      ingredienteid,
+      cantidad,
+      ingredientecostoparcial,
+      ingredientes (
+        nombre
+      )
+    `)
         .eq("recetaid", recetaId.current)
 
       if (error) {
@@ -954,7 +954,7 @@ export default function NuevaRecetaPage() {
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="p-4 border rounded-lg bg-slate-50">
-              <h3 className="font-semibold mb-4">Cantidad y Tipo de Unidad de la Sub-Receta</h3>
+              <h3 className="font-semibold mb-4">Agregar la Cantidad total y el Tipo de Unidad de la Sub-Receta</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <div>
                   <Label htmlFor="txtCantidad">Cantidad</Label>

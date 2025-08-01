@@ -103,18 +103,24 @@ export default function LoginPage() {
       {/* Contenido principal */}
       <div className="relative z-10 flex flex-col items-center justify-center min-h-screen p-4">
         {/* Logo */}
-        <div className="bg-[#fffcf5] shadow-2xl mb-8 rounded-lg">
-          <div className="bg-[#fffcf5] shadow-2xl flex items-center space-x-3 rounded-lg">
-            <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center">
-              <Icons.Utensils className="w-8 h-8 text-black" />
-            </div>
-            <h1 className="text-3xl font-bold text-black">Sistema de Costeo </h1>
-          </div>
-        </div>
+       
 
         {/* Formulario */}
         <Card className="bg-[#fffcf5] w-full max-w-md z-20 shadow-2xl">
           <CardHeader className="text-center">
+            <div className="bg-[#fffcf5] mb-8 rounded-lg">
+          <div className="bg-[#fffcf5] flex items-center space-x-3 rounded-lg">
+            <div className="w-full h-12 rounded-lg flex items-center justify-center">
+             
+          <Icons.Utensils className="w-8 h-8 text-black mr-4"/><h1 className="text-3xl font-bold text-black"> Sistema de Costeo </h1>
+          
+            </div>
+            
+          </div>
+        </div>
+          <h1></h1>
+          <h3></h3>
+          <h3></h3>
             <CardTitle className="text-2xl font-bold">Iniciar Sesión</CardTitle>
           </CardHeader>
           <CardContent>
@@ -165,11 +171,9 @@ export default function LoginPage() {
               </Button>
             </form>
           </CardContent>
-        </Card>
 
-        {/* Pie de página */}
-        <div className="mt-8 text-center text-white/80">
-          <p className="text-sm bg-gray-500/90">
+          <div className="mt-4 text-center">
+          <p className="text-sm text-black">
             {new Date().toLocaleDateString("es-ES", {
               weekday: "long",
               year: "numeric",
@@ -177,8 +181,12 @@ export default function LoginPage() {
               day: "numeric",
             })}
           </p>
-          <p className="text-xs mt-1 bg-gray-500/90">Sistema de Gestión de Restaurantes</p>
+          <p className="text-xs mt-1 mb-4 text-black">Sistema de Gestión de Restaurantes</p>
         </div>
+        </Card>
+
+        {/* Pie de página */}
+        
       </div>
 
       {/* Modal */}
