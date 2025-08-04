@@ -251,28 +251,29 @@ export default function AnalisisCostosPage() {
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="fechacreacion" minTickGap={20} />
                   <YAxis
-                    domain={[0, 700]} // Rango fijo de $0.00 a $700
+                    domain={[0, 60]} // Rango fijo de $0.00 a $60
                     tickMargin={8}
-                    tickFormatter={(value) => `$${value.toFixed(2)}`}
+                    //tickFormatter={(value) => `$${value.toFixed(2)}`}
+                    label={{ value: "Costo %", angle: -90, position: "insideLeft" }}
                   />
                   <Tooltip formatter={(value: number, name: string) => [`$${value.toFixed(2)}`, name]} />{" "}
                   {/* Actualizado para mostrar el nombre de la línea */}
-                  <Line dataKey="costo" type="monotone" stroke="#56a8b3" strokeWidth={2} dot={{ fill: "hsl(var(--primary))", strokeWidth: 2, r: 6 }} name="Costo Elaboracion" />
-                  <Line
+                  {/*<Line dataKey="costo" type="monotone" stroke="#56a8b3" strokeWidth={2} dot={{ fill: "hsl(var(--primary))", strokeWidth: 2, r: 6 }} name="Costo Elaboracion" />*/}
+                  {/*<Line
                     dataKey="precioventa"
                     type="monotone"
                     stroke="#46914c"
                     strokeWidth={2}
                     dot={{ fill: "hsl(var(--primary))", strokeWidth: 2, r: 6 }}
                     name="Precio Venta"
-                  />
+                  /> */}
                   <Line // Nueva línea para el margen de utilidad
                     dataKey="costoporcentual"
                     type="monotone"
                     stroke="#8884d8" // Color distintivo para el margen de utilidad
                     strokeWidth={2}
                     dot={{ fill: "hsl(var(--primary))", strokeWidth: 2, r: 6 }}
-                    name="Margen Utilidad"
+                    name="Costo %"
                   />
                   <ChartLegend content={<ChartLegend />} />
                   <ReferenceLine y={30} stroke="#ef4444" strokeDasharray="5 5" label="Objetivo (30%)" />
@@ -295,7 +296,7 @@ export default function AnalisisCostosPage() {
                   <strong>Precio de Venta:</strong> ${platilloDetails.PrecioVenta?.toFixed(2)}
                 </p>
                 <p>
-                  <strong>Margen de Utilidad:</strong> {platilloDetails.MargenUtilidad?.toFixed(2)}%
+                  <strong>Costo %:</strong> {platilloDetails.costoporcentual?.toFixed(2)}%
                 </p>
               </div>
             )}

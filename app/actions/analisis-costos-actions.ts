@@ -180,6 +180,7 @@ export async function getPlatilloCostHistory(
           costo: 0,
           precioventa: item.precioventa, // Tomar el primer precio de venta encontrado para esa fecha/platillo
           margenutilidad: 0, // Inicializar, se calculará después
+          costoporcentual: item.costoporcentual,
         }
       }
       acc[key].costo += item.costo
@@ -192,6 +193,7 @@ export async function getPlatilloCostHistory(
       precioventa: item.precioventa,
       platilloid: item.platilloid,
       margenutilidad: item.precioventa - item.costo, // Calcular el margen de utilidad
+      costoporcentual: item.costoporcentual,
     }))
 
     return chartData
