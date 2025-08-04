@@ -3,7 +3,7 @@
 import type React from "react"
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
-import { Loader2, UploadCloud } from "lucide-react"
+import { Loader2, UploadCloud } from 'lucide-react'
 import { toast } from "sonner"
 import { Suspense } from "react"
 import Loading from "./loading"
@@ -338,6 +338,7 @@ export default function NuevoPlatilloPage() {
     if (!file) {
       setImagenFile(null)
       setImagenPreview(null)
+      toast.error("No se seleccionó ningún archivo.")
       return
     }
 
@@ -356,7 +357,26 @@ export default function NuevoPlatilloPage() {
     }
 
     const reader = new FileReader()
-    reader.onload = (event) => {
+    reader.onload = (event: ProgressEvent<FileReader>) => {
+      // **INICIO DE LA MODIFICACIÓN PARA MANEJAR EL ERROR 'e' UNDEFINED**
+      if (event === undefined || event === null) {
+        console.error("FileReader onload event is undefined or null.");
+        setImagenFile(null);
+        setImagenPreview(null);
+        toast.error("Error al procesar la imagen: evento nulo.");
+        return;
+      }
+      // **FIN DE LA MODIFICACIÓN**
+
+      const readerTarget = event.target as FileReader | null;
+      if (!readerTarget || typeof readerTarget.result !== "string") {
+        console.error("FileReader onload event target or its result is invalid.", event);
+        setImagenFile(null);
+        setImagenPreview(null);
+        toast.error("Error al procesar la imagen: resultado inválido.");
+        return;
+      } 
+
       const img = new Image()
       img.onload = () => {
         if (img.width > MAX_IMAGE_DIMENSION || img.height > MAX_IMAGE_DIMENSION) {
@@ -365,12 +385,24 @@ export default function NuevoPlatilloPage() {
           setImagenPreview(null)
         } else {
           setImagenFile(file)
-          setImagenPreview(event.target?.result as string)
+          setImagenPreview(readerTarget.result)
           toast.success("Imagen cargada con éxito.")
         }
       }
-      img.src = event.target?.result as string
+      img.onerror = (err) => {
+        console.error("Error loading image for preview:", err)
+        toast.error("Error al cargar la imagen para previsualización.")
+        setImagenFile(null)
+        setImagenPreview(null)
+      }
+      img.src = readerTarget.result
     }
+    reader.onerror = (errorEvent) => { // Add onerror for FileReader itself
+      console.error("FileReader error:", errorEvent);
+      toast.error("Error al leer el archivo de imagen.");
+      setImagenFile(null);
+      setImagenPreview(null);
+    };
     reader.readAsDataURL(file)
   }
 

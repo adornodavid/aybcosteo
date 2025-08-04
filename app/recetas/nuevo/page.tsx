@@ -22,7 +22,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Loader2, ArrowLeft, Plus, CheckCircle, ImageIcon, X, Trash2 } from "lucide-react"
+import { Loader2, ArrowLeft, Plus, CheckCircle, ImageIcon, X, Trash2 } from 'lucide-react'
 import { getSession } from "@/app/actions/session-actions"
 import { toast } from "sonner"
 import { useNavigationGuard } from "@/contexts/navigation-guard-context"
@@ -235,7 +235,7 @@ export default function NuevaRecetaPage() {
       if (recetaId.current && validaRegistroId === 0) {
         e.preventDefault()
         e.returnValue =
-          "¿Estás seguro que deseas abandonar el registro de receta? Se perderá la información cargada previamente"
+          "¿Estás seguro que deseas abandonar el registro de sub-receta? Se perderá la información cargada previamente"
       }
     }
 
@@ -340,7 +340,12 @@ export default function NuevaRecetaPage() {
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
-    if (!file) return
+    if (!file) {
+      setImagenFile(null)
+      setImagenPreview(null)
+      toast.error("No se seleccionó ningún archivo.")
+      return
+    }
 
     if (file.type !== "image/jpeg") {
       toast.error("Formato no válido. Solo se permiten imágenes .jpg")
@@ -357,7 +362,26 @@ export default function NuevaRecetaPage() {
     }
 
     const reader = new FileReader()
-    reader.onload = (e) => {
+    reader.onload = (e: ProgressEvent<FileReader>) => {
+      // **INICIO DE LA MODIFICACIÓN PARA MANEJAR EL ERROR 'e' UNDEFINED**
+      if (e === undefined || e === null) {
+        console.error("FileReader onload event is undefined or null.");
+        setImagenFile(null);
+        setImagenPreview(null);
+        toast.error("Error al procesar la imagen: evento nulo.");
+        return;
+      }
+      // **FIN DE LA MODIFICACIÓN**
+
+      const readerTarget = e.target as FileReader | null;
+      if (!readerTarget || typeof readerTarget.result !== "string") {
+        console.error("FileReader onload event target or its result is invalid.", e);
+        setImagenFile(null);
+        setImagenPreview(null);
+        toast.error("Error al procesar la imagen: resultado inválido.");
+        return;
+      }
+
       const img = new Image()
       img.onload = () => {
         if (img.width > 500 || img.height > 500) {
@@ -370,8 +394,20 @@ export default function NuevaRecetaPage() {
           toast.success("Imagen cargada con éxito")
         }
       }
-      img.src = e.target?.result as string
+      img.onerror = (err) => { // Add onerror for image loading
+        console.error("Error loading image for preview:", err);
+        toast.error("Error al cargar la imagen para previsualización.");
+        setImagenFile(null);
+        setImagenPreview(null);
+      };
+      img.src = readerTarget.result
     }
+    reader.onerror = (errorEvent) => { // Add onerror for FileReader itself
+      console.error("FileReader error:", errorEvent);
+      toast.error("Error al leer el archivo de imagen.");
+      setImagenFile(null);
+      setImagenPreview(null);
+    };
     reader.readAsDataURL(file)
   }
 

@@ -910,6 +910,7 @@ export default function EditarPlatilloPage() {
             .from("platillosxmenu")
             .select(
               `
+              precioventa,
               menuid,
               menus!inner(
                 restauranteid,
@@ -921,8 +922,48 @@ export default function EditarPlatilloPage() {
 
           if (platilloMenusError) throw platilloMenusError
 
-          const historicoIngredientesToInsert = []
+          // Get today's date in YYYY-MM-DD format for comparison with `fechacreacion`
+          const today = new Date().toISOString().split("T")[0]
+
           for (const menuAssoc of platilloMenus) {
+            // 1. Check for existing records for today for this platilloId and menuId
+            const { data: existingHistorico, error: checkHistoricoError } = await supabase
+              .from("historico")
+              .select("idrec") // Just need to know if any exist
+              .eq("platilloid", platilloId)
+              .eq("menuid", menuAssoc.menuid)
+              .eq("fechacreacion", today) // Assuming fechacreacion is a DATE type in DB
+
+            if (checkHistoricoError) {
+              console.error("Error checking existing historico records:", checkHistoricoError)
+              throw new Error("Error al verificar registros históricos existentes.")
+            }
+
+            // 2. If records exist, perform delete
+            if (existingHistorico && existingHistorico.length > 0) {
+              console.log(
+                `Deleting existing historico records for platilloId: ${platilloId}, menuId: ${menuAssoc.menuid}, date: ${today}`,
+              )
+              const { error: deleteHistoricoError } = await supabase
+                .from("historico")
+                .delete()
+                .eq("platilloid", platilloId)
+                .eq("menuid", menuAssoc.menuid)
+                .eq("fechacreacion", today)
+
+              if (deleteHistoricoError) {
+                console.error("Error deleting existing historico records:", deleteHistoricoError)
+                throw new Error("Error al eliminar registros históricos existentes.")
+              }
+            }
+
+            let costoporcentual = null
+            const precioVenta = menuAssoc.precioventa
+            if (precioVenta !== null && precioVenta > 0) {
+              costoporcentual = (costoAdministrativoCalculado / precioVenta) * 100
+            }
+
+            const historicoIngredientesToInsert = []
             const hotelId = menuAssoc.menus.restaurantes.hotelid
             const restauranteId = menuAssoc.menus.restaurantes.restauranteid
             const menuId = menuAssoc.menuid
@@ -939,22 +980,19 @@ export default function EditarPlatilloPage() {
                 costo: ing.ingredientecostoparcial,
                 activo: true,
                 fechacreacion: new Date().toISOString(),
+                precioventa: precioVenta,
+                costoporcentual: costoporcentual, // Agregado el costoporcentual
               })
             }
-          }
 
-          if (historicoIngredientesToInsert.length > 0) {
-            const { error: insertIngredientesHistoricoError } = await supabase
-              .from("historico")
-              .insert(historicoIngredientesToInsert)
-            if (insertIngredientesHistoricoError) throw insertIngredientesHistoricoError
-          }
+            if (historicoIngredientesToInsert.length > 0) {
+              const { error: insertIngredientesHistoricoError } = await supabase
+                .from("historico")
+                .insert(historicoIngredientesToInsert)
+              if (insertIngredientesHistoricoError) throw insertIngredientesHistoricoError
+            }
 
-          const historicoRecetasToInsert = []
-          for (const menuAssoc of platilloMenus) {
-            const hotelId = menuAssoc.menus.restaurantes.hotelid
-            const restauranteId = menuAssoc.menus.restaurantes.restauranteid
-            const menuId = menuAssoc.menuid
+            const historicoRecetasToInsert = []
 
             for (const rec of recetasPlatillo) {
               historicoRecetasToInsert.push({
@@ -968,15 +1006,17 @@ export default function EditarPlatilloPage() {
                 costo: rec.recetacostoparcial,
                 activo: true,
                 fechacreacion: new Date().toISOString(),
+                precioventa: precioVenta,
+                costoporcentual: costoporcentual, // Agregado el costoporcentual
               })
             }
-          }
 
-          if (historicoRecetasToInsert.length > 0) {
-            const { error: insertRecetasHistoricoError } = await supabase
-              .from("historico")
-              .insert(historicoRecetasToInsert)
-            if (insertRecetasHistoricoError) throw insertRecetasHistoricoError
+            if (historicoRecetasToInsert.length > 0) {
+              const { error: insertRecetasHistoricoError } = await supabase
+                .from("historico")
+                .insert(historicoRecetasToInsert)
+              if (insertRecetasHistoricoError) throw insertRecetasHistoricoError
+            }
           }
           return { success: true }
         })(),

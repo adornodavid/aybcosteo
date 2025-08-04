@@ -274,7 +274,7 @@ export async function uploadImage(
   }
 
   const fileName = `${Date.now()}-${file.name}`
-  const { data, error } = await supabase.storage.from("imagenes_restaurantes").upload(fileName, file, {
+  const { data, error } = await supabase.storage.from("imagenes").upload(fileName, file, {
     cacheControl: "3600",
     upsert: false,
   })
@@ -284,7 +284,7 @@ export async function uploadImage(
     return { success: false, url: null, error: error.message }
   }
 
-  const { data: publicUrlData } = supabase.storage.from("imagenes_restaurantes").getPublicUrl(data.path)
+  const { data: publicUrlData } = supabase.storage.from("imagenes").getPublicUrl(data.path)
 
   if (!publicUrlData || !publicUrlData.publicUrl) {
     return { success: false, url: null, error: "No se pudo obtener la URL pública de la imagen." }
