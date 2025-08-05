@@ -10,7 +10,6 @@ import Loading from "./loading"
 import Image from "next/image" // Importar Image de next/image
 
 import * as actions from "@/app/actions/platillos-wizard-actions"
-import { uploadImage } from "@/app/actions/recetas-image-actions" // Importar uploadImage
 import { useNavigationGuard } from "@/contexts/navigation-guard-context" // Importar el hook del contexto
 
 import { Button } from "@/components/ui/button"
@@ -113,8 +112,6 @@ export default function NuevoPlatilloPage() {
   const [tiempo, setTiempo] = useState("")
   const [imagenFile, setImagenFile] = useState<File | null>(null)
   const [imagenPreview, setImagenPreview] = useState<string | null>(null)
-  const [isUploadingImage, setIsUploadingImage] = useState(false) // Nuevo estado para la carga de imagen
-
   // --- ETAPA 2: MENÚ ---
   const [hoteles, setHoteles] = useState<Hotel[]>([])
   const [restaurantes, setRestaurantes] = useState<Restaurante[]>([])
@@ -127,7 +124,7 @@ export default function NuevoPlatilloPage() {
   const [ingredientes, setIngredientes] = useState<Ingrediente[]>([]) // Todos los ingredientes para el hotel
   const [recetas, setRecetas] = useState<Receta[]>([])
   const [unidades, setUnidades] = useState<UnidadMedida[]>([]) // Ahora se carga dinámicamente
-  const [ingredientesAgregados, setIngredientesAgregados] = useState<IngredienteAgregado[]>([])
+  const [ingredientesAgregados, setIngredientesAgregados] = useState<IngredienteAgregada[]>([])
   const [recetasAgregadas, setRecetasAgregadas] = useState<RecetaAgregada[]>([])
 
   // Formulario de ingredientes (para el nuevo input de búsqueda)
@@ -335,7 +332,7 @@ export default function NuevoPlatilloPage() {
 
   // --- MANEJADORES DE EVENTOS ---
 
-  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) {
       setImagenFile(null)
@@ -343,41 +340,16 @@ export default function NuevoPlatilloPage() {
       toast.error("No se seleccionó ningún archivo.")
       return
     }
-       
+
     // Client-side preview using FileReader
     const reader = new FileReader()
     reader.onloadend = () => {
       setImagenPreview(reader.result as string)
     }
-    
+
     reader.readAsDataURL(file)
 
     setImagenFile(file) // Store the file for potential later use in FormData
-
-    const uploadFormData = new FormData()
-    uploadFormData.append("file", setImagenFile)
-
-    setIsUploadingImage(true)
-    try {
-      const { data, error } = await uploadImage(uploadFormData)
-      if (error) {
-        console.error("Error al subir imagen:", error)
-        toast.error("Error al subir imagen: " + error.message)
-        setImagenFile(null) // Clear file if upload fails
-        setImagenPreview(null) // Clear preview if upload fails
-      } else if (data) {
-        // If upload is successful, update preview to the public URL
-        setImagenPreview(data.publicUrl)
-        toast.success("Imagen subida correctamente.")
-      }
-    } catch (e: any) {
-      console.error("Error inesperado al subir imagen:", e)
-      toast.error("Error inesperado al subir imagen: " + e.message)
-      setImagenFile(null)
-      setImagenPreview(null)
-    } finally {
-      setIsUploadingImage(false)
-    }
   }
 
   const handleRegistrarPlatillo = async () => {
@@ -842,14 +814,8 @@ export default function NuevoPlatilloPage() {
                     accept="image/jpeg, image/jpg, image/png, image/webp" // Aceptar más formatos si el backend los soporta
                     onChange={handleImageChange}
                     className="mt-2"
-                    disabled={platilloId !== null || isUploadingImage}
+                    disabled={platilloId !== null}
                   />
-                  {isUploadingImage && (
-                    <div className="flex items-center text-sm text-muted-foreground">
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Subiendo imagen...
-                    </div>
-                  )}
                 </div>
               </div>
             </CardContent>
@@ -858,7 +824,7 @@ export default function NuevoPlatilloPage() {
                 id="btnRegistrarPlatillo"
                 name="btnRegistrarPlatillo"
                 onClick={handleRegistrarPlatillo}
-                disabled={isSubmitting || platilloId !== null || isUploadingImage}
+                disabled={isSubmitting || platilloId !== null}
               >
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Registrar y Continuar

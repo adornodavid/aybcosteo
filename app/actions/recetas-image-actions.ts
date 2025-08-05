@@ -9,14 +9,20 @@ const getSupabaseClient = () => {
 }
 
 
-export async function uploadImage(formData: FormData,
+export async function uploadImage(
+formData: FormData,
 ): Promise<{ success: boolean; url: string | null; error: string | null }> {
   const supabase = getSupabaseClient()
-  try {
+  
     //const fileExtension = file.name.split(".").pop()
     //const fileName = `${uuidv4()}.${fileExtension}`
     //const filePath = `${fileName}`
     const file = formData.get("file") as File
+
+    if (!file) {
+    return { success: false, url: null, error: "No se proporcionó ningún archivo." }
+   }
+
     const fileName = `${Date.now()}-${file.name}`
     const { data, error } = await supabase.storage.from("imagenes").upload(fileName, file, {
       cacheControl: "3600",
@@ -30,12 +36,15 @@ export async function uploadImage(formData: FormData,
 
     const { data: publicUrlData } = supabase.storage.from("imagenes").getPublicUrl(data.path)
 
-    return { data: { publicUrl: publicUrlData.publicUrl }, error: null }
-  } catch (e: any) {
-    console.error("Exception in uploadImage:", e)
-    return { data: null, error: { message: e.message || "Error desconocido al subir imagen." } }
+    if (!publicUrlData || !publicUrlData.publicUrl) {
+    return { success: false, url: null, error: "No se pudo obtener la URL pública de la imagen." }
   }
+
+  return { success: true, url: publicUrlData.publicUrl, error: null }
 }
+
+
+
 
 export async function deleteImage(imageUrl: string) {
   const supabase = getSupabaseClient()

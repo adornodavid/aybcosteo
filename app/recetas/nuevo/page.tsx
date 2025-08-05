@@ -26,8 +26,7 @@ import { Loader2, ArrowLeft, Plus, CheckCircle, ImageIcon, X, Trash2 } from "luc
 import { getSession } from "@/app/actions/session-actions"
 import { toast } from "sonner"
 import { useNavigationGuard } from "@/contexts/navigation-guard-context"
-import { getUnidadMedidaForRecetaIngrediente } from "@/app/actions/recetas-wizard-actions"
-import { uploadImage } from "@/app/actions/recetas-image-actions" // Importar uploadImage
+import { getUnidadMedidaForRecetaIngrediente, registrarRecetaConImagen } from "@/app/actions/recetas-wizard-actions" // Importar la nueva acción
 import Image from "next/image"
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -103,7 +102,7 @@ export default function NuevaRecetaPage() {
   const [imagenFile, setImagenFile] = useState<File | null>(null)
   const [imagenPreview, setImagenPreview] = useState<string | null>(null)
   const [etapa1Bloqueada, setEtapa1Bloqueada] = useState(false)
-  const [isUploadingImage, setIsUploadingImage] = useState(false) // Nuevo estado para la carga de imagen
+  // Removido isUploadingImage
 
   const [txtCantidadSubReceta, setTxtCantidadSubReceta] = useState("")
   const [ddlUnidadBaseSubReceta, setDdlUnidadBaseSubReceta] = useState("")
@@ -340,7 +339,7 @@ export default function NuevaRecetaPage() {
     }
   }, [])
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) {
       setImagenFile(null)
@@ -349,27 +348,14 @@ export default function NuevaRecetaPage() {
       return
     }
 
-    setIsUploadingImage(true)
-    try {
-      const { data, error } = await uploadImage(file, "imagenes")
-      if (error) {
-        console.error("Error al subir imagen:", error)
-        toast.error("Error al subir imagen: " + error.message)
-        setImagenFile(null)
-        setImagenPreview(null)
-      } else if (data) {
-        setImagenFile(file) // Mantener el archivo para el FormData si es necesario
-        setImagenPreview(data.publicUrl)
-        toast.success("Imagen subida correctamente.")
-      }
-    } catch (e: any) {
-      console.error("Error inesperado al subir imagen:", e)
-      toast.error("Error inesperado al subir imagen: " + e.message)
-      setImagenFile(null)
-      setImagenPreview(null)
-    } finally {
-      setIsUploadingImage(false)
+    // Client-side preview using FileReader
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      setImagenPreview(reader.result as string)
     }
+    reader.readAsDataURL(file)
+
+    setImagenFile(file) // Store the file for potential later use in FormData
   }
 
   const handleRemoveImage = () => {
@@ -387,49 +373,28 @@ export default function NuevaRecetaPage() {
     }
 
     try {
-      let currentUrlName: string | null = null
+      const formData = new FormData()
+      formData.append("nombre", txtNombreRecetaNuevo)
+      formData.append("notaspreparacion", txtNotasReceta)
+      formData.append("hotelId", ddlHotel)
+      formData.append("cantidad", txtCantidadSubReceta || "0") // Asegurar que se envíe un valor
+      formData.append("unidadBaseId", ddlUnidadBaseSubReceta || "0") // Asegurar que se envíe un valor
 
       if (imagenFile) {
-        const bucketName = "imagenes"
-        const timestamp = Date.now()
-        const randomString = Math.random().toString(36).substring(2, 15)
-        const fileExtension = imagenFile.name.split(".").pop()
-        const filePath = `Recetas/receta_${timestamp}_${randomString}.${fileExtension}`
-
-        const { data: uploadData, error: uploadError } = await supabaseClient.storage
-          .from(bucketName)
-          .upload(filePath, imagenFile)
-
-        if (uploadError) throw new Error(`Error al subir imagen: ${uploadError.message}`)
-
-        const { data: publicUrlData } = supabaseClient.storage.from(bucketName).getPublicUrl(uploadData.path)
-        currentUrlName = publicUrlData.publicUrl
-        urlName.current = currentUrlName
+        formData.append("imagen", imagenFile)
       }
 
-      const { data: insertData, error: insertError } = await supabaseClient
-        .from("recetas")
-        .insert({
-          nombre: txtNombreRecetaNuevo,
-          notaspreparacion: txtNotasReceta,
-          costo: null,
-          activo: true,
-          fechacreacion: new Date().toISOString(),
-          imgurl: currentUrlName,
-          cantidad: null,
-          unidadbaseid: null,
-        })
-        .select("id")
-        .single()
+      const result = await registrarRecetaConImagen(formData)
 
-      if (insertError) throw new Error(`Error al registrar receta: ${insertError.message}`)
-      if (!insertData) throw new Error("No se pudo obtener el ID de la receta creada.")
-
-      recetaId.current = insertData.id
-
-      setEtapa1Bloqueada(true)
-      setEtapaActual(2)
-      toast.success("Información básica registrada. Agregue los ingredientes.")
+      if (result.success && result.recetaId) {
+        recetaId.current = result.recetaId
+        urlName.current = result.imgUrl || null // Guardar la URL pública si se subió
+        setEtapa1Bloqueada(true)
+        setEtapaActual(2)
+        toast.success("Información básica registrada. Agregue los ingredientes.")
+      } else {
+        throw new Error(result.error || "Error al registrar receta.")
+      }
     } catch (error: any) {
       toast.error(error.message)
     }
@@ -918,18 +883,12 @@ export default function NuevaRecetaPage() {
                           className="sr-only"
                           onChange={handleFileUpload}
                           accept="image/jpeg, image/jpg, image/png, image/webp" // Aceptar más formatos si el backend los soporta
-                          disabled={etapa1Bloqueada || isUploadingImage}
+                          disabled={etapa1Bloqueada}
                         />
                       </label>
                       <p className="pl-1">o arrastra y suelta</p>
                     </div>
                     <p className="text-xs leading-5 text-gray-600">JPG hasta 25MB, 500x500px</p>
-                    {isUploadingImage && (
-                      <div className="flex items-center justify-center text-sm text-muted-foreground mt-2">
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Subiendo imagen...
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>
@@ -940,7 +899,7 @@ export default function NuevaRecetaPage() {
                 id="btnRegistrarReceta"
                 name="btnRegistrarReceta"
                 onClick={btnRegistrarReceta}
-                disabled={etapa1Bloqueada || isUploadingImage}
+                disabled={etapa1Bloqueada}
               >
                 Registrar
               </Button>
