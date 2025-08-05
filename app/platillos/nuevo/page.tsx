@@ -344,16 +344,25 @@ export default function NuevoPlatilloPage() {
       return
     }
 
+    // Client-side preview using FileReader
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      setImagenPreview(reader.result as string)
+    }
+    reader.readAsDataURL(file)
+
+    setImagenFile(file) // Store the file for potential later use in FormData
+
     setIsUploadingImage(true)
     try {
       const { data, error } = await uploadImage(file, "imagenes")
       if (error) {
         console.error("Error al subir imagen:", error)
         toast.error("Error al subir imagen: " + error.message)
-        setImagenFile(null)
-        setImagenPreview(null)
+        setImagenFile(null) // Clear file if upload fails
+        setImagenPreview(null) // Clear preview if upload fails
       } else if (data) {
-        setImagenFile(file) // Mantener el archivo para el FormData si es necesario
+        // If upload is successful, update preview to the public URL
         setImagenPreview(data.publicUrl)
         toast.success("Imagen subida correctamente.")
       }
