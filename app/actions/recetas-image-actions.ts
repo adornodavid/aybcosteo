@@ -8,14 +8,14 @@ const getSupabaseClient = () => {
   return createClient(cookies())
 }
 
-export async function uploadImage(file: File, bucketName: string) {
+export async function uploadImage(file: File) {
   const supabase = getSupabaseClient()
   try {
     const fileExtension = file.name.split(".").pop()
     const fileName = `${uuidv4()}.${fileExtension}`
     const filePath = `${fileName}`
 
-    const { data, error } = await supabase.storage.from(bucketName).upload(filePath, file, {
+    const { data, error } = await supabase.storage.from("imagenes").upload(filePath, file, {
       cacheControl: "3600",
       upsert: false,
     })
@@ -25,7 +25,7 @@ export async function uploadImage(file: File, bucketName: string) {
       return { data: null, error: { message: `Error al subir imagen: ${error.message}` } }
     }
 
-    const { data: publicUrlData } = supabase.storage.from(bucketName).getPublicUrl(filePath)
+    const { data: publicUrlData } = supabase.storage.from("imagenes").getPublicUrl(filePath)
 
     return { data: { publicUrl: publicUrlData.publicUrl }, error: null }
   } catch (e: any) {
@@ -34,13 +34,13 @@ export async function uploadImage(file: File, bucketName: string) {
   }
 }
 
-export async function deleteImage(imageUrl: string, bucketName: string) {
+export async function deleteImage(imageUrl: string) {
   const supabase = getSupabaseClient()
   try {
     const urlParts = imageUrl.split("/")
     const fileName = urlParts[urlParts.length - 1]
 
-    const { data, error } = await supabase.storage.from(bucketName).remove([fileName])
+    const { data, error } = await supabase.storage.from("imagenes").remove([fileName])
 
     if (error) {
       console.error("Error deleting image:", error)
