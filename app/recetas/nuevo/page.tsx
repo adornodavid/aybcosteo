@@ -2,25 +2,16 @@
 
 import type React from "react"
 import { useState, useEffect, useRef, useCallback } from "react"
+import { createClient } from "@supabase/supabase-js"
 import { useRouter } from "next/navigation"
-import { Loader2, UploadCloud } from "lucide-react"
-import { toast } from "sonner"
-import { Suspense } from "react"
-import Loading from "./loading"
-import Image from "next/image" // Importar Image de next/image
-
-import * as actions from "@/app/actions/recetas-wizard-actions"
-import { uploadImage } from "@/app/actions/recetas-image-actions" // Importar uploadImage
-import { useNavigationGuard } from "@/contexts/navigation-guard-context" // Importar el hook del contexto
-
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Progress } from "@/components/ui/progress"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Badge } from "@/components/ui/badge"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,312 +22,326 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { Loader2, ArrowLeft, Plus, CheckCircle, ImageIcon, X, Trash2 } from "lucide-react"
+import { getSession } from "@/app/actions/session-actions"
+import { toast } from "sonner"
+import { useNavigationGuard } from "@/contexts/navigation-guard-context"
+import { getUnidadMedidaForRecetaIngrediente } from "@/app/actions/recetas-wizard-actions"
+import { uploadImage } from "@/app/actions/recetas-image-actions" // Importar uploadImage
+import Image from "next/image"
 
-// Interfaces para los datos cargados
-interface Hotel {
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const supabaseClient = createClient(supabaseUrl, supabaseAnonKey)
+
+interface SessionData {
+  UsuarioId: string | null
+  Email: string | null
+  NombreCompleto: string | null
+  HotelId: string | null
+  RolId: string | null
+  SesionActiva: boolean | null
+}
+
+interface DropdownItem {
   id: number
   nombre: string
 }
-interface Restaurante {
+
+interface UnidadMedida {
   id: number
-  nombre: string
+  descripcion: string
+  calculoconversion: number | null
 }
-interface Menu {
-  id: number
-  nombre: string
-}
+
 interface Ingrediente {
   id: number
   nombre: string
   costo: number | null
-  codigo: string // Añadido el campo codigo
+  codigo: string
 }
-interface Receta {
+
+interface IngredienteRecetaDisplay {
   id: number
-  nombre: string
-  costo: number | null
-  cantidad: number | null // Añadido para la cantidad base de la receta
-  unidadbaseid: number | null // Añadido para la unidad base de la receta
-  tipounidadmedida: {
-    descripcion: string
-  } | null // Añadido para la descripción de la unidad base
-}
-interface UnidadMedida {
-  id: number
-  descripcion: string
-  calculoconversion: number | null // Necesario para el cálculo en el cliente
-}
-interface IngredienteAgregado {
-  id: number
+  ingredienteId: number
   nombre: string
   cantidad: number
   ingredientecostoparcial: number
-  unidad: string // Añadir esta línea
-}
-interface RecetaAgregada {
-  id: number
-  nombre: string
-  recetacostoparcial: number
 }
 
-const MAX_IMAGE_SIZE_MB = 10
-const MAX_IMAGE_DIMENSION = 500
-
-export default function NuevoRecetaPage() {
+export default function NuevaRecetaPage() {
   const router = useRouter()
-  const { setGuard } = useNavigationGuard() // Obtener setGuard del contexto
+  const { setGuard, attemptNavigation } = useNavigationGuard()
 
-  // --- ESTADO GENERAL ---
-  const [etapa, setEtapa] = useState(1)
+  const [sesion, setSesion] = useState<SessionData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [showCookingAnimation, setShowCookingAnimation] = useState(false) // Nuevo estado para la animación
+  const [showLoadingAnimation, setShowLoadingAnimation] = useState(false)
 
-  // --- ESTADO DE DATOS Y PROCESO ---
-  const [recetaId, setRecetaId] = useState<number | null>(null)
+  // Estados para AlertDialog de errores
+  const [showErrorDialog, setShowErrorDialog] = useState(false)
+  const [errorMessage, setErrorMessage] = useState("")
+
+  const [etapaActual, setEtapaActual] = useState(1)
+  const recetaId = useRef<number | null>(null)
+  const urlName = useRef<string | null>(null)
   const [validaRegistroId, setValidaRegistroId] = useState(0)
-  const [menuNom, setMenuNom] = useState("")
-  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false)
-  const [showSuccessModal, setShowSuccessModal] = useState(false) // Nuevo estado para el modal de éxito
-  const [showDuplicateRecetaModal, setShowDuplicateRecetaModal] = useState(false) // Nuevo estado para el modal de duplicidad de receta
-  const [showDuplicateIngredienteModal, setShowDuplicateIngredienteModal] = useState(false) // Nuevo estado para el modal de duplicidad de ingrediente
-  const [nextPath, setNextPath] = useState("")
-  const resolveNavigationRef = useRef<((value: boolean) => void) | null>(null) // Para resolver la promesa de navegación
-  const [countdown, setCountdown] = useState(10) // Nuevo estado para el contador
-  const [showErrorDialog, setShowErrorDialog] = useState(false) // Nuevo estado para el AlertDialog de error
-  const [errorMessage, setErrorMessage] = useState("") // Nuevo estado para el mensaje de error
 
-  // --- ETAPA 1: INFO BÁSICA ---
-  const [nombre, setNombre] = useState("")
-  const [descripcion, setDescripcion] = useState("")
-  const [instrucciones, setInstrucciones] = useState("")
-  const [tiempo, setTiempo] = useState("")
+  const [mostrarModalConfirmacion, setMostrarModalConfirmacion] = useState(false)
+  const [mostrarModalExito, setMostrarModalExito] = useState(false)
+  const [mostrarModalIngredienteDuplicado, setMostrarModalIngredienteDuplicado] = useState(false)
+  const [mostrarModalFaltanDatosEtapa2, setMostrarModalFaltanDatosEtapa2] = useState(false)
+  const navegacionPendiente = useRef<string | null>(null)
+
+  const [hoteles, setHoteles] = useState<DropdownItem[]>([])
+  const [ingredientes, setIngredientes] = useState<Ingrediente[]>([])
+  const [unidadesMedida, setUnidadesMedida] = useState<UnidadMedida[]>([])
+  const [ingredientesReceta, setIngredientesReceta] = useState<IngredienteRecetaDisplay[]>([])
+
+  const [txtNombreRecetaNuevo, setTxtNombreRecetaNuevo] = useState("")
+  const [txtNotasReceta, setTxtNotasReceta] = useState("")
+  const [ddlHotel, setDdlHotel] = useState("")
   const [imagenFile, setImagenFile] = useState<File | null>(null)
   const [imagenPreview, setImagenPreview] = useState<string | null>(null)
+  const [etapa1Bloqueada, setEtapa1Bloqueada] = useState(false)
   const [isUploadingImage, setIsUploadingImage] = useState(false) // Nuevo estado para la carga de imagen
 
-  // --- ETAPA 2: MENÚ ---
-  const [hoteles, setHoteles] = useState<Hotel[]>([])
-  const [restaurantes, setRestaurantes] = useState<Restaurante[]>([])
-  const [menus, setMenus] = useState<Menu[]>([])
-  const [hotelId, setHotelId] = useState<string>("")
-  const [restauranteId, setRestauranteId] = useState<string>("")
-  const [menuId, setMenuId] = useState<string>("")
+  const [txtCantidadSubReceta, setTxtCantidadSubReceta] = useState("")
+  const [ddlUnidadBaseSubReceta, setDdlUnidadBaseSubReceta] = useState("")
 
-  // --- ETAPA 3: CONTENIDO ---
-  const [ingredientes, setIngredientes] = useState<Ingrediente[]>([]) // Todos los ingredientes para el hotel
-  const [recetas, setRecetas] = useState<Receta[]>([])
-  const [unidades, setUnidades] = useState<UnidadMedida[]>([]) // Ahora se carga dinámicamente
-  const [ingredientesAgregados, setIngredientesAgregados] = useState<IngredienteAgregado[]>([])
-  const [recetasAgregadas, setRecetasAgregadas] = useState<RecetaAgregada[]>([])
-
-  // Formulario de ingredientes (para el nuevo input de búsqueda)
   const [ingredienteSearchTerm, setIngredienteSearchTerm] = useState("")
-  const [filteredIngredientes, setFilteredIngredientes] = useState<Ingrediente[]>([]) // Resultados de la búsqueda
+  const [filteredIngredientes, setFilteredIngredientes] = useState<Ingrediente[]>([])
   const [showIngredienteDropdown, setShowIngredienteDropdown] = useState(false)
 
-  const [selIngredienteId, setSelIngredienteId] = useState("")
-  const [selIngredienteCantidad, setSelIngredienteCantidad] = useState("")
-  const [selIngredienteUnidad, setSelIngredienteUnidad] = useState("")
-  const [selIngredienteCosto, setSelIngredienteCosto] = useState("")
+  const [ddlIngredientes, setDdlIngredientes] = useState("")
+  const [txtCantidadIngrediente, setTxtCantidadIngrediente] = useState("")
+  const [ddlUnidadMedida, setDdlUnidadMedida] = useState("")
+  const [txtCostoIngrediente, setTxtCostoIngrediente] = useState("")
+  const [isUnidadMedidaDisabled, setIsUnidadMedidaDisabled] = useState(false)
 
-  // Formulario de recetas
-  const [selRecetaId, setSelRecetaId] = useState("")
-  const [selRecetaCosto, setSelRecetaCosto] = useState("")
-  // NUEVOS ESTADOS PARA SUB-RECETAS
-  const [selRecetaCantidad, setSelRecetaCantidad] = useState("1") // Para txtCantidad (number)
-  const [selRecetaCant, setSelRecetaCant] = useState("1") // Para txtCant (range)
-  const [selRecetaUnidadBase, setSelRecetaUnidadBase] = useState("") // Para txtUnidadBase (text)
-  const [maxRangeReceta, setMaxRangeReceta] = useState(1) // Para el max del input range
-
-  // --- ETAPA 4: RESUMEN ---
-  const [totalCostoReceta, setTotalCostoReceta] = useState<number | null>(null) // Nuevo estado para el costo total
-  const [costoAdministrativoReceta, setCostoAdministrativoReceta] = useState<number | null>(null) // Nuevo estado para el costo administrativo
-  const [precioSugeridoReceta, setPrecioSugeridoReceta] = useState<number | null>(null) // Nuevo estado para el precio sugerido
-
-  // --- EFECTOS ---
-
-  // 1. Verificar sesión y cargar datos iniciales (hoteles, ingredientes, recetas)
   useEffect(() => {
-    const initialize = async () => {
+    const cargarSesionYValidar = async () => {
       try {
-        const sessionData = await actions.obtenerVariablesSesion()
-        if (sessionData.SesionActiva !== "true" || !sessionData.RolId || sessionData.RolId === "0") {
+        const datosSession = await getSession()
+
+        if (!datosSession || datosSession.SesionActiva !== true) {
           router.push("/login")
           return
         }
 
-        const auxHotelid = [1, 2, 3, 4].includes(Number(sessionData.RolId)) ? -1 : Number(sessionData.HotelId)
-        const [hotelesData] = await Promise.all([actions.getHoteles(auxHotelid)])
-
-        setHoteles(hotelesData)
-
-        if (hotelesData.length > 0) {
-          setHotelId(hotelesData[0].id.toString())
+        if (!datosSession.RolId || datosSession.RolId === "0") {
+          router.push("/login")
+          return
         }
-      } catch (error) {
-        console.error("Error verificando sesión o cargando datos:", error)
-        toast.error("Error al inicializar la página. Redirigiendo al login.")
+
+        setSesion(datosSession)
+      } catch (err) {
+        console.error("Error cargando sesión:", err)
         router.push("/login")
       } finally {
         setLoading(false)
       }
     }
-    initialize()
+    cargarSesionYValidar()
   }, [router])
 
-  // 2. Cargar dropdowns dependientes (restaurantes, menus, ingredientes, recetas)
   useEffect(() => {
-    if (!hotelId) return
-    const hotelNum = Number.parseInt(hotelId, 10)
-
-    actions.getRestaurantes(hotelNum).then((data) => {
-      setRestaurantes(data)
-      setRestauranteId(data[0]?.id.toString() || "")
-    })
-
-    actions.getIngredientes(hotelNum).then(setIngredientes) // Carga todos los ingredientes para el hotel
-    actions.getRecetas(hotelNum).then(setRecetas)
-  }, [hotelId])
-
-  useEffect(() => {
-    if (!restauranteId) return
-    actions.getMenus(Number.parseInt(restauranteId, 10), Number.parseInt(hotelId, 10)).then((data) => {
-      setMenus(data)
-      setMenuId(data[0]?.id.toString() || "")
-    })
-  }, [restauranteId, hotelId]) // Depende de hotelId también
-
-  // 3. Actualizar costos de inputs bloqueados
-  useEffect(() => {
-    const ingrediente = ingredientes.find((i) => i.id.toString() === selIngredienteId)
-    setSelIngredienteCosto(ingrediente?.costo?.toString() || "0")
-  }, [selIngredienteId, ingredientes])
-
-  useEffect(() => {
-    const receta = recetas.find((r) => r.id.toString() === selRecetaId)
-    setSelRecetaCosto(receta?.costo?.toString() || "0")
-  }, [selRecetaId, recetas])
-
-  // NUEVO EFECTO: Cargar unidades de medida basadas en el ingrediente seleccionado
-  useEffect(() => {
-    if (!selIngredienteId) {
-      setUnidades([]) // Limpiar unidades si no hay ingrediente seleccionado
-      setSelIngredienteUnidad("") // Limpiar unidad seleccionada
-      return
+    if (sesion) {
+      cargarHoteles(sesion)
+      cargarUnidadesMedida()
     }
-    const loadUnits = async () => {
-      const data = await actions.getUnidadesMedidaByIngrediente(Number(selIngredienteId))
-      setUnidades(data)
-      if (data.length > 0) {
-        setSelIngredienteUnidad(data[0].id.toString()) // Auto-seleccionar la única unidad
-      } else {
-        setSelIngredienteUnidad("")
+  }, [sesion])
+
+  useEffect(() => {
+    if (ddlHotel) {
+      cargarIngredientes(ddlHotel)
+    }
+  }, [ddlHotel])
+
+  const actualizarCostoIngrediente = useCallback(
+    (ingredienteId: string) => {
+      const ingrediente = ingredientes.find((i) => i.id.toString() === ingredienteId)
+      setTxtCostoIngrediente(ingrediente?.costo?.toString() || "0")
+    },
+    [ingredientes],
+  )
+
+  useEffect(() => {
+    if (ddlIngredientes) {
+      actualizarCostoIngrediente(ddlIngredientes)
+      const fetchAndSetUnidad = async () => {
+        const unidades = await getUnidadMedidaForRecetaIngrediente(Number(ddlIngredientes))
+        if (unidades.length > 0) {
+          setDdlUnidadMedida(unidades[0].id.toString())
+          setIsUnidadMedidaDisabled(false)
+        } else {
+          setDdlUnidadMedida("")
+        }
       }
+      fetchAndSetUnidad()
+    } else {
+      setDdlUnidadMedida("")
+      setIsUnidadMedidaDisabled(false)
     }
-    loadUnits()
-  }, [selIngredienteId])
+  }, [ddlIngredientes, actualizarCostoIngrediente])
 
-  // NUEVO EFECTO: Actualizar inputs de cantidad y unidad base para sub-recetas
-  useEffect(() => {
-    if (!selRecetaId) {
-      setMaxRangeReceta(1)
-      setSelRecetaCantidad("1")
-      setSelRecetaCant("1")
-      setSelRecetaUnidadBase("")
-      return
-    }
-    const selectedReceta = recetas.find((r) => r.id.toString() === selRecetaId)
-    if (selectedReceta) {
-      const baseCantidad = selectedReceta.cantidad && selectedReceta.cantidad > 0 ? selectedReceta.cantidad : 1
-      setMaxRangeReceta(baseCantidad)
-      setSelRecetaCantidad("1") // Reset to 1 when new recipe is selected
-      setSelRecetaCant("1") // Reset to 1 when new recipe is selected
-      setSelRecetaUnidadBase(selectedReceta.tipounidadmedida?.descripcion || "N/A")
-    }
-  }, [selRecetaId, recetas])
-
-  // NUEVO EFECTO: Cargar costo total de la receta en la etapa de resumen
-  useEffect(() => {
-    if (etapa === 4 && recetaId !== null) {
-      const fetchTotalCost = async () => {
-        const { totalCost, costoAdministrativo, precioSugerido } = await actions.getRecetaTotalCost(recetaId)
-        setTotalCostoReceta(totalCost)
-        setCostoAdministrativoReceta(costoAdministrativo) // Set the new state
-        setPrecioSugeridoReceta(precioSugerido) // Set the new state for suggested price
-      }
-      fetchTotalCost()
-    }
-  }, [etapa, recetaId])
-
-  // NUEVO EFECTO: Contador de tiempo para la Etapa 5 y redirección automática
-  useEffect(() => {
-    let timer: NodeJS.Timeout
-    if (etapa === 5) {
-      setCountdown(10) // Reiniciar contador al entrar a la etapa 5
-      timer = setInterval(() => {
-        setCountdown((prev) => {
-          if (prev === 1) {
-            clearInterval(timer)
-            router.push("/recetas") // Redirigir al llegar a 0
-            return 0
-          }
-          return prev - 1
-        })
-      }, 1000)
-    }
-    return () => clearInterval(timer) // Limpiar el intervalo al salir de la etapa o desmontar
-  }, [etapa, router])
-
-  // NUEVO EFECTO: Debounce para la búsqueda de ingredientes
   useEffect(() => {
     const delayDebounceFn = setTimeout(async () => {
-      if (hotelId && ingredienteSearchTerm.length >= 2) {
-        // Solo buscar si hay al menos 2 caracteres
-        const results = await actions.searchIngredientes(Number(hotelId), ingredienteSearchTerm)
+      if (ddlHotel && ingredienteSearchTerm.length >= 2) {
+        const results = await searchIngredientes(Number(ddlHotel), ingredienteSearchTerm)
         setFilteredIngredientes(results)
         setShowIngredienteDropdown(true)
       } else {
         setFilteredIngredientes([])
-        setShowIngredienteDropdown(false)
+        // setShowIngredienteDropdown(false) // Se elimina esta línea
       }
-    }, 300) // Debounce de 300ms
+    }, 300)
 
     return () => clearTimeout(delayDebounceFn)
-  }, [ingredienteSearchTerm, hotelId])
+  }, [ingredienteSearchTerm, ddlHotel])
 
-  // NUEVO EFECTO: Sincronizar el input de búsqueda con el ingrediente seleccionado
   useEffect(() => {
-    if (selIngredienteId) {
-      const selected = ingredientes.find((i) => i.id.toString() === selIngredienteId)
+    if (ddlIngredientes) {
+      const selected =
+        ingredientes.find((i) => i.id.toString() === ddlIngredientes) ||
+        filteredIngredientes.find((i) => i.id.toString() === ddlIngredientes)
       if (selected) {
         setIngredienteSearchTerm(`${selected.codigo} - ${selected.nombre}`)
+        setTxtCostoIngrediente(selected.costo?.toString() || "0")
       }
     } else {
-      setIngredienteSearchTerm("") // Limpiar el término de búsqueda si selIngredienteId se limpia
+      // Mantener el término de búsqueda si no hay un ingrediente seleccionado
+      // setIngredienteSearchTerm("")
+      // setTxtCostoIngrediente("")
     }
-  }, [selIngredienteId, ingredientes])
+  }, [ddlIngredientes, ingredientes, filteredIngredientes])
 
-  // 4. Lógica para evitar abandono de página (para F5 y cierre de pestaña)
-  const handleBeforeUnload = useCallback(
-    (e: BeforeUnloadEvent) => {
-      if (recetaId && validaRegistroId === 0) {
-        e.preventDefault()
-        e.returnValue = ""
+  const checkLeaveAndConfirm = useCallback(
+    async (targetPath: string): Promise<boolean> => {
+      if (recetaId.current && validaRegistroId === 0) {
+        navegacionPendiente.current = targetPath
+        setMostrarModalConfirmacion(true)
+        return false
       }
+      return true
     },
-    [recetaId, validaRegistroId],
+    [recetaId.current, validaRegistroId, setMostrarModalConfirmacion],
   )
 
   useEffect(() => {
+    setGuard(checkLeaveAndConfirm)
+    return () => setGuard(null)
+  }, [setGuard, checkLeaveAndConfirm])
+
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (recetaId.current && validaRegistroId === 0) {
+        e.preventDefault()
+        e.returnValue =
+          "¿Estás seguro que deseas abandonar el registro de sub-receta? Se perderá la información cargada previamente"
+      }
+    }
+
     window.addEventListener("beforeunload", handleBeforeUnload)
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload)
-  }, [handleBeforeUnload])
 
-  // --- MANEJADORES DE EVENTOS ---
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload)
+    }
+  }, [recetaId.current, validaRegistroId])
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
+  const cargarHoteles = useCallback(async (sessionData: SessionData) => {
+    try {
+      const rolId = Number.parseInt(sessionData.RolId || "0", 10)
+      const hotelIdSesion = Number.parseInt(sessionData.HotelId || "0", 10)
+
+      let auxHotelid: number
+
+      if (![1, 2, 3, 4].includes(rolId)) {
+        auxHotelid = hotelIdSesion
+      } else {
+        auxHotelid = -1
+      }
+
+      let query = supabaseClient.from("hoteles").select("id, nombre")
+
+      if (auxHotelid !== -1) {
+        query = query.eq("id", auxHotelid)
+      }
+
+      const { data, error } = await query.order("nombre", { ascending: true })
+
+      if (error) {
+        console.error("Error al cargar hoteles:", error)
+        toast.error(`Error al cargar hoteles: ${error.message}`)
+        return
+      }
+
+      setHoteles(data || [])
+      if (data && data.length > 0) {
+        setDdlHotel(data[0].id.toString())
+      }
+    } catch (error: any) {
+      console.error("Error cargando hoteles:", error)
+      toast.error("Error al cargar hoteles")
+    }
+  }, [])
+
+  const cargarIngredientes = useCallback(async (hotelId: string) => {
+    try {
+      const { data, error } = await supabaseClient
+        .from("ingredientes")
+        .select("id, nombre, codigo, costo")
+        .eq("hotelid", Number(hotelId))
+        .eq("activo", true)
+        .order("nombre", { ascending: true })
+
+      if (error) {
+        console.error("Error al cargar ingredientes:", error)
+        toast.error("Error al cargar ingredientes")
+        return
+      }
+
+      setIngredientes(data || [])
+    } catch (error: any) {
+      console.error("Error cargando ingredientes:", error)
+      toast.error("Error al cargar ingredientes")
+    }
+  }, [])
+
+  const searchIngredientes = useCallback(async (hotelId: number, searchTerm: string): Promise<Ingrediente[]> => {
+    let query = supabaseClient.from("ingredientes").select("id, nombre, codigo, costo").eq("hotelid", hotelId)
+
+    if (searchTerm) {
+      const lowerCaseSearchTerm = searchTerm.toLowerCase()
+      query = query.or(`nombre.ilike.%${lowerCaseSearchTerm}%,codigo.ilike.%${lowerCaseSearchTerm}%`)
+    }
+
+    const { data, error } = await query.order("nombre", { ascending: true })
+    if (error) {
+      console.error("Error searching ingredientes:", error)
+      return []
+    }
+    return data || []
+  }, [])
+
+  const cargarUnidadesMedida = useCallback(async () => {
+    try {
+      const { data, error } = await supabaseClient.from("tipounidadmedida").select("id, descripcion, calculoconversion")
+
+      if (error) {
+        console.error("Error al cargar unidades de medida:", error)
+        toast.error("Error al cargar unidades de medida")
+        return
+      }
+
+      setUnidadesMedida(data || [])
+    } catch (error: any) {
+      console.error("Error cargando unidades de medida:", error)
+      toast.error("Error al cargar unidades de medida")
+    }
+  }, [])
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
     if (!file) {
       setImagenFile(null)
       setImagenPreview(null)
@@ -367,972 +372,853 @@ export default function NuevoRecetaPage() {
     }
   }
 
-  const handleRegistrarReceta = async () => {
-    if (!nombre || !descripcion) {
-      setErrorMessage("Favor de llenar la información faltante (Nombre y Descripción son obligatorios).")
+  const handleRemoveImage = () => {
+    setImagenFile(null)
+    setImagenPreview(null)
+    urlName.current = null
+    toast.info("Imagen eliminada")
+  }
+
+  const btnRegistrarReceta = async () => {
+    if (!txtNombreRecetaNuevo.trim() || !txtNotasReceta.trim() || !ddlHotel) {
+      setErrorMessage("Favor de llenar la información faltante.")
       setShowErrorDialog(true)
       return
     }
 
-    setIsSubmitting(true)
-    const formData = new FormData()
-    formData.append("nombre", nombre)
-    formData.append("descripcion", descripcion)
-    formData.append("instruccionespreparacion", instrucciones || "") // Se envía vacío si no hay valor
-    formData.append("tiempopreparacion", tiempo || "") // Se envía vacío si no hay valor
-    if (imagenFile) {
-      formData.append("imagen", imagenFile)
-    }
+    try {
+      let currentUrlName: string | null = null
 
-    const result = await actions.registrarRecetaBasica(formData)
-    if (result.success && result.recetaId) {
-      setRecetaId(result.recetaId)
-      toast.success("Información básica guardada. Continue con el siguiente paso.")
-      setEtapa(2)
-    } else {
-      setErrorMessage(result.error || "Ocurrió un error al registrar la receta.")
-      setShowErrorDialog(true)
+      if (imagenFile) {
+        const bucketName = "imagenes"
+        const timestamp = Date.now()
+        const randomString = Math.random().toString(36).substring(2, 15)
+        const fileExtension = imagenFile.name.split(".").pop()
+        const filePath = `Recetas/receta_${timestamp}_${randomString}.${fileExtension}`
+
+        const { data: uploadData, error: uploadError } = await supabaseClient.storage
+          .from(bucketName)
+          .upload(filePath, imagenFile)
+
+        if (uploadError) throw new Error(`Error al subir imagen: ${uploadError.message}`)
+
+        const { data: publicUrlData } = supabaseClient.storage.from(bucketName).getPublicUrl(uploadData.path)
+        currentUrlName = publicUrlData.publicUrl
+        urlName.current = currentUrlName
+      }
+
+      const { data: insertData, error: insertError } = await supabaseClient
+        .from("recetas")
+        .insert({
+          nombre: txtNombreRecetaNuevo,
+          notaspreparacion: txtNotasReceta,
+          costo: null,
+          activo: true,
+          fechacreacion: new Date().toISOString(),
+          imgurl: currentUrlName,
+          cantidad: null,
+          unidadbaseid: null,
+        })
+        .select("id")
+        .single()
+
+      if (insertError) throw new Error(`Error al registrar receta: ${insertError.message}`)
+      if (!insertData) throw new Error("No se pudo obtener el ID de la receta creada.")
+
+      recetaId.current = insertData.id
+
+      setEtapa1Bloqueada(true)
+      setEtapaActual(2)
+      toast.success("Información básica registrada. Agregue los ingredientes.")
+    } catch (error: any) {
+      toast.error(error.message)
     }
-    setIsSubmitting(false)
   }
 
-  const handleContinuarEtapa2 = () => {
-    if (!menuId) {
-      toast.error("Debe seleccionar un menú.")
-      return
+  const cargarIngredientesReceta = useCallback(async () => {
+    if (!recetaId.current) return
+
+    try {
+      const { data, error } = await supabaseClient
+        .from("ingredientesxreceta")
+        .select(`
+  id,
+  ingredienteid,
+  cantidad,
+  ingredientecostoparcial,
+  ingredientes (
+    nombre
+  )
+`)
+        .eq("recetaid", recetaId.current)
+
+      if (error) {
+        console.error("Error al cargar ingredientes de la receta:", error)
+        toast.error("Error al cargar ingredientes de la receta")
+        return
+      }
+
+      const ingredientesFormateados = (data || []).map((item) => ({
+        id: item.id,
+        ingredienteId: item.ingredienteid,
+        nombre: item.ingredientes?.nombre || "N/A",
+        cantidad: item.cantidad,
+        ingredientecostoparcial: item.ingredientecostoparcial,
+      }))
+      setIngredientesReceta(ingredientesFormateados)
+    } catch (error: any) {
+      console.error("Error cargando ingredientes de receta:", error)
+      toast.error("Error al cargar ingredientes de la receta")
     }
-    const menu = menus.find((m) => m.id.toString() === menuId)
-    setMenuNom(menu?.nombre || "")
-    setEtapa(3)
-  }
+  }, [])
 
   const handleIngredienteSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const term = e.target.value
     setIngredienteSearchTerm(term)
-    // Si el usuario empieza a escribir después de haber seleccionado un ingrediente,
-    // se asume que quiere buscar uno nuevo, así que se limpia el ID seleccionado.
-    const selectedIng = ingredientes.find((i) => i.id.toString() === selIngredienteId)
-    if (selIngredienteId && selectedIng && term !== `${selectedIng.codigo} - ${selectedIng.nombre}`) {
-      setSelIngredienteId("")
+    const selectedIng =
+      ingredientes.find((i) => i.id.toString() === ddlIngredientes) ||
+      filteredIngredientes.find((i) => i.id.toString() === ddlIngredientes)
+    if (term === "") {
+      // Si el término de búsqueda está vacío, limpiar selección
+      setDdlIngredientes("")
+      setTxtCostoIngrediente("")
+    } else if (ddlIngredientes && selectedIng && term !== `${selectedIng.codigo} - ${selectedIng.nombre}`) {
+      setDdlIngredientes("")
+      setTxtCostoIngrediente("")
     }
   }
 
   const handleSelectIngredienteFromDropdown = (ing: Ingrediente) => {
-    setSelIngredienteId(ing.id.toString())
+    setDdlIngredientes(ing.id.toString())
     setIngredienteSearchTerm(`${ing.codigo} - ${ing.nombre}`)
+    setTxtCostoIngrediente(ing.costo?.toString() || "0")
     setShowIngredienteDropdown(false)
   }
 
-  const handleAgregarIngrediente = async () => {
-    if (!selIngredienteId || !selIngredienteCantidad || !selIngredienteUnidad) {
-      setErrorMessage("Favor de llenar la información faltante del ingrediente.")
+  const btnAgregarIngrediente = async () => {
+    if (!ddlIngredientes || !txtCantidadIngrediente || !ddlUnidadMedida) {
+      setErrorMessage("Favor de llenar la información faltante")
       setShowErrorDialog(true)
       return
     }
 
-    setIsSubmitting(true)
-    const result = await actions.agregarIngrediente(
-      recetaId!,
-      Number(selIngredienteId),
-      Number(selIngredienteCantidad),
-      Number(selIngredienteUnidad),
-    )
-
-    if (result.success && result.ingredientes) {
-      setIngredientesAgregados(result.ingredientes)
-      toast.success("Ingrediente agregado.")
-      // Limpiar inputs
-      setSelIngredienteId("") // Esto activará el useEffect para limpiar ingredienteSearchTerm
-      setSelIngredienteCantidad("")
-      setSelIngredienteUnidad("")
-      setSelIngredienteCosto("")
-    } else {
-      // Si el error es el de duplicidad, mostrar el AlertDialog
-      if (result.error === "No es posible agregar este ingrediente, puesto que ya se encuentra agregado a la receta.") {
-        setShowDuplicateIngredienteModal(true)
-      } else {
-        setErrorMessage(result.error || "No se pudo agregar el ingrediente.")
-        setShowErrorDialog(true)
-      }
-    }
-    setIsSubmitting(false)
-  }
-
-  // NUEVO MANEJADOR: Para el input numérico de cantidad de sub-receta
-  const handleCantidadRecetaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let value = Number(e.target.value)
-    if (isNaN(value) || value < 1) {
-      value = 1
-    }
-    if (value > maxRangeReceta) {
-      value = maxRangeReceta
-    }
-    setSelRecetaCantidad(value.toString())
-    setSelRecetaCant(value.toString()) // Sincronizar con el input de rango
-  }
-
-  // NUEVO MANEJADOR: Para el input de rango de cantidad de sub-receta
-  const handleCantRecetaRangeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value
-    setSelRecetaCant(value)
-    setSelRecetaCantidad(value) // Sincronizar con el input numérico
-  }
-
-  const handleAgregarReceta = async () => {
-    if (!selRecetaId || !selRecetaCantidad || Number(selRecetaCantidad) < 1) {
-      toast.error("Favor de seleccionar una sub-receta e ingresar una cantidad válida.")
+    if (!recetaId.current) {
+      toast.error("Error: ID de receta no disponible. Vuelve a la etapa 1.")
       return
     }
-    if (Number(selRecetaCantidad) > maxRangeReceta) {
-      toast.error(`La cantidad no puede ser mayor a la cantidad base de la sub-receta (${maxRangeReceta}).`)
-      return
-    }
-
-    setIsSubmitting(true)
-    const result = await actions.agregarReceta(recetaId!, Number(selRecetaId), Number(selRecetaCantidad))
-
-    if (result.success && result.recetas) {
-      setRecetasAgregadas(result.recetas)
-      toast.success("Sub-Receta agregada.")
-      setSelRecetaId("")
-      setSelRecetaCosto("")
-      setSelRecetaCantidad("1") // Reset
-      setSelRecetaCant("1") // Reset
-      setSelRecetaUnidadBase("") // Reset
-      setMaxRangeReceta(1) // Reset
-    } else {
-      // Si el error es el de duplicidad, mostrar el AlertDialog
-      if (result.error === "No es posible agregar esta Sub-Receta, puesto que ya se encuentra agregada a la receta.") {
-        setShowDuplicateRecetaModal(true)
-      } else {
-        toast.error(result.error || "No se pudo agregar la sub-receta.")
-      }
-    }
-    setIsSubmitting(false)
-  }
-
-  const handleEliminarIngrediente = async (ingredienteXRecetaId: number) => {
-    setIsSubmitting(true)
-    const result = await actions.eliminarIngredienteDeReceta(recetaId!, ingredienteXRecetaId)
-
-    if (result.success) {
-      setIngredientesAgregados((prev) => prev.filter((i) => i.id !== ingredienteXRecetaId))
-      toast.success("Ingrediente eliminado de la receta.")
-    } else {
-      toast.error(result.error || "No se pudo eliminar el ingrediente de la receta.")
-    }
-    setIsSubmitting(false)
-  }
-
-  const handleEliminarReceta = async (IdToDelete: number) => {
-    setIsSubmitting(true)
-    const result = await actions.eliminarRecetaDeReceta(recetaId!, IdToDelete)
-
-    if (result.success) {
-      console.log("Se elimino la subreceta")
-      setRecetasAgregadas((prev) => prev.filter((r) => r.id !== IdToDelete))
-      toast.success("Sub-Receta eliminada de la receta.")
-    } else {
-      toast.error(result.error || "No se pudo eliminar la sub-receta de la receta.")
-      console.log(result.error)
-    }
-    setIsSubmitting(false)
-  }
-
-  const handleRegistroCompleto = async () => {
-    if (!menuNom) {
-      toast.error("La receta no se encuentra asignada a ningun Menu, favor de llenar la informacion.")
-      return
-    }
-
-    setIsSubmitting(true)
-    setShowCookingAnimation(true) // Mostrar la animación de cocinando
 
     try {
-      // Ejecutar la acción y el temporizador de 6 segundos en paralelo
-      const [result] = await Promise.all([
-        actions.finalizarRegistro(recetaId!, Number(menuId)),
-        new Promise((resolve) => setTimeout(resolve, 6000)), // Mínimo 6 segundos de animación
+      const { data: existingIngrediente, error: checkError } = await supabaseClient
+        .from("ingredientesxreceta")
+        .select("id")
+        .eq("recetaid", recetaId.current)
+        .eq("ingredienteid", Number.parseInt(ddlIngredientes))
+        .single()
+
+      if (checkError && checkError.code !== "PGRST116") {
+        console.error("Error al verificar ingrediente existente:", checkError)
+        toast.error("Error al verificar ingrediente existente: " + checkError.message)
+        return
+      }
+
+      if (existingIngrediente) {
+        setMostrarModalIngredienteDuplicado(true)
+        return
+      }
+
+      let CalculoConversion = 1
+
+      const unidadSeleccionada = unidadesMedida.find((u) => u.id.toString() === ddlUnidadMedida)
+      if (unidadSeleccionada && unidadSeleccionada.calculoconversion !== null) {
+        CalculoConversion = unidadSeleccionada.calculoconversion
+      } else {
+        toast.error("No se pudo obtener el factor de conversión para la unidad de medida seleccionada.")
+        return
+      }
+
+      const cantidad = Number.parseFloat(txtCantidadIngrediente)
+      const costoUnitario = Number.parseFloat(txtCostoIngrediente)
+      const costoParcial = cantidad * CalculoConversion * costoUnitario
+
+      const { error: insertError } = await supabaseClient.from("ingredientesxreceta").insert({
+        recetaid: recetaId.current,
+        ingredienteid: Number.parseInt(ddlIngredientes),
+        cantidad: cantidad,
+        ingredientecostoparcial: costoParcial,
+        activo: true,
+        fechacreacion: new Date().toISOString(),
+        fechamodificacion: new Date().toISOString(),
+      })
+
+      if (insertError) {
+        console.error("Error al agregar ingrediente:", insertError)
+        toast.error(`Error al agregar ingrediente: ${insertError.message}`)
+        return
+      }
+
+      await cargarIngredientesReceta()
+
+      setDdlIngredientes("")
+      setIngredienteSearchTerm("")
+      setTxtCantidadIngrediente("")
+      setTxtCostoIngrediente("")
+      setDdlUnidadMedida("")
+      setIsUnidadMedidaDisabled(false)
+
+      toast.success("Ingrediente agregado")
+    } catch (error: any) {
+      console.error("Error inesperado al agregar ingrediente:", error)
+      toast.error("Error inesperado al agregar ingrediente")
+    }
+  }
+
+  const handleEliminarIngredienteReceta = async (ingredienteIdToDelete: number) => {
+    if (!recetaId.current) {
+      toast.error("Error: ID de receta no disponible para eliminar ingrediente.")
+      return
+    }
+
+    try {
+      const { error } = await supabaseClient
+        .from("ingredientesxreceta")
+        .delete()
+        .eq("recetaid", recetaId.current)
+        .eq("ingredienteid", ingredienteIdToDelete)
+
+      if (error) {
+        console.error("Error al eliminar ingrediente de la receta:", error)
+        toast.error(`Error al eliminar ingrediente: ${error.message}`)
+        return
+      }
+
+      toast.success("Ingrediente eliminado de la sub-receta.")
+      await cargarIngredientesReceta()
+    } catch (error: any) {
+      console.error("Error inesperado al eliminar ingrediente:", error)
+      toast.error("Error inesperado al eliminar ingrediente.")
+    }
+  }
+
+  const btnRegistroCompletoReceta = async () => {
+    if (!recetaId.current) {
+      toast.error("Error: ID de receta no disponible.")
+      return
+    }
+
+    setShowLoadingAnimation(true)
+
+    try {
+      const [sumDataResult] = await Promise.all([
+        supabaseClient.from("ingredientesxreceta").select("ingredientecostoparcial").eq("recetaid", recetaId.current),
+        new Promise((resolve) => setTimeout(resolve, 5000)),
       ])
 
-      if (result.success) {
-        setValidaRegistroId(1)
-        setEtapa(5) // Cambiar a la nueva Etapa 5
-      } else {
-        toast.error(result.error || "Error al finalizar el registro.")
+      const { data: sumData, error: sumError } = sumDataResult
+
+      if (sumError) {
+        console.error("Error al obtener suma de costos:", sumError)
+        toast.error(`Error al calcular costo total: ${sumError.message}`)
+        return
       }
-    } catch (error) {
-      console.error("Error al finalizar el registro:", error)
-      toast.error("Ocurrió un error inesperado al finalizar el registro.")
+
+      const costoTotal = (sumData || []).reduce((sum, item) => sum + (item.ingredientecostoparcial || 0), 0)
+
+      const { error: updateError } = await supabaseClient
+        .from("recetas")
+        .update({
+          costo: costoTotal,
+          cantidad: Number.parseFloat(txtCantidadSubReceta),
+          unidadbaseid: Number.parseInt(ddlUnidadBaseSubReceta),
+        })
+        .eq("id", recetaId.current)
+
+      if (updateError) {
+        console.error("Error al actualizar costo de receta:", updateError)
+        toast.error(`Error al actualizar costo de receta: ${updateError.message}`)
+        return
+      }
+
+      toast.success("Platillo registrado correctamente")
+
+      setValidaRegistroId(1)
+    } catch (error: any) {
+      console.error("Error inesperado al completar registro:", error)
+      toast.error("Error inesperado al completar el registro")
     } finally {
-      setShowCookingAnimation(false) // Ocultar la animación
-      setIsSubmitting(false)
+      setShowLoadingAnimation(false)
+      setMostrarModalExito(true)
     }
   }
 
-  // Esta función es llamada por el AlertDialog y resuelve la promesa de navegación
-  const handleLeavePage = useCallback(
-    async (confirm: boolean) => {
-      setShowLeaveConfirm(false) // Cerrar el modal
-      if (confirm) {
-        if (recetaId) {
-          const result = await actions.cancelarRegistro(recetaId)
-          if (result.success) {
-            toast.info("Registro cancelado y datos depurados.")
-          } else {
-            toast.error(result.error || "Error al cancelar el registro y depurar datos.")
+  const btnRegresarReceta = async () => {
+    const canProceed = await attemptNavigation("/recetas")
+    if (canProceed) {
+      router.push("/recetas")
+    }
+  }
+
+  const manejarConfirmacionSalida = async () => {
+    if (recetaId.current) {
+      try {
+        await supabaseClient.from("ingredientesxreceta").delete().eq("recetaid", recetaId.current)
+
+        if (validaRegistroId === 0) {
+          await supabaseClient.from("recetas").delete().eq("id", recetaId.current)
+          if (urlName.current) {
+            const bucketName = "imagenes"
+            const pathInBucket = urlName.current.split(`${bucketName}/`)[1]
+            if (pathInBucket) {
+              await supabaseClient.storage.from(bucketName).remove([pathInBucket])
+            }
           }
         }
-        resolveNavigationRef.current?.(true) // Resolver la promesa con true (proceder)
-      } else {
-        resolveNavigationRef.current?.(false) // Resolver la promesa con false (cancelar)
+      } catch (error) {
+        console.error("Error al limpiar datos:", error)
+        toast.error("Error al limpiar datos incompletos.")
       }
-      resolveNavigationRef.current = null // Limpiar la referencia
-    },
-    [recetaId],
-  )
-
-  // Esta es la función que se registra en el NavigationGuardContext
-  const checkLeaveAndConfirm = useCallback(
-    async (targetPath: string): Promise<boolean> => {
-      if (recetaId && validaRegistroId === 0) {
-        return new Promise<boolean>((resolve) => {
-          resolveNavigationRef.current = resolve // Almacenar la función resolve de la promesa
-          setShowLeaveConfirm(true) // Mostrar el modal
-          setNextPath(targetPath) // Guardar la ruta a la que se intenta navegar
-        })
-      }
-      return true // No hay proceso incompleto, se puede navegar libremente
-    },
-    [recetaId, validaRegistroId],
-  )
-
-  // Efecto para registrar/desregistrar la guardia de navegación en el contexto
-  useEffect(() => {
-    if (recetaId !== null && validaRegistroId === 0) {
-      // Si hay una receta en proceso y no está validada como completa
-      setGuard(checkLeaveAndConfirm)
-    } else {
-      // Si no hay proceso o ya está completo, desregistrar la guardia
-      setGuard(null)
     }
-    // Limpiar al desmontar el componente
-    return () => {
-      setGuard(null)
+
+    setMostrarModalConfirmacion(false)
+    if (navegacionPendiente.current) {
+      router.push(navegacionPendiente.current)
+      navegacionPendiente.current = null
     }
-  }, [recetaId, validaRegistroId, setGuard, checkLeaveAndConfirm])
-
-  // --- RENDERIZADO ---
-
-  if (loading) {
-    return <Loading />
   }
 
-  const progressValue = (etapa / 5) * 100 // Ajustar el cálculo del progreso para 5 etapas
+  const manejarCancelarSalida = () => {
+    setMostrarModalConfirmacion(false)
+    navegacionPendiente.current = null
+  }
+
+  const manejarModalExito = () => {
+    setMostrarModalExito(false)
+    router.push("/recetas")
+  }
+
+  const manejarModalIngredienteDuplicado = () => {
+    setMostrarModalIngredienteDuplicado(false)
+  }
+
+  const btnAnterior = () => {
+    if (etapaActual > 1) setEtapaActual(etapaActual - 1)
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    )
+  }
 
   return (
-    <Suspense fallback={<Loading />}>
-      <div className="container mx-auto max-w-5xl p-6">
-        {/* Modal de confirmación de abandono */}
-        <AlertDialog open={showLeaveConfirm} onOpenChange={setShowLeaveConfirm}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>¿Estás seguro que deseas abandonar el registro de receta?</AlertDialogTitle>
-              <AlertDialogDescription>Se perderá la información cargada previamente.</AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => handleLeavePage(false)}>Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={() => handleLeavePage(true)}>Aceptar</AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-
-        {/* Modal de éxito de registro (Mantenido según la solicitud) */}
-        <AlertDialog open={showSuccessModal} onOpenChange={setShowSuccessModal}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>¡Registro Exitoso!</AlertDialogTitle>
-              <AlertDialogDescription>Receta registrada exitosamente.</AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogAction onClick={() => router.push("/recetas")}>Aceptar</AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-
-        {/* Modal de duplicidad de sub-receta */}
-        <AlertDialog open={showDuplicateRecetaModal} onOpenChange={setShowDuplicateRecetaModal}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Error al agregar Sub-Receta</AlertDialogTitle>
-              <AlertDialogDescription>
-                No es posible agregar esta Sub-Receta, puesto que ya se encuentra agregada a la receta.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogAction onClick={() => setShowDuplicateRecetaModal(false)}>Aceptar</AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-
-        {/* Nuevo Modal de duplicidad de ingrediente */}
-        <AlertDialog open={showDuplicateIngredienteModal} onOpenChange={setShowDuplicateIngredienteModal}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Error al agregar Ingrediente</AlertDialogTitle>
-              <AlertDialogDescription>
-                No es posible agregar este ingrediente, puesto que ya se encuentra agregado a la receta.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogAction onClick={() => setShowDuplicateIngredienteModal(false)}>Aceptar</AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-
-        {/* Nuevo Modal de error de validación (para handleRegistrarReceta y handleAgregarIngrediente) */}
-        <AlertDialog open={showErrorDialog} onOpenChange={setShowErrorDialog}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Error de Validación</AlertDialogTitle>
-              <AlertDialogDescription>{errorMessage}</AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogAction onClick={() => setShowErrorDialog(false)}>Aceptar</AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-
-        {/* Animación de cocinando */}
-        {showCookingAnimation && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-            <div className="flex flex-col items-center justify-center p-8 bg-white rounded-lg shadow-xl">
-              <div className="relative w-24 h-24 mb-4">
-                <Image
-                  src="https://nxtrsibnomdqmzcrwedc.supabase.co/storage/v1/object/public/imagenes/AnimationGif/RegistroReceta.gif"
-                  alt="Cocinando"
-                  width={200}
-                  height={200}
-                  className="absolute inset-0 animate-bounce-slow" // Animación de rebote lento
-                />
-                {/*
-              <Loader2 className="absolute inset-0 m-auto h-12 w-12 animate-spin text-[#58e0be]" />{" "}
-              */}
-                {/* Icono giratorio */}
-              </div>
-              <p className="text-lg font-semibold text-gray-800">Cocinando tu receta...</p>
-              <p className="text-sm text-gray-600">Esto puede tomar unos segundos.</p>
+    <div className="container mx-auto p-6 max-w-5xl">
+      {showLoadingAnimation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="flex flex-col items-center justify-center p-8 bg-white rounded-lg shadow-xl">
+            <div className="relative w-24 h-24 mb-4">
+              <Image
+                src="https://nxtrsibnomdqmzcrwedc.supabase.co/storage/v1/object/public/imagenes/AnimationGif/RegistrarSubReceta.gif"
+                alt="Procesando..."
+                width={400}
+                height={400}
+                unoptimized
+                className="absolute inset-0 animate-bounce-slow"
+              />
             </div>
-          </div>
-        )}
-
-        <div className="mb-6 flex items-center justify-between">
-          <h1 className="text-3xl font-bold">Registro de nueva receta</h1>
-          {/* El botón "Regresar" ahora simplemente llama a router.push,
-            la intercepción la manejará el NavigationGuardProvider */}
-          {/*<Button id="btnRegresar" name="btnRegresar" variant="outline" onClick={() => router.push("/recetas")}>
-          <ArrowLeft className="mr-2 h-4 w-4" /> Regresar
-        </Button>*/}
-        </div>
-
-        <div className="mb-8">
-          <Progress value={progressValue} className="h-2 [&>*]:bg-[#58e0be]" />
-          <div className="mt-2 grid grid-cols-5 text-center text-sm">
-            {" "}
-            {/* Ajustado a 5 columnas */}
-            <div className={etapa >= 1 ? "font-bold text-[#58e0be]" : "text-muted-foreground"}>Info. Básica</div>
-            <div className={etapa >= 2 ? "font-bold text-[#58e0be]" : "text-muted-foreground"}>Asignar Menú</div>
-            <div className={etapa >= 3 ? "font-bold text-[#58e0be]" : "text-muted-foreground"}>Contenido</div>
-            <div className={etapa >= 4 ? "font-bold text-[#58e0be]" : "text-muted-foreground"}>Resumen</div>
-            <div className={etapa >= 5 ? "font-bold text-[#58e0be]" : "text-muted-foreground"}>Finalizado</div>{" "}
-            {/* Nueva etapa */}
+            <p className="text-lg font-semibold text-gray-800">Registrando Sub-receta...</p>
+            <p className="text-sm text-gray-600">Esto puede tomar unos segundos.</p>
           </div>
         </div>
+      )}
 
-        {/* --- ETAPA 1: INFORMACIÓN BÁSICA --- */}
-        {etapa === 1 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Etapa 1: Información Básica de la Receta</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="txtNombreRecetaNuevo">Nombre Receta *</Label>
-                    <Input
-                      id="txtNombreRecetaNuevo"
-                      name="txtNombreRecetaNuevo"
-                      value={nombre}
-                      onChange={(e) => setNombre(e.target.value)}
-                      maxLength={150}
-                      disabled={recetaId !== null}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="txtDescripcionReceta">Descripción *</Label>
-                    <Textarea
-                      id="txtDescripcionReceta"
-                      name="txtDescripcionReceta"
-                      value={descripcion}
-                      onChange={(e) => setDescripcion(e.target.value)}
-                      maxLength={150}
-                      rows={4}
-                      disabled={recetaId !== null}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="txtRecetaInstrucciones">Instrucciones de Elaboración</Label>
-                    <Textarea
-                      id="txtRecetaInstrucciones"
-                      name="txtRecetaInstrucciones"
-                      value={instrucciones}
-                      onChange={(e) => setInstrucciones(e.target.value)}
-                      rows={4}
-                      disabled={recetaId !== null}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="txtRecetaTiempo">Tiempo Preparación (minutos)</Label>
-                    <Input
-                      id="txtRecetaTiempo"
-                      name="txtRecetaTiempo"
-                      type="number"
-                      value={tiempo}
-                      onChange={(e) => setTiempo(e.target.value)}
-                      disabled={recetaId !== null}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="ImagenFile">Cargar Imagen (Opcional: .jpg, &lt;10MB, 500x500px)</Label>
-                  <div className="flex h-64 w-full items-center justify-center rounded-md border-2 border-dashed">
-                    {imagenPreview ? (
-                      <img
-                        src={imagenPreview || "/placeholder.svg"}
-                        alt="Vista previa"
-                        className="h-full w-full object-contain"
-                      />
-                    ) : (
-                      <div className="text-center">
-                        <UploadCloud className="mx-auto h-12 w-12 text-gray-400" />
-                        <p>Arrastra o selecciona una imagen</p>
-                      </div>
-                    )}
-                  </div>
+      {/* AlertDialog para errores */}
+      <AlertDialog open={showErrorDialog} onOpenChange={setShowErrorDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Error de Validación</AlertDialogTitle>
+            <AlertDialogDescription>{errorMessage}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setShowErrorDialog(false)}>Aceptar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={mostrarModalConfirmacion} onOpenChange={setMostrarModalConfirmacion}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Estás seguro que deseas abandonar el registro de sub-receta?</AlertDialogTitle>
+            <AlertDialogDescription>Se perderá la información cargada previamente.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={manejarCancelarSalida}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={manejarConfirmacionSalida}>Aceptar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={mostrarModalExito} onOpenChange={setMostrarModalExito}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sub-Receta registrada exitosamente.</AlertDialogTitle>
+            <AlertDialogDescription>
+              La sub-receta ha sido registrada correctamente con todos sus ingredientes y costo calculado.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={manejarModalExito}>Aceptar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={mostrarModalIngredienteDuplicado} onOpenChange={setMostrarModalIngredienteDuplicado}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Ingrediente Duplicado</AlertDialogTitle>
+            <AlertDialogDescription>
+              No puedes agregar este ingrediente, ya que ya está incluido.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={manejarModalIngredienteDuplicado}>Aceptar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={mostrarModalFaltanDatosEtapa2} onOpenChange={setMostrarModalFaltanDatosEtapa2}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Datos Faltantes</AlertDialogTitle>
+            <AlertDialogDescription>
+              Por favor, ingresa la cantidad y selecciona la unidad base de la sub-receta para poder continuar.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setMostrarModalFaltanDatosEtapa2(false)}>Aceptar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center space-x-4">
+          <Button
+            onClick={btnRegresarReceta}
+            variant="outline"
+            size="sm"
+            type="button"
+            id="btnRegresarReceta"
+            name="btnRegresarReceta"
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" /> Regresar
+          </Button>
+          <h1 className="text-3xl font-bold">Registro de nueva Sub-Receta</h1>
+        </div>
+      </div>
+
+      <div className="mb-8">
+        <div className="w-full bg-gray-200 rounded-full h-3">
+          <div
+            className="h-3 rounded-full transition-all duration-500"
+            style={{ width: `${(etapaActual / 3) * 100}%`, backgroundColor: "#ade06e" }}
+          />
+        </div>
+        <p className="text-right text-sm text-muted-foreground mt-1">Etapa {etapaActual} de 3</p>
+      </div>
+
+      {etapaActual > 1 && (
+        <Button onClick={btnAnterior} variant="secondary" size="sm" className="mb-4">
+          Anterior
+        </Button>
+      )}
+
+      {etapaActual === 1 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Etapa 1: Registrar información básica de la sub-receta</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="txtNombreRecetaNuevo">Nombre de la Sub-Receta</Label>
                   <Input
-                    id="ImagenFile"
-                    name="ImagenFile"
-                    type="file"
-                    accept="image/jpeg, image/jpg, image/png, image/webp" // Aceptar más formatos si el backend los soporta
-                    onChange={handleFileUpload}
-                    className="mt-2"
-                    disabled={recetaId !== null || isUploadingImage}
+                    type="text"
+                    id="txtNombreRecetaNuevo"
+                    name="txtNombreRecetaNuevo"
+                    maxLength={150}
+                    value={txtNombreRecetaNuevo}
+                    onChange={(e) => setTxtNombreRecetaNuevo(e.target.value)}
+                    disabled={etapa1Bloqueada}
                   />
-                  {isUploadingImage && (
-                    <div className="flex items-center text-sm text-muted-foreground">
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Subiendo imagen...
-                    </div>
-                  )}
                 </div>
-              </div>
-            </CardContent>
-            <CardFooter className="justify-end">
-              <Button
-                id="btnRegistrarReceta"
-                name="btnRegistrarReceta"
-                onClick={handleRegistrarReceta}
-                disabled={isSubmitting || recetaId !== null || isUploadingImage}
-              >
-                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Registrar y Continuar
-              </Button>
-            </CardFooter>
-          </Card>
-        )}
-
-        {/* --- ETAPA 2: ASIGNAR A MENÚ --- */}
-        {etapa === 2 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Etapa 2: Asignar a un Menú</CardTitle>
-              <CardDescription>Es requerido asignar la receta a un Menú para su completo registro.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <div>
+                  <Label htmlFor="txtNotasReceta">Notas de Preparación</Label>
+                  <Textarea
+                    id="txtNotasReceta"
+                    name="txtNotasReceta"
+                    maxLength={150}
+                    value={txtNotasReceta}
+                    onChange={(e) => setTxtNotasReceta(e.target.value)}
+                    disabled={etapa1Bloqueada}
+                    rows={6}
+                    className="min-h-[120px]"
+                  />
+                </div>
                 <div>
                   <Label htmlFor="ddlHotel">Hotel</Label>
-                  <Select value={hotelId} onValueChange={setHotelId}>
-                    <SelectTrigger id="ddlHotel" name="ddlHotel">
-                      <SelectValue />
+                  <Select name="ddlHotel" value={ddlHotel} onValueChange={setDdlHotel} disabled={etapa1Bloqueada}>
+                    <SelectTrigger id="ddlHotel">
+                      <SelectValue placeholder="Seleccionar hotel" />
                     </SelectTrigger>
                     <SelectContent>
-                      {hoteles.map((h) => (
-                        <SelectItem key={h.id} value={h.id.toString()}>
-                          {h.nombre}
+                      {hoteles.map((hotel) => (
+                        <SelectItem key={hotel.id} value={hotel.id.toString()}>
+                          {hotel.nombre}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-                <div>
-                  <Label htmlFor="ddlRestaurante">Restaurante</Label>
-                  <Select value={restauranteId} onValueChange={setRestauranteId} disabled={!hotelId}>
-                    <SelectTrigger id="ddlRestaurante" name="ddlRestaurante">
-                      <SelectValue placeholder="Seleccione..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {restaurantes.map((r) => (
-                        <SelectItem key={r.id} value={r.id.toString()}>
-                          {r.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="ddlMenu">Menú</Label>
-                  <Select value={menuId} onValueChange={setMenuId} disabled={!restauranteId}>
-                    <SelectTrigger id="ddlMenu" name="ddlMenu">
-                      <SelectValue placeholder="Seleccione..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {menus.map((m) => (
-                        <SelectItem key={m.id} value={m.id.toString()}>
-                          {m.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </CardContent>
-            <CardFooter className="flex justify-between">
-              {/*<Button variant="outline" onClick={() => setEtapa(1)}>
-              Anterior
-            </Button>*/}
-              <Button id="btnContinuar" name="btnContinuar" onClick={handleContinuarEtapa2} disabled={!menuId}>
-                Continuar
-              </Button>
-            </CardFooter>
-          </Card>
-        )}
-
-        {/* --- ETAPA 3: CONTENIDO --- */}
-        {etapa === 3 && (
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Agregar Ingredientes</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                  <div className="md:col-span-2 relative">
-                    {" "}
-                    {/* Añadido relative para el posicionamiento del dropdown */}
-                    <Label htmlFor="txtIngredienteSearch">Ingrediente</Label>
-                    <Input
-                      id="txtIngredienteSearch"
-                      name="txtIngredienteSearch"
-                      value={ingredienteSearchTerm}
-                      onChange={handleIngredienteSearchChange}
-                      onFocus={() =>
-                        ingredienteSearchTerm.length >= 2 &&
-                        filteredIngredientes.length > 0 &&
-                        setShowIngredienteDropdown(true)
-                      }
-                      onBlur={() => setTimeout(() => setShowIngredienteDropdown(false), 100)} // Pequeño delay para permitir el click
-                      placeholder="Buscar por código o nombre..."
-                      autoComplete="off"
-                    />
-                    {showIngredienteDropdown && filteredIngredientes.length > 0 && (
-                      <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-y-auto mt-1">
-                        {filteredIngredientes.map((ing) => (
-                          <div
-                            key={ing.id}
-                            className="px-4 py-2 cursor-pointer hover:bg-gray-100"
-                            onMouseDown={() => handleSelectIngredienteFromDropdown(ing)} // Usar onMouseDown
-                          >
-                            {ing.codigo} - {ing.nombre}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <Label htmlFor="txtCantidadIngrediente">Cantidad</Label>
-                    <Input
-                      id="txtCantidadIngrediente"
-                      name="txtCantidadIngrediente"
-                      type="number"
-                      value={selIngredienteCantidad}
-                      onChange={(e) => setSelIngredienteCantidad(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="ddlUnidadMedida">Unidad</Label>
-                    <Select
-                      value={selIngredienteUnidad}
-                      onValueChange={setSelIngredienteUnidad}
-                      disabled={!selIngredienteId || unidades.length === 0} // Deshabilitar si no hay ingrediente o unidades
-                    >
-                      <SelectTrigger id="ddlUnidadMedida" name="ddlUnidadMedida">
-                        <SelectValue placeholder="Seleccione..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {unidades.map((u) => (
-                          <SelectItem key={u.id} value={u.id.toString()}>
-                            {u.descripcion}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div>
-                  <Label htmlFor="txtCostoIngrediente">Costo Ingrediente</Label>
-                  <Input id="txtCostoIngrediente" name="txtCostoIngrediente" value={selIngredienteCosto} disabled />
-                </div>
-                <div className="flex justify-end">
-                  <Button
-                    id="btnAgregarIngrediente"
-                    name="btnAgregarIngrediente"
-                    onClick={handleAgregarIngrediente}
-                    disabled={isSubmitting}
-                  >
-                    {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Agregar Ingrediente
-                  </Button>
-                </div>
-                {ingredientesAgregados.length > 0 && (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Nombre</TableHead>
-                        <TableHead>Cantidad</TableHead>
-                        <TableHead>Unidad</TableHead>
-                        <TableHead className="text-right">Costo Parcial</TableHead>
-                        <TableHead>Acciones</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {ingredientesAgregados.map((i) => (
-                        <TableRow key={i.id}>
-                          <TableCell>{i.nombre}</TableCell>
-                          <TableCell>{i.cantidad}</TableCell>
-                          <TableCell>{i.unidad}</TableCell>
-                          <TableCell className="text-right">${i.ingredientecostoparcial.toFixed(2)}</TableCell>
-                          <TableCell>
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              onClick={() => handleEliminarIngrediente(i.id)}
-                              disabled={isSubmitting}
-                            >
-                              Eliminar
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Agregar Sub-Recetas</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-6">
-                  <div className="col-span-6">
-                    <Label htmlFor="ddlReceta">Sub-Receta</Label>
-                    <Select value={selRecetaId} onValueChange={setSelRecetaId}>
-                      <SelectTrigger
-                        id="ddlReceta"
-                        name="ddlReceta"
-                        className="flex h-10 w-96 items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1"
-                      >
-                        <SelectValue placeholder="Seleccione..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {recetas.map((r) => (
-                          <SelectItem key={r.id} value={r.id.toString()}>
-                            {r.nombre} {/* Revertido para mostrar el nombre de la receta */}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  {/* NUEVOS INPUTS PARA CANTIDAD Y UNIDAD BASE DE SUB-RECETA */}
-                  <div>
-                    <Label htmlFor="txtCantidad">Cantidad</Label>
-                    <Input
-                      id="txtCantidad"
-                      name="txtCantidad"
-                      type="number"
-                      value={selRecetaCantidad}
-                      onChange={handleCantidadRecetaChange}
-                      min="1"
-                      max={maxRangeReceta}
-                      disabled={!selRecetaId || maxRangeReceta === 0}
-                      className="flex h-10 w-32 rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <Label htmlFor="txtCant">Rango de Cantidad</Label>
-                    <Input
-                      id="txtCant"
-                      name="txtCant"
-                      type="range"
-                      value={selRecetaCant}
-                      onChange={handleCantRecetaRangeChange}
-                      min="1"
-                      max={maxRangeReceta}
-                      disabled={!selRecetaId || maxRangeReceta === 0}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="txtUnidadBase">Unidad Base</Label>
-                    <Input
-                      id="txtUnidadBase"
-                      name="txtUnidadBase"
-                      className="flex h-10 w-32 rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
-                      type="text"
-                      value={selRecetaUnidadBase}
-                      disabled
-                    />
-                  </div>
-                  {/* FIN NUEVOS INPUTS */}
-                  <div>
-                    <Label htmlFor="txtCostoReceta">Costo Sub-Receta</Label>
-                    <Input id="txtCostoReceta" name="txtCostoReceta" value={selRecetaCosto} disabled />
-                  </div>
-                </div>
-                <div className="flex justify-end">
-                  <Button
-                    id="btnAgregarReceta"
-                    name="btnAgregarReceta"
-                    onClick={handleAgregarReceta}
-                    disabled={
-                      isSubmitting ||
-                      !selRecetaId ||
-                      Number(selRecetaCantidad) < 1 ||
-                      Number(selRecetaCantidad) > maxRangeReceta
-                    }
-                  >
-                    {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Agregar Receta
-                  </Button>
-                </div>
-                {recetasAgregadas.length > 0 && (
-                  <Table className="mt-4">
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Nombre</TableHead>
-                        <TableHead className="text-right">Costo Parcial</TableHead>
-                        <TableHead className="text-right">Acciones</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {recetasAgregadas.map((r) => (
-                        <TableRow key={r.id}>
-                          <TableCell>{r.nombre}</TableCell>
-                          <TableCell className="text-right">${r.recetacostoparcial.toFixed(2)}</TableCell>
-                          <TableCell className="text-right">
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              onClick={() => handleEliminarReceta(r.id)}
-                              disabled={isSubmitting}
-                            >
-                              Eliminar
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </CardContent>
-            </Card>
-
-            <div className="flex justify-between">
-              <Button variant="outline" onClick={() => setEtapa(2)}>
-                Anterior
-              </Button>
-              <Button
-                id="btnContinuarIngrediente"
-                name="btnContinuarIngrediente"
-                onClick={() => setEtapa(4)}
-                disabled={ingredientesAgregados.length === 0 && recetasAgregadas.length === 0} // Habilitar si hay ingredientes O recetas
-              >
-                Continuar
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* --- ETAPA 4: RESUMEN --- */}
-        {etapa === 4 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Etapa 4: Resumen y Confirmación</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                <div>
-                  <h3 className="mb-2 font-semibold">Información de la Receta</h3>
-                  <div className="space-y-1 text-sm">
-                    <p>
-                      <strong>Nombre:</strong> {nombre}
-                    </p>
-                    <p>
-                      <strong>Descripción:</strong> {descripcion}
-                    </p>
-                    {instrucciones && (
-                      <p>
-                        <strong>Instrucciones:</strong> {instrucciones}
-                      </p>
-                    )}
-                    {tiempo && (
-                      <p>
-                        <strong>Tiempo:</strong> {tiempo} minutos
-                      </p>
-                    )}
-                    {imagenPreview && (
-                      <div className="mt-2">
-                        <strong>Imagen:</strong>
-                        <img
-                          src={imagenPreview || "/placeholder.svg"}
-                          alt="Vista previa"
-                          className="mt-1 h-24 w-24 object-cover rounded-md"
-                        />
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <h3 className="mb-2 font-semibold">Asignación</h3>
-                  <div className="space-y-1 text-sm">
-                    <p>
-                      <strong>Hotel:</strong> {hoteles.find((h) => h.id.toString() === hotelId)?.nombre}
-                    </p>
-                    <p>
-                      <strong>Restaurante:</strong>{" "}
-                      {restaurantes.find((r) => r.id.toString() === restauranteId)?.nombre}
-                    </p>
-                    <p>
-                      <strong>Menú:</strong> {menuNom}
-                    </p>
-                  </div>
                 </div>
               </div>
               <div>
-                <h3 className="mb-2 font-semibold">Contenido de la Receta</h3>
-                {ingredientesAgregados.length > 0 && (
-                  <>
-                    <h4 className="mb-1 font-medium">Ingredientes:</h4>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Nombre</TableHead>
-                          <TableHead>Cantidad</TableHead>
-                          <TableHead className="text-right">Costo Parcial</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {ingredientesAgregados.map((i) => (
-                          <TableRow key={i.id}>
-                            <TableCell>{i.nombre}</TableCell>
-                            <TableCell>{i.cantidad}</TableCell>
-                            <TableCell className="text-right">${i.ingredientecostoparcial.toFixed(2)}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </>
-                )}
-                {recetasAgregadas.length > 0 && (
-                  <>
-                    <h4 className="mt-4 mb-1 font-medium">Sub-Recetas:</h4>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Nombre</TableHead>
-                          <TableHead className="text-right">Costo Parcial</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {recetasAgregadas.map((r) => (
-                          <TableRow key={r.id}>
-                            <TableCell>{r.nombre}</TableCell>
-                            <TableCell className="text-right">${r.recetacostoparcial.toFixed(2)}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </>
-                )}
-                {ingredientesAgregados.length === 0 && recetasAgregadas.length === 0 && (
-                  <p className="text-muted-foreground">No se han agregado ingredientes ni sub-recetas.</p>
-                )}
+                <Label htmlFor="ImagenFile">Cargar Imagen (.jpg, &lt;25MB, max 500x500)</Label>
+                <div className="mt-2 flex justify-center rounded-lg border border-dashed border-gray-900/25 px-6 py-10">
+                  <div className="text-center">
+                    {imagenPreview ? (
+                      <div className="relative mx-auto h-32 w-32 object-cover rounded-md">
+                        <img
+                          src={imagenPreview || "/placeholder.svg"}
+                          alt="Vista previa"
+                          className="h-full w-full object-cover rounded-md"
+                        />
+                        <Button
+                          variant="destructive"
+                          size="icon"
+                          className="absolute -top-2 -right-2 h-6 w-6 rounded-full"
+                          onClick={handleRemoveImage}
+                          disabled={etapa1Bloqueada}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <ImageIcon className="mx-auto h-12 w-12 text-gray-300" aria-hidden="true" />
+                    )}
+                    <div className="mt-4 flex text-sm leading-6 text-gray-600">
+                      <label
+                        htmlFor="ImagenFile"
+                        className="relative cursor-pointer rounded-md bg-white font-semibold text-indigo-600 focus-within:outline-none focus-within:ring-2 focus-within:ring-indigo-600 focus-within:ring-offset-2 hover:text-indigo-500"
+                      >
+                        <span>Sube un archivo</span>
+                        <Input
+                          type="file"
+                          id="ImagenFile"
+                          name="ImagenFile"
+                          className="sr-only"
+                          onChange={handleFileUpload}
+                          accept="image/jpeg, image/jpg, image/png, image/webp" // Aceptar más formatos si el backend los soporta
+                          disabled={etapa1Bloqueada || isUploadingImage}
+                        />
+                      </label>
+                      <p className="pl-1">o arrastra y suelta</p>
+                    </div>
+                    <p className="text-xs leading-5 text-gray-600">JPG hasta 25MB, 500x500px</p>
+                    {isUploadingImage && (
+                      <div className="flex items-center justify-center text-sm text-muted-foreground mt-2">
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Subiendo imagen...
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
-              {totalCostoReceta !== null && (
-                <div className="mt-2 text-right text-xl font-semibold text-gray-700">
-                  Costo de Elaboracion: ${totalCostoReceta.toFixed(2)}
-                </div>
-              )}
-              <div className="text-right text-base font-semibold text-gray-700">Variacion Precios: 5%</div>
-              {costoAdministrativoReceta !== null && (
-                <div className="mt-6 text-right text-2xl font-bold border-t-4 border-[#58e0be] pt-4">
-                  Costo Total: ${costoAdministrativoReceta.toFixed(2)}
-                </div>
-              )}
-              {/* Línea 1107 del código anterior, el nuevo contenido va después de este div */}
-              {precioSugeridoReceta !== null && (
-                <div className="mt-6 text-right text-lg text-black-600">
-                  <span className="text-yellow-600">*</span> Precio Mínimo: ${precioSugeridoReceta.toFixed(2)}
-                </div>
-              )}
-            </CardContent>
-            <CardFooter className="flex justify-between">
-              <Button variant="outline" onClick={() => setEtapa(3)}>
-                Anterior
-              </Button>
+            </div>
+            <div className="flex justify-end">
               <Button
-                id="btnRegistroCompleto"
-                name="btnRegistroCompleto"
-                onClick={handleRegistroCompleto}
-                disabled={isSubmitting}
+                type="button"
+                id="btnRegistrarReceta"
+                name="btnRegistrarReceta"
+                onClick={btnRegistrarReceta}
+                disabled={etapa1Bloqueada || isUploadingImage}
               >
-                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Registro Completo de Receta
+                Registrar
               </Button>
-            </CardFooter>
-          </Card>
-        )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-        {/* --- ETAPA 5: REGISTRO COMPLETADO --- */}
-        {etapa === 5 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>¡Registro Completado!</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4 text-center">
-              <p className="text-lg font-semibold text-green-600">
-                El registro del platillo/receta se realizó correctamente y sin errores.
-              </p>
-              <p className="text-md text-gray-700">En {countdown} segundos serás dirigido a la página de recetas.</p>
-              <Button onClick={() => router.push("/recetas")}>Regresar a Recetas</Button>
-            </CardContent>
-          </Card>
-        )}
-      </div>
-    </Suspense>
+      {etapaActual === 2 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Etapa 2: Registrar ingredientes</CardTitle>
+            <CardDescription>Agregue al menos 2 ingredientes para poder continuar.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="p-4 border rounded-lg bg-slate-50">
+              <h3 className="font-semibold mb-4">Agregar la Cantidad total y el Tipo de Unidad de la Sub-Receta</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <Label htmlFor="txtCantidad">Cantidad</Label>
+                  <Input
+                    type="number"
+                    id="txtCantidad"
+                    name="txtCantidad"
+                    value={txtCantidadSubReceta}
+                    onChange={(e) => setTxtCantidadSubReceta(e.target.value)}
+                    min="0"
+                    step="any"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="ddlUnidadBase">Unidad Base</Label>
+                  <Select name="ddlUnidadBase" value={ddlUnidadBaseSubReceta} onValueChange={setDdlUnidadBaseSubReceta}>
+                    <SelectTrigger id="ddlUnidadBase">
+                      <SelectValue placeholder="Seleccionar unidad base" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {unidadesMedida.map((unidad) => (
+                        <SelectItem key={unidad.id} value={unidad.id.toString()}>
+                          {unidad.descripcion}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 border rounded-lg">
+              <h3 className="font-semibold mb-4">Agregar Ingrediente</h3>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 items-end">
+                <div className="md:col-span-2 relative">
+                  <Label htmlFor="txtIngredienteSearch">Ingrediente</Label>
+                  <Input
+                    id="txtIngredienteSearch"
+                    name="txtIngredienteSearch"
+                    value={ingredienteSearchTerm}
+                    onChange={handleIngredienteSearchChange}
+                    onFocus={() => setShowIngredienteDropdown(true)}
+                    onBlur={() => setTimeout(() => setShowIngredienteDropdown(false), 100)}
+                    placeholder="Buscar por código o nombre..."
+                    autoComplete="off"
+                  />
+                  {showIngredienteDropdown && filteredIngredientes.length > 0 && (
+                    <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-y-auto mt-1">
+                      {filteredIngredientes.map((ing) => (
+                        <div
+                          key={ing.id}
+                          className="px-4 py-2 cursor-pointer hover:bg-gray-100"
+                          onMouseDown={() => handleSelectIngredienteFromDropdown(ing)}
+                        >
+                          {ing.codigo} - {ing.nombre}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <Label htmlFor="txtCantidadIngrediente">Cantidad</Label>
+                  <Input
+                    type="number"
+                    id="txtCantidadIngrediente"
+                    name="txtCantidadIngrediente"
+                    value={txtCantidadIngrediente}
+                    onChange={(e) => setTxtCantidadIngrediente(e.target.value)}
+                    min="0"
+                    step="any"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="ddlUnidadMedida">Unidad Medida</Label>
+                  <Select
+                    name="ddlUnidadMedida"
+                    value={ddlUnidadMedida}
+                    onValueChange={setDdlUnidadMedida}
+                    disabled={true}
+                  >
+                    <SelectTrigger id="ddlUnidadMedida">
+                      <SelectValue placeholder="Seleccionar unidad" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {unidadesMedida.map((unidad) => (
+                        <SelectItem key={unidad.id} value={unidad.id.toString()}>
+                          {unidad.descripcion}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="txtCostoIngrediente">Costo Ingrediente</Label>
+                  <Input
+                    type="text"
+                    id="txtCostoIngrediente"
+                    name="txtCostoIngrediente"
+                    value={txtCostoIngrediente}
+                    disabled
+                  />
+                </div>
+              </div>
+              <div className="flex justify-center">
+                <Button
+                  type="button"
+                  id="btnAgregarIngrediente"
+                  name="btnAgregarIngrediente"
+                  onClick={btnAgregarIngrediente}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Agregar ingrediente
+                </Button>
+              </div>
+            </div>
+
+            {ingredientesReceta.length > 0 && (
+              <div className="mt-4">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>ID</TableHead>
+                      <TableHead>Nombre</TableHead>
+                      <TableHead>Cantidad</TableHead>
+                      <TableHead>Costo Parcial</TableHead>
+                      <TableHead className="text-right">Acciones</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {ingredientesReceta.map((ingrediente) => (
+                      <TableRow key={ingrediente.id}>
+                        <TableCell>{ingrediente.id}</TableCell>
+                        <TableCell>{ingrediente.nombre}</TableCell>
+                        <TableCell>{ingrediente.cantidad}</TableCell>
+                        <TableCell>${ingrediente.ingredientecostoparcial.toFixed(2)}</TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="destructive"
+                            size="icon"
+                            onClick={() => handleEliminarIngredienteReceta(ingrediente.ingredienteId)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                id="btnContinuarIngrediente"
+                name="btnContinuarIngrediente"
+                onClick={() => {
+                  if (!txtCantidadSubReceta || !ddlUnidadBaseSubReceta) {
+                    setMostrarModalFaltanDatosEtapa2(true)
+                    return
+                  }
+                  setEtapaActual(3)
+                }}
+                disabled={ingredientesReceta.length < 2}
+              >
+                Continuar
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {etapaActual === 3 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Etapa 3: Resumen y Confirmación</CardTitle>
+            <CardDescription>Revise la información antes de finalizar el registro.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="p-6 border rounded-lg space-y-4 bg-slate-50">
+              <h3 className="text-xl font-semibold border-b pb-2">Detalles de la Sub-Receta</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+                <div>
+                  <p className="text-sm font-medium text-gray-500">Nombre</p>
+                  <p className="text-lg text-gray-800">{txtNombreRecetaNuevo}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-500">Hotel</p>
+                  <p className="text-lg text-gray-800">
+                    {hoteles.find((h) => h.id.toString() === ddlHotel)?.nombre || "N/A"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-500">Cantidad de Sub-Receta</p>
+                  <p className="text-lg text-gray-800">{txtCantidadSubReceta || "N/A"}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-500">Unidad Base de Sub-Receta</p>
+                  <p className="text-lg text-gray-800">
+                    {unidadesMedida.find((u) => u.id.toString() === ddlUnidadBaseSubReceta)?.descripcion || "N/A"}
+                  </p>
+                </div>
+                <div className="md:col-span-2">
+                  <p className="text-sm font-medium text-gray-500">Notas de Preparación</p>
+                  <p className="text-lg text-gray-800">{txtNotasReceta}</p>
+                </div>
+              </div>
+              {imagenPreview && (
+                <div className="space-y-2">
+                  <Label className="text-base font-medium">Imagen de la Sub-Receta</Label>
+                  <img
+                    src={imagenPreview || "/placeholder.svg"}
+                    alt="Vista previa de la receta"
+                    className="h-48 w-auto object-cover rounded-md border"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 border rounded-lg space-y-4 bg-slate-50">
+              <h3 className="text-xl font-semibold border-b pb-2">Ingredientes</h3>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>ID</TableHead>
+                    <TableHead>Nombre</TableHead>
+                    <TableHead>Cantidad</TableHead>
+                    <TableHead>Costo Parcial</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {ingredientesReceta.map((ingrediente) => (
+                    <TableRow key={ingrediente.id}>
+                      <TableCell>{ingrediente.id}</TableCell>
+                      <TableCell>{ingrediente.nombre}</TableCell>
+                      <TableCell>{ingrediente.cantidad}</TableCell>
+                      <TableCell>${ingrediente.ingredientecostoparcial.toFixed(2)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <div className="mt-4 p-4 bg-green-100 rounded-lg flex justify-between items-center">
+                <span className="font-bold text-lg">Costo Total de la Sub-Receta:</span>
+                <Badge className="text-xl">
+                  ${ingredientesReceta.reduce((sum, i) => sum + i.ingredientecostoparcial, 0).toFixed(2)}
+                </Badge>
+              </div>
+            </div>
+
+            <Button
+              type="button"
+              id="btnRegistroCompletoReceta"
+              name="btnRegistroCompletoReceta"
+              onClick={btnRegistroCompletoReceta}
+              className="w-full text-lg py-6"
+            >
+              <CheckCircle className="mr-2" /> Registrar Sub-Receta
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+    </div>
   )
 }
