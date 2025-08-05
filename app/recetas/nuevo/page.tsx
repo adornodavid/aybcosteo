@@ -22,11 +22,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Loader2, ArrowLeft, Plus, CheckCircle, ImageIcon, X, Trash2 } from 'lucide-react'
+import { Loader2, ArrowLeft, Plus, CheckCircle, ImageIcon, X, Trash2 } from "lucide-react"
 import { getSession } from "@/app/actions/session-actions"
 import { toast } from "sonner"
 import { useNavigationGuard } from "@/contexts/navigation-guard-context"
 import { getUnidadMedidaForRecetaIngrediente } from "@/app/actions/recetas-wizard-actions"
+import { uploadImage } from "@/app/actions/recetas-image-actions" // Importar uploadImage
 import Image from "next/image"
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -102,6 +103,7 @@ export default function NuevaRecetaPage() {
   const [imagenFile, setImagenFile] = useState<File | null>(null)
   const [imagenPreview, setImagenPreview] = useState<string | null>(null)
   const [etapa1Bloqueada, setEtapa1Bloqueada] = useState(false)
+  const [isUploadingImage, setIsUploadingImage] = useState(false) // Nuevo estado para la carga de imagen
 
   const [txtCantidadSubReceta, setTxtCantidadSubReceta] = useState("")
   const [ddlUnidadBaseSubReceta, setDdlUnidadBaseSubReceta] = useState("")
@@ -338,7 +340,7 @@ export default function NuevaRecetaPage() {
     }
   }, [])
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) {
       setImagenFile(null)
@@ -347,68 +349,27 @@ export default function NuevaRecetaPage() {
       return
     }
 
-    if (file.type !== "image/jpeg") {
-      toast.error("Formato no válido. Solo se permiten imágenes .jpg")
+    setIsUploadingImage(true)
+    try {
+      const { data, error } = await uploadImage(file, "imagenes")
+      if (error) {
+        console.error("Error al subir imagen:", error)
+        toast.error("Error al subir imagen: " + error.message)
+        setImagenFile(null)
+        setImagenPreview(null)
+      } else if (data) {
+        setImagenFile(file) // Mantener el archivo para el FormData si es necesario
+        setImagenPreview(data.publicUrl)
+        toast.success("Imagen subida correctamente.")
+      }
+    } catch (e: any) {
+      console.error("Error inesperado al subir imagen:", e)
+      toast.error("Error inesperado al subir imagen: " + e.message)
       setImagenFile(null)
       setImagenPreview(null)
-      return
+    } finally {
+      setIsUploadingImage(false)
     }
-
-    if (file.size > 25 * 1024 * 1024) {
-      toast.error("La imagen es demasiado grande. El máximo es 25 MB.")
-      setImagenFile(null)
-      setImagenPreview(null)
-      return
-    }
-
-    const reader = new FileReader()
-    reader.onload = (e: ProgressEvent<FileReader>) => {
-      // **INICIO DE LA MODIFICACIÓN PARA MANEJAR EL ERROR 'e' UNDEFINED**
-      if (e === undefined || e === null) {
-        console.error("FileReader onload event is undefined or null.");
-        setImagenFile(null);
-        setImagenPreview(null);
-        toast.error("Error al procesar la imagen: evento nulo.");
-        return;
-      }
-      // **FIN DE LA MODIFICACIÓN**
-
-      const readerTarget = e.target as FileReader | null;
-      if (!readerTarget || typeof readerTarget.result !== "string") {
-        console.error("FileReader onload event target or its result is invalid.", e);
-        setImagenFile(null);
-        setImagenPreview(null);
-        toast.error("Error al procesar la imagen: resultado inválido.");
-        return;
-      }
-
-      const img = new Image()
-      img.onload = () => {
-        if (img.width > 500 || img.height > 500) {
-          toast.error(`La resolución de la imagen (${img.width}x${img.height}) no debe pasar de 500x500 pixeles.`)
-          setImagenFile(null)
-          setImagenPreview(null)
-        } else {
-          setImagenPreview(URL.createObjectURL(file))
-          setImagenFile(file)
-          toast.success("Imagen cargada con éxito")
-        }
-      }
-      img.onerror = (err) => { // Add onerror for image loading
-        console.error("Error loading image for preview:", err);
-        toast.error("Error al cargar la imagen para previsualización.");
-        setImagenFile(null);
-        setImagenPreview(null);
-      };
-      img.src = readerTarget.result
-    }
-    reader.onerror = (errorEvent) => { // Add onerror for FileReader itself
-      console.error("FileReader error:", errorEvent);
-      toast.error("Error al leer el archivo de imagen.");
-      setImagenFile(null);
-      setImagenPreview(null);
-    };
-    reader.readAsDataURL(file)
   }
 
   const handleRemoveImage = () => {
@@ -481,14 +442,14 @@ export default function NuevaRecetaPage() {
       const { data, error } = await supabaseClient
         .from("ingredientesxreceta")
         .select(`
-      id,
-      ingredienteid,
-      cantidad,
-      ingredientecostoparcial,
-      ingredientes (
-        nombre
-      )
-    `)
+    id,
+    ingredienteid,
+    cantidad,
+    ingredientecostoparcial,
+    ingredientes (
+      nombre
+    )
+  `)
         .eq("recetaid", recetaId.current)
 
       if (error) {
@@ -956,13 +917,19 @@ export default function NuevaRecetaPage() {
                           name="ImagenFile"
                           className="sr-only"
                           onChange={handleFileUpload}
-                          accept="image/jpeg"
-                          disabled={etapa1Bloqueada}
+                          accept="image/jpeg, image/jpg, image/png, image/webp" // Aceptar más formatos si el backend los soporta
+                          disabled={etapa1Bloqueada || isUploadingImage}
                         />
                       </label>
                       <p className="pl-1">o arrastra y suelta</p>
                     </div>
                     <p className="text-xs leading-5 text-gray-600">JPG hasta 25MB, 500x500px</p>
+                    {isUploadingImage && (
+                      <div className="flex items-center justify-center text-sm text-muted-foreground mt-2">
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Subiendo imagen...
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -973,7 +940,7 @@ export default function NuevaRecetaPage() {
                 id="btnRegistrarReceta"
                 name="btnRegistrarReceta"
                 onClick={btnRegistrarReceta}
-                disabled={etapa1Bloqueada}
+                disabled={etapa1Bloqueada || isUploadingImage}
               >
                 Registrar
               </Button>

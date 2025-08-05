@@ -3,13 +3,14 @@
 import type React from "react"
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
-import { Loader2, UploadCloud } from 'lucide-react'
+import { Loader2, UploadCloud } from "lucide-react"
 import { toast } from "sonner"
 import { Suspense } from "react"
 import Loading from "./loading"
 import Image from "next/image" // Importar Image de next/image
 
 import * as actions from "@/app/actions/platillos-wizard-actions"
+import { uploadImage } from "@/app/actions/recetas-image-actions" // Importar uploadImage
 import { useNavigationGuard } from "@/contexts/navigation-guard-context" // Importar el hook del contexto
 
 import { Button } from "@/components/ui/button"
@@ -112,6 +113,7 @@ export default function NuevoPlatilloPage() {
   const [tiempo, setTiempo] = useState("")
   const [imagenFile, setImagenFile] = useState<File | null>(null)
   const [imagenPreview, setImagenPreview] = useState<string | null>(null)
+  const [isUploadingImage, setIsUploadingImage] = useState(false) // Nuevo estado para la carga de imagen
 
   // --- ETAPA 2: MENÚ ---
   const [hoteles, setHoteles] = useState<Hotel[]>([])
@@ -333,7 +335,7 @@ export default function NuevoPlatilloPage() {
 
   // --- MANEJADORES DE EVENTOS ---
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) {
       setImagenFile(null)
@@ -342,68 +344,27 @@ export default function NuevoPlatilloPage() {
       return
     }
 
-    if (file.type !== "image/jpeg") {
-      toast.error("Formato no válido. Solo se permiten imágenes .jpg")
-      setImagenFile(null)
-      setImagenPreview(null)
-      return
-    }
-
-    if (file.size > MAX_IMAGE_SIZE_MB * 1024 * 1024) {
-      toast.error(`La imagen es muy pesada. El máximo es ${MAX_IMAGE_SIZE_MB}MB.`)
-      setImagenFile(null)
-      setImagenPreview(null)
-      return
-    }
-
-    const reader = new FileReader()
-    reader.onload = (event: ProgressEvent<FileReader>) => {
-      // **INICIO DE LA MODIFICACIÓN PARA MANEJAR EL ERROR 'e' UNDEFINED**
-      if (event === undefined || event === null) {
-        console.error("FileReader onload event is undefined or null.");
-        setImagenFile(null);
-        setImagenPreview(null);
-        toast.error("Error al procesar la imagen: evento nulo.");
-        return;
-      }
-      // **FIN DE LA MODIFICACIÓN**
-
-      const readerTarget = event.target as FileReader | null;
-      if (!readerTarget || typeof readerTarget.result !== "string") {
-        console.error("FileReader onload event target or its result is invalid.", event);
-        setImagenFile(null);
-        setImagenPreview(null);
-        toast.error("Error al procesar la imagen: resultado inválido.");
-        return;
-      } 
-
-      const img = new Image()
-      img.onload = () => {
-        if (img.width > MAX_IMAGE_DIMENSION || img.height > MAX_IMAGE_DIMENSION) {
-          toast.error(`La resolución es muy alta. Máximo ${MAX_IMAGE_DIMENSION}x${MAX_IMAGE_DIMENSION}px.`)
-          setImagenFile(null)
-          setImagenPreview(null)
-        } else {
-          setImagenFile(file)
-          setImagenPreview(readerTarget.result)
-          toast.success("Imagen cargada con éxito.")
-        }
-      }
-      img.onerror = (err) => {
-        console.error("Error loading image for preview:", err)
-        toast.error("Error al cargar la imagen para previsualización.")
+    setIsUploadingImage(true)
+    try {
+      const { data, error } = await uploadImage(file, "imagenes")
+      if (error) {
+        console.error("Error al subir imagen:", error)
+        toast.error("Error al subir imagen: " + error.message)
         setImagenFile(null)
         setImagenPreview(null)
+      } else if (data) {
+        setImagenFile(file) // Mantener el archivo para el FormData si es necesario
+        setImagenPreview(data.publicUrl)
+        toast.success("Imagen subida correctamente.")
       }
-      img.src = readerTarget.result
+    } catch (e: any) {
+      console.error("Error inesperado al subir imagen:", e)
+      toast.error("Error inesperado al subir imagen: " + e.message)
+      setImagenFile(null)
+      setImagenPreview(null)
+    } finally {
+      setIsUploadingImage(false)
     }
-    reader.onerror = (errorEvent) => { // Add onerror for FileReader itself
-      console.error("FileReader error:", errorEvent);
-      toast.error("Error al leer el archivo de imagen.");
-      setImagenFile(null);
-      setImagenPreview(null);
-    };
-    reader.readAsDataURL(file)
   }
 
   const handleRegistrarPlatillo = async () => {
@@ -755,8 +716,8 @@ export default function NuevoPlatilloPage() {
                   className="absolute inset-0 animate-bounce-slow" // Animación de rebote lento
                 />
                 {/*
-                <Loader2 className="absolute inset-0 m-auto h-12 w-12 animate-spin text-[#58e0be]" />{" "}
-                */}
+              <Loader2 className="absolute inset-0 m-auto h-12 w-12 animate-spin text-[#58e0be]" />{" "}
+              */}
                 {/* Icono giratorio */}
               </div>
               <p className="text-lg font-semibold text-gray-800">Cocinando tu receta...</p>
@@ -768,10 +729,10 @@ export default function NuevoPlatilloPage() {
         <div className="mb-6 flex items-center justify-between">
           <h1 className="text-3xl font-bold">Registro de nueva receta</h1>
           {/* El botón "Regresar" ahora simplemente llama a router.push,
-              la intercepción la manejará el NavigationGuardProvider */}
+            la intercepción la manejará el NavigationGuardProvider */}
           {/*<Button id="btnRegresar" name="btnRegresar" variant="outline" onClick={() => router.push("/platillos")}>
-            <ArrowLeft className="mr-2 h-4 w-4" /> Regresar
-          </Button>*/}
+          <ArrowLeft className="mr-2 h-4 w-4" /> Regresar
+        </Button>*/}
         </div>
 
         <div className="mb-8">
@@ -865,11 +826,17 @@ export default function NuevoPlatilloPage() {
                     id="ImagenFile"
                     name="ImagenFile"
                     type="file"
-                    accept="image/jpeg"
+                    accept="image/jpeg, image/jpg, image/png, image/webp" // Aceptar más formatos si el backend los soporta
                     onChange={handleImageChange}
                     className="mt-2"
-                    disabled={platilloId !== null}
+                    disabled={platilloId !== null || isUploadingImage}
                   />
+                  {isUploadingImage && (
+                    <div className="flex items-center text-sm text-muted-foreground">
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Subiendo imagen...
+                    </div>
+                  )}
                 </div>
               </div>
             </CardContent>
@@ -878,7 +845,7 @@ export default function NuevoPlatilloPage() {
                 id="btnRegistrarPlatillo"
                 name="btnRegistrarPlatillo"
                 onClick={handleRegistrarPlatillo}
-                disabled={isSubmitting || platilloId !== null}
+                disabled={isSubmitting || platilloId !== null || isUploadingImage}
               >
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Registrar y Continuar
@@ -945,8 +912,8 @@ export default function NuevoPlatilloPage() {
             </CardContent>
             <CardFooter className="flex justify-between">
               {/*<Button variant="outline" onClick={() => setEtapa(1)}>
-                Anterior
-              </Button>*/}
+              Anterior
+            </Button>*/}
               <Button id="btnContinuar" name="btnContinuar" onClick={handleContinuarEtapa2} disabled={!menuId}>
                 Continuar
               </Button>
