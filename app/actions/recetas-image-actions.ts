@@ -8,14 +8,17 @@ const getSupabaseClient = () => {
   return createClient(cookies())
 }
 
-export async function uploadImage(file: File) {
+
+export async function uploadImage(formData: FormData,
+): Promise<{ success: boolean; url: string | null; error: string | null }> {
   const supabase = getSupabaseClient()
   try {
-    const fileExtension = file.name.split(".").pop()
-    const fileName = `${uuidv4()}.${fileExtension}`
-    const filePath = `${fileName}`
-
-    const { data, error } = await supabase.storage.from("imagenes").upload(filePath, file, {
+    //const fileExtension = file.name.split(".").pop()
+    //const fileName = `${uuidv4()}.${fileExtension}`
+    //const filePath = `${fileName}`
+    const file = formData.get("file") as File
+    const fileName = `${Date.now()}-${file.name}`
+    const { data, error } = await supabase.storage.from("imagenes").upload(fileName, file, {
       cacheControl: "3600",
       upsert: false,
     })
@@ -25,7 +28,7 @@ export async function uploadImage(file: File) {
       return { data: null, error: { message: `Error al subir imagen: ${error.message}` } }
     }
 
-    const { data: publicUrlData } = supabase.storage.from("imagenes").getPublicUrl(filePath)
+    const { data: publicUrlData } = supabase.storage.from("imagenes").getPublicUrl(data.path)
 
     return { data: { publicUrl: publicUrlData.publicUrl }, error: null }
   } catch (e: any) {

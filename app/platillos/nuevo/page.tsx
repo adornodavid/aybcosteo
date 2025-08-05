@@ -343,19 +343,23 @@ export default function NuevoPlatilloPage() {
       toast.error("No se seleccionó ningún archivo.")
       return
     }
-
+       
     // Client-side preview using FileReader
     const reader = new FileReader()
     reader.onloadend = () => {
       setImagenPreview(reader.result as string)
     }
+    
     reader.readAsDataURL(file)
 
     setImagenFile(file) // Store the file for potential later use in FormData
 
+    const uploadFormData = new FormData()
+    uploadFormData.append("file", setImagenFile)
+
     setIsUploadingImage(true)
     try {
-      const { data, error } = await uploadImage(file, "imagenes")
+      const { data, error } = await uploadImage(uploadFormData)
       if (error) {
         console.error("Error al subir imagen:", error)
         toast.error("Error al subir imagen: " + error.message)
