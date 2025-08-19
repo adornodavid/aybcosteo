@@ -132,3 +132,19 @@ export async function obtenerPlatilloPorId(id: number) {
     return { success: false, error: "Error interno del servidor" }
   }
 }
+
+// Nueva función para calcular el costo porcentual
+export function calcularCostoPorcentual(costoTotal: number, precioVenta: number): number {
+  if (precioVenta === 0) {
+  return 0
+  }
+  else {
+  //const Costoporcentual = (costoTotal / precioVenta) * 100
+  return  (costoTotal / precioVenta) * 100
+  }
+}
+
+// Nueva función para calcular el precio con IVA
+export function calcularPrecioConIVA(precioVenta: number): number {
+  return precioVenta * 0.16 + precioVenta
+}

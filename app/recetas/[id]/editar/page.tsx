@@ -7,7 +7,23 @@ import { supabase } from "@/lib/supabase" // Ensure supabase is imported
 import { toast } from "sonner"
 import Image from "next/image"
 
-import * as actions from "@/app/actions/recetas-actions"
+import {
+  getRecetaDetails,
+  updateRecetaBasicInfo,
+  getIngredientesByRecetaId,
+  getHotelIdFromRecetaIngredients,
+  getUnidadMedidaForDropdown,
+  searchIngredientes,
+  checkIngredienteExistsInReceta,
+  addIngredienteToReceta,
+  deleteIngredienteFromReceta,
+  updateRecetaCostoAndHistorico,
+  getRecetasForRecetaDropdown,
+  getSubRecetasByRecetaId,
+  checkSubRecetaExistsInReceta,
+  addSubRecetaToReceta,
+  deleteSubRecetaFromReceta,
+} from "@/app/actions/recetas-actions"
 import { uploadImage, deleteImage } from "@/app/actions/recetas-image-actions"
 
 import { Button } from "@/components/ui/button"
@@ -28,6 +44,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Loader2, ArrowLeft, PlusCircle, Trash2, XCircle } from "lucide-react"
+import { Slider } from "@/components/ui/slider"
 
 interface RecetaData {
   id: number
@@ -68,6 +85,23 @@ interface RecetaEditPageProps {
   }
 }
 
+interface Receta {
+  id: number
+  nombre: string
+  costo: number | null
+  cantidad: number | null
+  unidadbaseid: number | null
+}
+
+interface SubRecetaDisplay {
+  id: number
+  recetaId: number
+  nombre: string
+  cantidad: number
+  costototal: number
+  ingredientecostoparcial: number
+}
+
 export default function RecetaEditPage({ params }: RecetaEditPageProps) {
   const router = useRouter()
   const recetaId = params.id
@@ -102,6 +136,16 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
 
   const [totalCostoReceta, setTotalCostoReceta] = useState<number | null>(null)
 
+  const [recetas, setRecetas] = useState<Receta[]>([])
+  const [subRecetasSeleccionadas, setSubRecetasSeleccionadas] = useState<SubRecetaDisplay[]>([])
+  const [ddlRecetas, setDdlRecetas] = useState("")
+  const [txtCantidadReceta, setTxtCantidadReceta] = useState("")
+  const [cantidadRangoReceta, setCantidadRangoReceta] = useState([1])
+  const [txtCostoReceta, setTxtCostoReceta] = useState("")
+  const [txtUnidadReceta, setTxtUnidadReceta] = useState("")
+  const [maxCantidadReceta, setMaxCantidadReceta] = useState(1)
+  const [showSubRecetaExistsDialog, setShowSubRecetaExistsDialog] = useState(false)
+
   const canAdvanceToStep2 = useMemo(() => {
     return recetaData?.nombre && recetaData?.notaspreparacion
   }, [recetaData])
@@ -120,7 +164,7 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
       }
 
       try {
-        const { data, error } = await actions.getRecetaDetails(recetaId)
+        const { data, error } = await getRecetaDetails(recetaId)
 
         if (error) {
           console.error("Error al cargar datos de la receta:", error)
@@ -151,7 +195,7 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
 
       setLoading(true)
       try {
-        const { data: hotelData, error: hotelError } = await actions.getHotelIdFromRecetaIngredients(recetaId)
+        const { data: hotelData, error: hotelError } = await getHotelIdFromRecetaIngredients(recetaId)
 
         let hotelIdForDropdowns: number | null = null
         if (hotelError) {
@@ -161,7 +205,7 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
           hotelIdForDropdowns = hotelData.id
         }
 
-        const { data: unidadesData, error: unidadesError } = await actions.getUnidadMedidaForDropdown() // Corregido: getUnidadMedidaForDropdown
+        const { data: unidadesData, error: unidadesError } = await getUnidadMedidaForDropdown()
         if (unidadesError) {
           console.error("Error al cargar unidades de medida dropdown:", unidadesError)
           toast.error("Error al cargar unidades de medida.")
@@ -169,13 +213,35 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
           setUnidadesMedidaDropdown(unidadesData || [])
         }
 
-        const { data: existingIngredientes, error: ingXRecetaError } = await actions.getIngredientesByRecetaId(recetaId)
-
+        const { data: existingIngredientes, error: ingXRecetaError } = await getIngredientesByRecetaId(recetaId)
         if (ingXRecetaError) {
           console.error("Error al cargar ingredientes de la receta:", ingXRecetaError)
           toast.error("Error al cargar ingredientes de la receta.")
         } else {
           setIngredientesReceta(existingIngredientes || [])
+        }
+
+        // Cargar recetas disponibles para agregar
+        if (hotelIdForDropdowns !== null) {
+          const { data: recetasData, error: recetasError } = await getRecetasForRecetaDropdown(
+            hotelIdForDropdowns,
+            recetaId,
+          )
+          if (recetasError) {
+            console.error("Error al cargar recetas dropdown:", recetasError)
+            toast.error("Error al cargar recetas disponibles.")
+          } else {
+            setRecetas(recetasData || [])
+          }
+        }
+
+        // Cargar sub-recetas existentes
+        const { data: existingSubRecetas, error: subRecetasError } = await getSubRecetasByRecetaId(recetaId)
+        if (subRecetasError) {
+          console.error("Error al cargar sub-recetas de la receta:", subRecetasError)
+          toast.error("Error al cargar sub-recetas de la receta.")
+        } else {
+          setSubRecetasSeleccionadas(existingSubRecetas || [])
         }
       } catch (error) {
         console.error("Error inesperado al cargar datos de la Etapa 2:", error)
@@ -187,6 +253,39 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
 
     loadStep2Data()
   }, [recetaId, currentStep])
+
+  useEffect(() => {
+    if (ddlRecetas) {
+      const recetaSeleccionada = recetas.find((r) => r.id.toString() === ddlRecetas)
+      if (recetaSeleccionada) {
+        const maxCantidad = recetaSeleccionada.cantidad || 1
+        setMaxCantidadReceta(maxCantidad)
+        setTxtCostoReceta(recetaSeleccionada.costo?.toString() || "0")
+
+        // Obtener la descripción de la unidad de medida
+        const unidadMedida = unidadesMedidaDropdown.find((u) => u.id === recetaSeleccionada.unidadbaseid)
+        setTxtUnidadReceta(unidadMedida?.descripcion || "Sin unidad")
+
+        // Si la cantidad actual excede el máximo, ajustarla
+        const cantidadActual = Number.parseFloat(txtCantidadReceta) || 1
+        if (cantidadActual > maxCantidad) {
+          setTxtCantidadReceta(maxCantidad.toString())
+          setCantidadRangoReceta([maxCantidad])
+        } else if (cantidadActual >= 1) {
+          setCantidadRangoReceta([cantidadActual])
+        } else {
+          setTxtCantidadReceta("1")
+          setCantidadRangoReceta([1])
+        }
+      }
+    } else {
+      setTxtCostoReceta("")
+      setTxtUnidadReceta("")
+      setMaxCantidadReceta(1)
+      setTxtCantidadReceta("")
+      setCantidadRangoReceta([1])
+    }
+  }, [ddlRecetas, recetas, unidadesMedidaDropdown, txtCantidadReceta])
 
   useEffect(() => {
     const loadStep3Data = async () => {
@@ -221,7 +320,7 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
   useEffect(() => {
     const delayDebounceFn = setTimeout(async () => {
       if (recetaId && ingredienteSearchTerm.length >= 2) {
-        const { data: hotelData, error: hotelError } = await actions.getHotelIdFromRecetaIngredients(recetaId)
+        const { data: hotelData, error: hotelError } = await getHotelIdFromRecetaIngredients(recetaId)
 
         let hotelIdForSearch: number | null = null
         if (hotelError) {
@@ -231,7 +330,7 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
         }
 
         if (hotelIdForSearch !== null) {
-          const results = await actions.searchIngredientes(hotelIdForSearch, ingredienteSearchTerm)
+          const results = await searchIngredientes(hotelIdForSearch, ingredienteSearchTerm)
           setFilteredIngredientes(results)
           setShowIngredienteDropdown(true)
         } else {
@@ -366,7 +465,7 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
 
       setIsSubmitting(true)
       try {
-        const { success, error } = await actions.updateRecetaBasicInfo(
+        const { success, error } = await updateRecetaBasicInfo(
           recetaId,
           recetaData.nombre,
           recetaData.notaspreparacion,
@@ -409,7 +508,7 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
 
     setIsSubmitting(true)
     try {
-      const { data: existingIngrediente, error: checkError } = await actions.checkIngredienteExistsInReceta(
+      const { data: existingIngrediente, error: checkError } = await checkIngredienteExistsInReceta(
         recetaId,
         Number.parseInt(selectedIngredienteId),
       )
@@ -440,7 +539,7 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
       const calculoConversion = unidadMedida.calculoconversion || 1
       const ingredienteCostoParcial = cantidadNum * calculoConversion * costoNum
 
-      const { success, error } = await actions.addIngredienteToReceta(
+      const { success, error } = await addIngredienteToReceta(
         recetaId,
         Number.parseInt(selectedIngredienteId),
         cantidadNum,
@@ -455,7 +554,7 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
       }
 
       if (success) {
-        const { data: updatedIngredientes, error: fetchError } = await actions.getIngredientesByRecetaId(recetaId)
+        const { data: updatedIngredientes, error: fetchError } = await getIngredientesByRecetaId(recetaId)
         if (fetchError) {
           console.error("Error al recargar ingredientes:", fetchError)
           toast.error("Error al recargar ingredientes después de agregar.")
@@ -476,12 +575,13 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
     }
   }
 
-  const handleDeleteIngrediente = async () => {
-    if (ingredienteToDelete === null) return
+  const handleDeleteIngrediente = async (Ingredienteid: number) => {
+    
+    //if (ingredienteToDelete === null) return
 
     setIsSubmitting(true)
     try {
-      const { success, error } = await actions.deleteIngredienteFromReceta(ingredienteToDelete, recetaId)
+      const { success, error } = await deleteIngredienteFromReceta(Ingredienteid, recetaId)
 
       if (error) {
         console.error("Error al eliminar ingrediente:", error)
@@ -490,7 +590,7 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
       }
 
       if (success) {
-        setIngredientesReceta((prev) => prev.filter((ing) => ing.id !== ingredienteToDelete))
+        setIngredientesReceta((prev) => prev.filter((ing) => ing.ingredienteid !== Ingredienteid))
         toast.success("Ingrediente eliminado correctamente.")
       }
     } catch (error) {
@@ -499,6 +599,131 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
     } finally {
       setShowConfirmDeleteIngrediente(false)
       setIngredienteToDelete(null)
+      setIsSubmitting(false)
+    }
+  }
+
+  // Función para manejar cambios en el input de cantidad de receta
+  const handleCantidadRecetaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const valor = e.target.value
+    const numeroValor = Number.parseFloat(valor) || 0
+
+    if (numeroValor > maxCantidadReceta) {
+      setTxtCantidadReceta(maxCantidadReceta.toString())
+      setCantidadRangoReceta([maxCantidadReceta])
+      toast.warning(`La cantidad no puede exceder ${maxCantidadReceta}`)
+    } else if (numeroValor < 1 && valor !== "") {
+      setTxtCantidadReceta("1")
+      setCantidadRangoReceta([1])
+    } else {
+      setTxtCantidadReceta(valor)
+      if (numeroValor >= 1) {
+        setCantidadRangoReceta([numeroValor])
+      }
+    }
+  }
+
+  // Función para manejar cambios en el slider de cantidad de receta
+  const handleCantidadRangoRecetaChange = (value: number[]) => {
+    const nuevaCantidad = value[0]
+    setCantidadRangoReceta([nuevaCantidad])
+    setTxtCantidadReceta(nuevaCantidad.toString())
+  }
+
+  const handleAddSubReceta = async () => {
+    if (!ddlRecetas || !txtCantidadReceta) {
+      toast.error("Favor de llenar la información de la sub-receta.")
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      const { data: existingSubReceta, error: checkError } = await checkSubRecetaExistsInReceta(
+        recetaId,
+        Number.parseInt(ddlRecetas),
+      )
+
+      if (checkError && checkError.code !== "PGRST116") {
+        console.error("Error al verificar sub-receta existente:", checkError)
+        toast.error("Error al verificar sub-receta existente: " + checkError.message)
+        setIsSubmitting(false)
+        return
+      }
+
+      if (existingSubReceta) {
+        setShowSubRecetaExistsDialog(true)
+        setIsSubmitting(false)
+        return
+      }
+
+      const recetaSeleccionada = recetas.find((r) => r.id.toString() === ddlRecetas)
+      if (!recetaSeleccionada) {
+        toast.error("Sub-receta no encontrada")
+        setIsSubmitting(false)
+        return
+      }
+
+      const cantidad = Number.parseFloat(txtCantidadReceta)
+      const costoSubReceta = recetaSeleccionada.costo || 0
+      const cantidadMaxima = recetaSeleccionada.cantidad || 1
+
+      const { success, error } = await addSubRecetaToReceta(
+        recetaId,
+        Number.parseInt(ddlRecetas),
+        cantidad,
+        costoSubReceta,
+        cantidadMaxima,
+      )
+
+      if (error) {
+        console.error("Error al agregar sub-receta:", error)
+        toast.error("Error al agregar sub-receta: " + error.message)
+        return
+      }
+
+      if (success) {
+        const { data: updatedSubRecetas, error: fetchError } = await getSubRecetasByRecetaId(recetaId)
+        if (fetchError) {
+          console.error("Error al recargar sub-recetas:", fetchError)
+          toast.error("Error al recargar sub-recetas después de agregar.")
+          return
+        }
+        setSubRecetasSeleccionadas(updatedSubRecetas || [])
+        toast.success("Sub-receta agregada correctamente.")
+        setDdlRecetas("")
+        setTxtCantidadReceta("")
+        setCantidadRangoReceta([1])
+        setTxtCostoReceta("")
+        setTxtUnidadReceta("")
+        setMaxCantidadReceta(1)
+      }
+    } catch (error) {
+      console.error("Error inesperado al agregar sub-receta:", error)
+      toast.error("Error inesperado al agregar sub-receta.")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleDeleteSubReceta = async (subRecetaId: number) => {
+    setIsSubmitting(true)
+    try {
+      const { success, error } = await deleteSubRecetaFromReceta(subRecetaId, recetaId)
+
+      if (error) {
+        console.error("Error al eliminar sub-receta:", error)
+        toast.error("Error al eliminar sub-receta: " + error.message)
+        return
+      }
+
+      if (success) {
+        setSubRecetasSeleccionadas((prev) => prev.filter((rec) => rec.recetaId !== subRecetaId))
+        toast.success("Sub-receta eliminada correctamente.")
+      }
+    } catch (error) {
+      console.error("Error inesperado al eliminar sub-receta:", error)
+      toast.error("Error inesperado al eliminar sub-receta.")
+    } finally {
       setIsSubmitting(false)
     }
   }
@@ -519,7 +744,7 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
 
     try {
       const [result] = await Promise.all([
-        actions.updateRecetaCostoAndHistorico(recetaId),
+        updateRecetaCostoAndHistorico(recetaId),
         new Promise((resolve) => setTimeout(resolve, 5000)),
       ])
 
@@ -815,7 +1040,7 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
                                   variant="destructive"
                                   size="icon"
                                   title="Eliminar Ingrediente"
-                                  onClick={() => setIngredienteToDelete(ing.id)}
+                                  //onClick={() => setIngredienteToDelete(ing.ingredienteid)}
                                 >
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
@@ -831,7 +1056,7 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
                                   <AlertDialogCancel onClick={() => setIngredienteToDelete(null)}>
                                     Cancelar
                                   </AlertDialogCancel>
-                                  <AlertDialogAction onClick={handleDeleteIngrediente}>Confirmar</AlertDialogAction>
+                                  <AlertDialogAction  onClick={() => handleDeleteIngrediente(ing.ingredienteid)}>Confirmar</AlertDialogAction>
                                 </AlertDialogFooter>
                               </AlertDialogContent>
                             </AlertDialog>
@@ -850,6 +1075,162 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
               </div>
             </CardContent>
           </Card>
+
+          {/* Nueva sección para agregar sub-recetas */}
+          <div className="p-4 border rounded-lg">
+            <h3 className="font-semibold mb-4">Agregar Sub-Receta</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div>
+                <label htmlFor="ddlRecetas" className="text-sm font-medium">
+                  Sub-Receta
+                </label>
+                <Select name="ddlRecetas" value={ddlRecetas} onValueChange={setDdlRecetas}>
+                  <SelectTrigger id="ddlRecetas">
+                    <SelectValue placeholder="Seleccionar sub-receta" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {recetas.map((receta) => (
+                      <SelectItem key={receta.id} value={receta.id.toString()}>
+                        {receta.nombre} - {formatCurrency(receta.costo)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label htmlFor="txtCostoReceta" className="text-sm font-medium">
+                  Costo
+                </label>
+                <Input
+                  type="text"
+                  id="txtCostoReceta"
+                  name="txtCostoReceta"
+                  value={txtCostoReceta}
+                  disabled
+                  placeholder="Seleccione una sub-receta"
+                />
+              </div>
+              <div>
+                <label htmlFor="txtUnidadReceta" className="text-sm font-medium">
+                  Unidad
+                </label>
+                <Input
+                  type="text"
+                  id="txtUnidadReceta"
+                  name="txtUnidadReceta"
+                  value={txtUnidadReceta}
+                  disabled
+                  placeholder="Seleccione una sub-receta"
+                />
+              </div>
+            </div>
+
+            {ddlRecetas && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label htmlFor="txtCantidadReceta" className="text-sm font-medium">
+                    Cantidad
+                  </label>
+                  <Input
+                    type="number"
+                    id="txtCantidadReceta"
+                    name="txtCantidadReceta"
+                    value={txtCantidadReceta}
+                    onChange={handleCantidadRecetaChange}
+                    min="1"
+                    max={maxCantidadReceta}
+                    step="any"
+                    placeholder={`Máximo: ${maxCantidadReceta}`}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="cantidadRangoReceta" className="text-sm font-medium">
+                    Cantidad Rango: {cantidadRangoReceta[0]}
+                  </label>
+                  <div className="px-2 py-2">
+                    <Slider
+                      id="cantidadRangoReceta"
+                      min={1}
+                      max={maxCantidadReceta}
+                      step={0.1}
+                      value={cantidadRangoReceta}
+                      onValueChange={handleCantidadRangoRecetaChange}
+                      className="w-full"
+                    />
+                    <div className="flex justify-between text-xs text-gray-500 mt-1">
+                      <span>1</span>
+                      <span>{maxCantidadReceta}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-center">
+              <Button
+                type="button"
+                id="btnAgregarSubReceta"
+                name="btnAgregarSubReceta"
+                onClick={handleAddSubReceta}
+                disabled={isSubmitting}
+                className="bg-blue-800 hover:bg-blue-900 text-white"
+              >
+                <PlusCircle className="mr-2 h-4 w-4" />
+                Agregar Sub-Receta
+              </Button>
+            </div>
+
+            {/* Tabla de sub-recetas seleccionadas */}
+            {subRecetasSeleccionadas.length > 0 && (
+              <div className="mt-4">
+                <h4 className="font-medium mb-3">Sub-Recetas Agregadas</h4>
+                <div className="rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Nombre</TableHead>
+                        <TableHead>Cantidad</TableHead>
+                        <TableHead>Costo Parcial</TableHead>
+                        <TableHead className="text-right">Acciones</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {subRecetasSeleccionadas.map((receta) => (
+                        <TableRow key={receta.id}>
+                          <TableCell>{receta.nombre}</TableCell>
+                          <TableCell>{receta.cantidad}</TableCell>
+                          <TableCell>{formatCurrency(receta.ingredientecostoparcial)}</TableCell>
+                          <TableCell className="text-right">
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="destructive" size="icon" title="Eliminar Sub-Receta">
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>¿Confirmar eliminación?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    ¿Estás seguro de que deseas eliminar esta sub-receta de la receta?
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => handleDeleteSubReceta(receta.recetaId)}>
+                                    Confirmar       
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            )}
+          </div>
 
           <div className="flex justify-between gap-4 mt-6">
             <Button
@@ -935,6 +1316,33 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
                 )}
               </div>
 
+              {/* Tabla de sub-recetas en el resumen */}
+              {subRecetasSeleccionadas.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="text-lg font-semibold">Sub-Recetas Agregadas</h3>
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Nombre</TableHead>
+                          <TableHead>Cantidad</TableHead>
+                          <TableHead>Costo Parcial</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {subRecetasSeleccionadas.map((receta) => (
+                          <TableRow key={receta.id}>
+                            <TableCell>{receta.nombre}</TableCell>
+                            <TableCell>{receta.cantidad}</TableCell>
+                            <TableCell>{formatCurrency(receta.ingredientecostoparcial)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-2">
                 <p className="mt-2 text-right text-xl font-semibold text-gray-700">
                   Costo Total de la Sub-Receta: {formatCurrency(totalCostoReceta)}
@@ -979,6 +1387,20 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogAction onClick={() => setShowIngredienteExistsDialog(false)}>Aceptar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={showSubRecetaExistsDialog} onOpenChange={setShowSubRecetaExistsDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sub-receta ya existe</AlertDialogTitle>
+            <AlertDialogDescription>
+              No puedes agregar esta sub-receta, ya que ya está incluida en esta sub-receta.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setShowSubRecetaExistsDialog(false)}>Aceptar</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

@@ -261,7 +261,7 @@ export async function getPlatilloTotalCost(
     console.log("  costoAdministrativo (fallback):", totalCost)
     return { totalCost, costoAdministrativo: totalCost, precioSugerido: 0 } // Or 0, depending on desired fallback
   }
-  const valorFloatConfig = configData.valorfloat || 0
+  const valorFloatConfig = configData.valorfloat || 0 // Asegurarse de que sea un número, por defecto 0 si es null/undefined
 
   // Calculate costoAdministrativo
   const costoAdministrativo = totalCost * valorFloatConfig + totalCost
@@ -510,7 +510,14 @@ export async function agregarReceta(platilloId: number, recetaId: number, cantid
   }
 }
 
-export async function finalizarRegistro(platilloId: number, menuId: number) {
+export async function finalizarRegistro(
+  platilloId: number,
+  menuId: number,
+  precioVenta: number,
+  costoAdministrativo: number,
+  precioConIVA: number,
+  costoPorcentual: number,
+) {
   const supabase = createServerComponentClient({ cookies })
   try {
     // 1. Calcular y actualizar costototal en la tabla platillos
@@ -552,22 +559,26 @@ export async function finalizarRegistro(platilloId: number, menuId: number) {
     const valorFloatConfig = configData.valorfloat || 0 // Asegurarse de que sea un número, por defecto 0 si es null/undefined
 
     // Calcular costoadministrativo
-    const costoAdministrativo = totalCost * valorFloatConfig + totalCost
+    const costoAdministrativoCalculado = totalCost * valorFloatConfig + totalCost
 
     // Actualizar la columna costoadministrativo en la tabla platillos
     const { error: updateCostoAdminError } = await supabase
       .from("platillos")
-      .update({ costoadministrativo: costoAdministrativo })
+      .update({ costoadministrativo: costoAdministrativoCalculado })
       .eq("id", platilloId)
 
     if (updateCostoAdminError) throw updateCostoAdminError
 
-    // 2. Insertar en platillosxmenu
+    // Calcular margen de utilidad
+    const margenUtilidad = precioVenta - costoAdministrativo
+
+    // 2. Insertar en platillosxmenu con precioventa, margenutilidad y precioconiva
     const { error: platillosxmenuError } = await supabase.from("platillosxmenu").insert({
       menuid: menuId,
       platilloid: platilloId,
-      precioventa: null,
-      margenutilidad: null,
+      precioventa: precioVenta,
+      margenutilidad: margenUtilidad,
+      precioconiva: precioConIVA,
       activo: true,
       fechacreacion: new Date().toISOString(),
     })
@@ -609,6 +620,8 @@ export async function finalizarRegistro(platilloId: number, menuId: number) {
         recetaid: r.recetaid,
         cantidad: r.cantidad, // Usar la cantidad de la sub-receta
         costo: r.recetacostoparcial,
+        costoporcentual: costoPorcentual,
+        precioventa: precioVenta,
         activo: true,
         fechacreacion: new Date().toISOString(),
       }))
@@ -633,6 +646,8 @@ export async function finalizarRegistro(platilloId: number, menuId: number) {
         recetaid: null,
         cantidad: i.cantidad,
         costo: i.ingredientecostoparcial,
+        costoporcentual: costoPorcentual,
+        precioventa: precioVenta,
         activo: true,
         fechacreacion: new Date().toISOString(),
       }))

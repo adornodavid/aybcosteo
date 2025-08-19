@@ -63,40 +63,57 @@ export async function updateRecetaBasicInfo(
 export async function getIngredientesByRecetaId(recetaId: string) {
   const supabase = getSupabaseClient()
   try {
-    const { data, error } = await supabase
+    // Primero obtenemos los elementos de la receta que son ingredientes (tiposegmentoid = 1)
+    const { data: elementosReceta, error: elementosError } = await supabase
       .from("ingredientesxreceta")
-      .select(
-        `
-      id,
-      cantidad,
-      ingredientecostoparcial,
-      ingredientes (
+      .select("id, cantidad, ingredientecostoparcial, elementoid")
+      .eq("recetaid", recetaId)
+      .eq("tiposegmentoid", 1)
+      .order("id", { ascending: true })
+
+    if (elementosError) {
+      console.error("Error fetching elementos by receta ID:", elementosError.message)
+      return { data: null, error: elementosError }
+    }
+
+    if (!elementosReceta || elementosReceta.length === 0) {
+      return { data: [], error: null }
+    }
+
+    // Obtenemos los IDs de los ingredientes
+    const ingredienteIds = elementosReceta.map((item) => item.elementoid)
+
+    // Consultamos los ingredientes por separado
+    const { data: ingredientesData, error: ingredientesError } = await supabase
+      .from("ingredientes")
+      .select(`
         id,
         nombre,
         unidadmedidaid,
         tipounidadmedida (
           descripcion
         )
-      )
-    `,
-      )
-      .eq("recetaid", recetaId)
-      .order("id", { ascending: true })
+      `)
+      .in("id", ingredienteIds)
 
-    if (error) {
-      console.error("Error fetching ingredientes by receta ID:", error.message)
-      return { data: null, error }
+    if (ingredientesError) {
+      console.error("Error fetching ingredientes data:", ingredientesError.message)
+      return { data: null, error: ingredientesError }
     }
 
-    const formattedData: IngredienteReceta[] = data.map((item: any) => ({
-      id: item.id,
-      cantidad: item.cantidad,
-      ingredientecostoparcial: item.ingredientecostoparcial,
-      ingredienteid: item.ingredientes.id,
-      nombre: item.ingredientes.nombre,
-      unidadmedidaid: item.ingredientes.unidadmedidaid,
-      unidadmedidadescripcion: item.ingredientes.tipounidadmedida.descripcion,
-    }))
+    // Combinamos los datos
+    const formattedData: IngredienteReceta[] = elementosReceta.map((item: any) => {
+      const ingrediente = ingredientesData?.find((ing) => ing.id === item.elementoid)
+      return {
+        id: item.elementoid,
+        cantidad: item.cantidad,
+        ingredientecostoparcial: item.ingredientecostoparcial,
+        ingredienteid: item.elementoid,
+        nombre: ingrediente?.nombre || "Ingrediente no encontrado",
+        unidadmedidaid: ingrediente?.unidadmedidaid || null,
+        unidadmedidadescripcion: ingrediente?.tipounidadmedida?.descripcion || "N/A",
+      }
+    })
 
     return { data: formattedData, error: null }
   } catch (e: any) {
@@ -105,24 +122,18 @@ export async function getIngredientesByRecetaId(recetaId: string) {
   }
 }
 
-// NEW FUNCTION: Get Hotel ID from recipe's ingredients
+// Función para obtener Hotel ID directamente de la tabla recetas
 export async function getHotelIdFromRecetaIngredients(recetaId: string) {
   const supabase = getSupabaseClient()
   try {
-    const { data, error } = await supabase
-      .from("ingredientesxreceta")
-      .select("ingredientes!inner(hoteles!inner(id))")
-      .eq("recetaid", recetaId)
+    const { data, error } = await supabase.from("recetas").select("hotelid").eq("id", recetaId).single()
 
     if (error) {
       console.error("Error in getHotelIdFromRecetaIngredients:", error.message)
       return { data: null, error }
     }
 
-    const hotelIds = data.map((item: any) => item.ingredientes.hoteles.id).filter((id: any) => id !== null)
-    const distinctHotelIds = [...new Set(hotelIds)]
-
-    return { data: distinctHotelIds.length > 0 ? { id: distinctHotelIds[0] } : null, error: null }
+    return { data: data?.hotelid ? { id: data.hotelid } : null, error: null }
   } catch (e: any) {
     console.error("Exception in getHotelIdFromRecetaIngredients:", e)
     return { data: null, error: { message: e.message || "An unexpected error occurred" } }
@@ -224,7 +235,8 @@ export async function checkIngredienteExistsInReceta(recetaId: string, ingredien
       .from("ingredientesxreceta")
       .select("id")
       .eq("recetaid", recetaId)
-      .eq("ingredienteid", ingredienteId)
+      .eq("elementoid", ingredienteId)
+      .eq("tiposegmentoid", 1)
       .single()
 
     if (error && error.code !== "PGRST116") {
@@ -263,7 +275,8 @@ export async function addIngredienteToReceta(
       .from("ingredientesxreceta")
       .insert({
         recetaid: recetaId,
-        ingredienteid: ingredienteId,
+        elementoid: ingredienteId,
+        tiposegmentoid: 1,
         cantidad: cantidad,
         ingredientecostoparcial: ingredientecostoparcial,
         fechacreacion: new Date().toISOString(),
@@ -284,10 +297,15 @@ export async function addIngredienteToReceta(
 }
 
 // Función para eliminar ingrediente de la receta
-export async function deleteIngredienteFromReceta(id: number, recetaId: string) {
+export async function deleteIngredienteFromReceta(elementoId: number, recetaId: string) {
   const supabase = getSupabaseClient()
   try {
-    const { error } = await supabase.from("ingredientesxreceta").delete().eq("id", id).eq("recetaid", recetaId)
+    const { error } = await supabase
+      .from("ingredientesxreceta")
+      .delete()
+      .eq("elementoid", elementoId)
+      .eq("recetaid", recetaId)
+      .eq("tiposegmentoid", 1)
 
     if (error) {
       console.error("Error deleting ingrediente from receta:", error.message)
@@ -341,6 +359,168 @@ async function getPlatilloLocationDetails(platilloId: number) {
   } catch (e: any) {
     console.error(`Exception fetching location details for platillo ${platilloId}:`, e)
     return [] // Return an empty array on exception
+  }
+}
+
+// Función para obtener recetas disponibles para agregar a una receta (excluyendo la receta actual)
+export async function getRecetasForRecetaDropdown(hotelId: number, currentRecetaId: string) {
+  const supabase = getSupabaseClient()
+  try {
+    const { data, error } = await supabase
+      .from("recetas")
+      .select("id, nombre, costo, cantidad, unidadbaseid")
+      .eq("hotelid", hotelId)
+      .eq("activo", true)
+      .neq("id", currentRecetaId) // Excluir la receta actual
+      .order("nombre", { ascending: true })
+
+    if (error) {
+      console.error("Error fetching recetas for dropdown:", error.message)
+      return { data: null, error }
+    }
+    return { data, error: null }
+  } catch (e: any) {
+    console.error("Exception in getRecetasForRecetaDropdown:", e)
+    return { data: null, error: { message: e.message || "An unexpected error occurred" } }
+  }
+}
+
+// Función para obtener sub-recetas de una receta para la tabla
+export async function getSubRecetasByRecetaId(recetaId: string) {
+  const supabase = getSupabaseClient()
+  try {
+    // Primero obtenemos los elementos de la receta que son sub-recetas (tiposegmentoid = 2)
+    const { data: elementosReceta, error: elementosError } = await supabase
+      .from("ingredientesxreceta")
+      .select("id, cantidad, ingredientecostoparcial, elementoid")
+      .eq("recetaid", recetaId)
+      .eq("tiposegmentoid", 2)
+      .order("id", { ascending: true })
+
+    if (elementosError) {
+      console.error("Error fetching sub-recetas by receta ID:", elementosError.message)
+      return { data: null, error: elementosError }
+    }
+
+    if (!elementosReceta || elementosReceta.length === 0) {
+      return { data: [], error: null }
+    }
+
+    // Obtenemos los IDs de las sub-recetas
+    const subRecetaIds = elementosReceta.map((item) => item.elementoid)
+
+    // Consultamos las sub-recetas por separado
+    const { data: subRecetasData, error: subRecetasError } = await supabase
+      .from("recetas")
+      .select("id, nombre, costo")
+      .in("id", subRecetaIds)
+
+    if (subRecetasError) {
+      console.error("Error fetching sub-recetas data:", subRecetasError.message)
+      return { data: null, error: subRecetasError }
+    }
+
+    // Combinamos los datos
+    const formattedData = elementosReceta.map((item: any) => {
+      const subReceta = subRecetasData?.find((rec) => rec.id === item.elementoid)
+      return {
+        id: item.id,
+        recetaId: item.elementoid,
+        nombre: subReceta?.nombre || "Sub-receta no encontrada",
+        cantidad: item.cantidad,
+        costototal: subReceta?.costo || 0,
+        ingredientecostoparcial: item.ingredientecostoparcial,
+      }
+    })
+
+    return { data: formattedData, error: null }
+  } catch (e: any) {
+    console.error("Exception fetching sub-recetas by receta ID:", e)
+    return { data: null, error: { message: e.message || "An unexpected error occurred" } }
+  }
+}
+
+// Función para verificar si una sub-receta ya existe en la receta
+export async function checkSubRecetaExistsInReceta(recetaId: string, subRecetaId: number) {
+  const supabase = getSupabaseClient()
+  try {
+    const { data, error } = await supabase
+      .from("ingredientesxreceta")
+      .select("id")
+      .eq("recetaid", recetaId)
+      .eq("elementoid", subRecetaId)
+      .eq("tiposegmentoid", 2)
+      .single()
+
+    if (error && error.code !== "PGRST116") {
+      // PGRST116 means "No rows found"
+      console.error("Error checking existing sub-receta in receta:", error.message)
+      return { data: null, error }
+    }
+    return { data: data, error: null }
+  } catch (e: any) {
+    console.error("Exception checking existing sub-receta in receta:", e)
+    return { data: null, error: { message: e.message || "An unexpected error occurred" } }
+  }
+}
+
+// Función para agregar sub-receta a la receta
+export async function addSubRecetaToReceta(
+  recetaId: string,
+  subRecetaId: number,
+  cantidad: number,
+  costoSubReceta: number,
+  cantidadMaximaSubReceta: number,
+) {
+  const supabase = getSupabaseClient()
+  try {
+    const costoParcial = (costoSubReceta / cantidadMaximaSubReceta) * cantidad
+
+    const { data, error } = await supabase
+      .from("ingredientesxreceta")
+      .insert({
+        recetaid: recetaId,
+        elementoid: subRecetaId,
+        tiposegmentoid: 2, // 2 para sub-recetas
+        cantidad: cantidad,
+        ingredientecostoparcial: costoParcial,
+        fechacreacion: new Date().toISOString(),
+        fechamodificacion: new Date().toISOString(),
+      })
+      .select()
+
+    if (error) {
+      console.error("Error adding sub-receta to receta:", error.message)
+      return { success: false, error }
+    }
+    revalidatePath(`/recetas/${recetaId}/editar`)
+    return { success: true, data, error: null }
+  } catch (e: any) {
+    console.error("Exception adding sub-receta to receta:", e)
+    return { success: false, error: { message: e.message || "An unexpected error occurred" } }
+  }
+}
+
+// Función para eliminar sub-receta de la receta
+export async function deleteSubRecetaFromReceta(subRecetaId: number, recetaId: string) {
+  const supabase = getSupabaseClient()
+  try {
+    const { error } = await supabase
+      .from("ingredientesxreceta")
+      .delete()
+      .eq("elementoid", subRecetaId)
+      .eq("recetaid", recetaId)
+      .eq("tiposegmentoid", 2)
+
+    if (error) {
+      console.error("Error deleting sub-receta from receta:", error.message)
+      return { success: false, error }
+    }
+    revalidatePath(`/recetas/${recetaId}/editar`)
+    return { success: true, error: null }
+  } catch (e: any) {
+    console.error("Exception deleting sub-receta from receta:", e)
+    return { success: false, error: { message: e.message || "An unexpected error occurred" } }
   }
 }
 

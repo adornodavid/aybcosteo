@@ -232,7 +232,8 @@ export function RecetaEditForm({ recetaId }: RecetaEditFormProps) {
         .from("ingredientesxreceta")
         .select("id")
         .eq("recetaid", recetaId) // Usa recetaId de las props
-        .eq("ingredienteid", Number(selectedIngredienteId))
+        .eq("elementoid", Number(selectedIngredienteId))
+        .eq("tiposegmentoid",1)
         .single()
 
       // Si hay un error y no es el error de "no rows found" (PGRST116), lo manejamos
@@ -304,6 +305,7 @@ export function RecetaEditForm({ recetaId }: RecetaEditFormProps) {
           title: "Ingrediente eliminado",
           description: "El ingrediente se ha eliminado de la sub-receta.",
         })
+        
         // Recargar ingredientes de la receta y actualizar costo total
         const { data: updatedIngredientes, error: updatedIngredientesError } = await getIngredientesByRecetaId(recetaId)
         if (updatedIngredientesError) {
@@ -325,8 +327,10 @@ export function RecetaEditForm({ recetaId }: RecetaEditFormProps) {
           description: `Error al eliminar ingrediente: ${error?.message}`,
           variant: "destructive",
         })
-      }
+      } 
+     
     })
+     console.log("cons", id)
   }
 
   const handleUpdateRecetaBasicInfo = async () => {
@@ -359,7 +363,7 @@ export function RecetaEditForm({ recetaId }: RecetaEditFormProps) {
 
   const handleUpdateRecetaCompleto = async () => {
     // Validar que existan al menos 2 ingredientes
-    if (ingredientesReceta.length < 2) {
+    if (ingredientesReceta.length < 1) {
       setShowIngredientesInsuficientesDialog(true) // Mostrar AlertDialog en lugar de toast
       return // Detener el proceso de actualización
     }
@@ -541,7 +545,7 @@ export function RecetaEditForm({ recetaId }: RecetaEditFormProps) {
               <Input
                 id="txtCostoIngrediente"
                 type="number"
-                value={selectedIngredienteCosto.toFixed(2)}
+                value={selectedIngredienteCosto.toFixed(3)}
                 disabled={true} // This field is for display only
               />
             </div>
@@ -580,7 +584,7 @@ export function RecetaEditForm({ recetaId }: RecetaEditFormProps) {
                     <TableCell>{ingrediente.nombre}</TableCell>
                     <TableCell>{ingrediente.cantidad}</TableCell>
                     <TableCell>{ingrediente.unidadmedidadescripcion}</TableCell>
-                    <TableCell>{ingrediente.ingredientecostoparcial?.toFixed(2) || "0.00"}</TableCell>
+                    <TableCell>{ingrediente.ingredientecostoparcial?.toFixed(3) || "0.00"}</TableCell>
                     <TableCell className="text-right">
                       <Button
                         variant="ghost"

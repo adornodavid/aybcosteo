@@ -17,7 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import * as DialogPrimitive from "@radix-ui/react-dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { AspectRatio } from "@/components/ui/aspect-ratio"
-import Image from "next/image" // Se eliminó la importación duplicada de Image
+import Image from "next/image"
 import { getRecetaDetails } from "@/app/actions/recetas-details-actions"
 
 interface SessionData {
@@ -218,6 +218,7 @@ export default function RecetasPage() {
         auxHotelid = -1
       }
 
+      // Consulta con relación correcta entre recetas y hoteles
       let query = supabase
         .from("recetas")
         .select(`
@@ -226,19 +227,17 @@ export default function RecetasPage() {
           notaspreparacion,
           costo,
           activo,
-          ingredientesxreceta!inner (
-            ingredientes!inner (
-              hoteles!inner (
-                id, nombre
-              )
-            )
+          hotelid,
+          hoteles!inner (
+            id,
+            nombre
           )
         `)
         .eq("activo", ddlEstatusReceta === "true")
 
       // Aplicar filtro de hotel si auxHotelid no es -1
       if (auxHotelid !== -1) {
-        query = query.eq("ingredientesxreceta.ingredientes.hoteles.id", auxHotelid)
+        query = query.eq("hotelid", auxHotelid)
       }
 
       const { data, error } = await query
@@ -252,34 +251,20 @@ export default function RecetasPage() {
         receta: receta.nombre,
         notaspreparacion: receta.notaspreparacion || "",
         costo: receta.costo || 0,
-        hotel: receta.ingredientesxreceta?.[0]?.ingredientes?.hoteles?.nombre || "N/A",
+        hotel: receta.hoteles?.nombre || "Sin Hotel",
         activo: receta.activo,
       }))
 
       setRecetas(recetasFormateadas)
 
       // Calcular total de páginas
-      // Para el conteo, necesitamos una consulta similar pero solo para el count
       let countQuery = supabase
         .from("recetas")
-        .select(
-          `
-          id,
-          activo,
-          ingredientesxreceta!inner (
-            ingredientes!inner (
-              hoteles!inner (
-                id
-              )
-            )
-          )
-        `,
-          { count: "exact", head: true },
-        )
+        .select("*", { count: "exact", head: true })
         .eq("activo", ddlEstatusReceta === "true")
 
       if (auxHotelid !== -1) {
-        countQuery = countQuery.eq("ingredientesxreceta.ingredientes.hoteles.id", auxHotelid)
+        countQuery = countQuery.eq("hotelid", auxHotelid)
       }
 
       const { count: totalCount } = await countQuery
@@ -318,12 +303,10 @@ export default function RecetasPage() {
           notaspreparacion,
           costo,
           activo,
-          ingredientesxreceta!inner (
-            ingredientes!inner (
-              hoteles!inner (
-                id, nombre
-              )
-            )
+          hotelid,
+          hoteles!inner (
+            id,
+            nombre
           )
         `)
         .eq("activo", ddlEstatusReceta === "true")
@@ -335,7 +318,7 @@ export default function RecetasPage() {
 
       // Filtro por hotel
       if (hotelFilterId !== -1) {
-        query = query.eq("ingredientesxreceta.ingredientes.hoteles.id", hotelFilterId)
+        query = query.eq("hotelid", hotelFilterId)
       }
 
       const { data, error } = await query
@@ -349,7 +332,7 @@ export default function RecetasPage() {
         receta: receta.nombre,
         notaspreparacion: receta.notaspreparacion || "",
         costo: receta.costo || 0,
-        hotel: receta.ingredientesxreceta?.[0]?.ingredientes?.hoteles?.nombre || "N/A",
+        hotel: receta.hoteles?.nombre || "Sin Hotel",
         activo: receta.activo,
       }))
 
@@ -358,20 +341,7 @@ export default function RecetasPage() {
       // Calcular total de páginas para la búsqueda
       let countQuery = supabase
         .from("recetas")
-        .select(
-          `
-          id,
-          activo,
-          ingredientesxreceta!inner (
-            ingredientes!inner (
-              hoteles!inner (
-                id
-              )
-            )
-          )
-        `,
-          { count: "exact", head: true },
-        )
+        .select("*", { count: "exact", head: true })
         .eq("activo", ddlEstatusReceta === "true")
 
       if (txtRecetaNombre.trim()) {
@@ -379,7 +349,7 @@ export default function RecetasPage() {
       }
 
       if (hotelFilterId !== -1) {
-        countQuery = countQuery.eq("ingredientesxreceta.ingredientes.hoteles.id", hotelFilterId)
+        countQuery = countQuery.eq("hotelid", hotelFilterId)
       }
 
       const { count: totalCount } = await countQuery
@@ -459,9 +429,9 @@ export default function RecetasPage() {
             <Image
               src="https://nxtrsibnomdqmzcrwedc.supabase.co/storage/v1/object/public/imagenes/AnimationGif/CargarPage.gif"
               alt="Procesando..."
-              width={300} // Ajusta el tamaño según sea necesario
-              height={300} // Ajusta el tamaño según sea necesario
-              unoptimized // Importante para GIFs externos
+              width={300}
+              height={300}
+              unoptimized
               className="absolute inset-0 animate-bounce-slow"
             />
           </div>
@@ -575,7 +545,7 @@ export default function RecetasPage() {
               type="button"
               onClick={clearPlatillosBusqueda}
               className="bg-[#4a4a4a] text-white hover:bg-[#333333]"
-              style={{ fontSize: "12px", }}
+              style={{ fontSize: "12px" }}
             >
               <RotateCcw className="h-3 w-3 mr-1" />
               Limpiar filtros
@@ -588,7 +558,7 @@ export default function RecetasPage() {
               onClick={btnRecetaBuscar}
               disabled={searching}
               className="bg-[#4a4a4a] text-white hover:bg-[#333333]"
-              style={{ fontSize: "12px", }}
+              style={{ fontSize: "12px" }}
             >
               {searching ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Search className="h-3 w-3 mr-1" />}
               Buscar
@@ -635,11 +605,7 @@ export default function RecetasPage() {
                     <TableCell>{receta.hotel}</TableCell>
                     <TableCell>
                       <div className="flex space-x-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleViewRecetaDetails(receta.folio)} // Cambiado para abrir el modal
-                        >
+                        <Button size="sm" variant="outline" onClick={() => handleViewRecetaDetails(receta.folio)}>
                           <Eye className="h-3 w-3" />
                         </Button>
                         <Button
@@ -703,7 +669,6 @@ export default function RecetasPage() {
           <DialogHeader className="flex flex-row items-center justify-between pb-4 border-b">
             <DialogTitle className="text-2xl font-bold text-[#cfa661]">Detalles de Sub-Receta</DialogTitle>
             <DialogPrimitive.Close asChild>
-              {/* Usado DialogPrimitive.Close */}
               <Button variant="ghost" size="icon" className="rounded-full">
                 <X className="h-5 w-5" />
                 <span className="sr-only">Cerrar</span>
@@ -781,7 +746,7 @@ export default function RecetasPage() {
                         <Table>
                           <TableHeader>
                             <TableRow>
-                              <TableHead >Ingrediente</TableHead>
+                              <TableHead>Ingrediente</TableHead>
                               <TableHead className="text-right">Cantidad</TableHead>
                               <TableHead className="text-right">Costo Parcial</TableHead>
                             </TableRow>

@@ -34,6 +34,7 @@ import {
   getRecetas as getRecetasForDropdown,
   getUnidadesMedidaByIngrediente,
 } from "@/app/actions/platillos-wizard-actions"
+import { calcularCostoPorcentual, calcularPrecioConIVA } from "@/app/actions/platillos-actions"
 import { Label } from "@/components/ui/label"
 
 interface PlatilloData {
@@ -138,6 +139,11 @@ export default function EditarPlatilloPage() {
   const [totalCostoPlatillo, setTotalCostoPlatillo] = useState<number | null>(null)
   const [costoAdministrativoPlatillo, setCostoAdministrativoPlatillo] = useState<number | null>(null)
   const [precioSugeridoPlatillo, setPrecioSugeridoPlatillo] = useState<number | null>(null)
+
+  // Nuevos estados para los inputs adicionales
+  const [precioVenta, setPrecioVenta] = useState<string>("")
+  const [costoPorcentual, setCostoPorcentual] = useState<string>("")
+  const [precioConIVA, setPrecioConIVA] = useState<string>("")
 
   const canAdvanceToStep2 = useMemo(() => {
     return platilloData?.nombre && platilloData?.descripcion
@@ -306,6 +312,38 @@ export default function EditarPlatilloPage() {
         setTotalCostoPlatillo(totalCost)
         setCostoAdministrativoPlatillo(costoAdministrativo)
         setPrecioSugeridoPlatillo(precioSugerido)
+
+        // Cargar precio de venta existente si existe
+        const { data: platilloMenuData, error: platilloMenuError } = await supabase
+          .from("platillosxmenu")
+          .select("precioventa, precioconiva")
+          .eq("platilloid", platilloId)
+          .limit(1)
+          .single()
+
+        if (!platilloMenuError && platilloMenuData) {
+          if (platilloMenuData.precioventa) {
+            const Costoporcentual = (costoAdministrativo / platilloMenuData.precioventa) * 100
+            setCostoPorcentual(Costoporcentual.toFixed(2))
+            setPrecioVenta(platilloMenuData.precioventa.toString())
+            // Calcular automáticamente los otros valores
+           
+            /*const costoPorcentualCalculado = calcularCostoPorcentual(
+              costoAdministrativo || 0,
+              platilloMenuData.precioventa,
+            )
+            */
+
+            const precioConIVACalculado = platilloMenuData.precioventa * 0.16 + platilloMenuData.precioventa
+            setPrecioConIVA(precioConIVACalculado.toFixed(2))
+            //const precioConIVACalculado = calcularPrecioConIVA(platilloMenuData.precioventa)
+            //setCostoPorcentual(costoPorcentualCalculado.toFixed(2))
+            //setPrecioConIVA(precioConIVACalculado.toFixed(2))
+          }
+          if (platilloMenuData.precioconiva) {
+            setPrecioConIVA(platilloMenuData.precioconiva.toString())
+          }
+        }
       } catch (error) {
         console.error("Error al cargar costos para la Etapa 3:", error)
         toast.error("Error al cargar costos para el resumen.")
@@ -391,6 +429,27 @@ export default function EditarPlatilloPage() {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { id, value } = e.target
     setPlatilloData((prev) => (prev ? { ...prev, [id]: value } : null))
+  }
+
+  const handlePrecioVentaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value
+    setPrecioVenta(value)
+
+    if (value && !isNaN(Number(value)) && costoAdministrativoPlatillo) {
+      const precioVentaNum = Number(value)
+      const Costoporcentual = (costoAdministrativoPlatillo / precioVentaNum) * 100
+      setCostoPorcentual(Costoporcentual.toFixed(2))
+      //const costoPorcentualCalculado = calcularCostoPorcentual(costoAdministrativoPlatillo, precioVentaNum)
+      //const precioConIVACalculado = calcularPrecioConIVA(precioVentaNum)
+
+      //setCostoPorcentual(costoPorcentualCalculado.toFixed(2))
+      //setPrecioConIVA(precioConIVACalculado.toFixed(2))
+      const precioConIVACalculado = precioVentaNum * 0.16 + precioVentaNum
+            setPrecioConIVA(precioConIVACalculado.toFixed(2))
+    } else {
+      setCostoPorcentual("")
+      setPrecioConIVA("")
+    }
   }
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -846,10 +905,19 @@ export default function EditarPlatilloPage() {
       return
     }
 
+    if (!precioVenta || isNaN(Number(precioVenta))) {
+      toast.error("Debe ingresar un precio de venta válido.")
+      return
+    }
+
     setIsSubmitting(true)
     setShowAnimation(true)
 
     try {
+      const precioVentaNum = Number(precioVenta)
+      const costoPorcentualNum = Number(costoPorcentual)
+      const precioConIVANum = Number(precioConIVA)
+
       const [supabaseResult] = await Promise.all([
         (async () => {
           const { data: ingredientesCostos, error: ingCostosError } = await supabase
@@ -901,33 +969,33 @@ export default function EditarPlatilloPage() {
 
           if (updateCostoAdministrativoError) throw updateCostoAdministrativoError
 
+          // Actualizar platillosxmenu con los nuevos valores
           const { data: platillosxMenuEntries, error: platillosxMenuError } = await supabase
             .from("platillosxmenu")
-            .select("id, precioventa")
+            .select("id")
             .eq("platilloid", platilloId)
 
           if (platillosxMenuError) {
-            console.error("Error al obtener entradas de platillosxmenu para margen de utilidad:", platillosxMenuError)
-            throw new Error("Error al obtener datos de platillosxmenu para el cálculo del margen de utilidad.")
+            console.error("Error al obtener entradas de platillosxmenu:", platillosxMenuError)
+            throw new Error("Error al obtener datos de platillosxmenu.")
           }
 
           if (platillosxMenuEntries && platillosxMenuEntries.length > 0) {
             for (const entry of platillosxMenuEntries) {
-              if (entry.precioventa !== null) {
-                const margenUtilidadCalculado = entry.precioventa - costoAdministrativoCalculado
+              const margenUtilidadCalculado = precioVentaNum - costoAdministrativoCalculado
 
-                const { error: updateMargenUtilidadError } = await supabase
-                  .from("platillosxmenu")
-                  .update({ margenutilidad: margenUtilidadCalculado })
-                  .eq("id", entry.id)
+              const { error: updatePlatillosxMenuError } = await supabase
+                .from("platillosxmenu")
+                .update({
+                  precioventa: precioVentaNum,
+                  precioconiva: precioConIVANum,
+                  margenutilidad: margenUtilidadCalculado,
+                })
+                .eq("id", entry.id)
 
-                if (updateMargenUtilidadError) {
-                  console.error(
-                    `Error al actualizar margenutilidad para platillosxmenu ID ${entry.id}:`,
-                    updateMargenUtilidadError,
-                  )
-                  throw updateMargenUtilidadError
-                }
+              if (updatePlatillosxMenuError) {
+                console.error(`Error al actualizar platillosxmenu para ID ${entry.id}:`, updatePlatillosxMenuError)
+                throw updatePlatillosxMenuError
               }
             }
           }
@@ -980,12 +1048,6 @@ export default function EditarPlatilloPage() {
               }
             }
 
-            let costoporcentual = null
-            const precioVenta = menuAssoc.precioventa
-            if (precioVenta !== null && precioVenta > 0) {
-              costoporcentual = (costoAdministrativoCalculado / precioVenta) * 100
-            }
-
             const historicoIngredientesToInsert = []
             const hotelId = menuAssoc.menus.restaurantes.hotelid
             const restauranteId = menuAssoc.menus.restaurantes.restauranteid
@@ -1003,8 +1065,8 @@ export default function EditarPlatilloPage() {
                 costo: ing.ingredientecostoparcial,
                 activo: true,
                 fechacreacion: new Date().toISOString(),
-                precioventa: precioVenta,
-                costoporcentual: costoporcentual,
+                precioventa: precioVentaNum,
+                costoporcentual: costoPorcentualNum,
               })
             }
 
@@ -1029,8 +1091,8 @@ export default function EditarPlatilloPage() {
                 costo: rec.recetacostoparcial,
                 activo: true,
                 fechacreacion: new Date().toISOString(),
-                precioventa: precioVenta,
-                costoporcentual: costoporcentual,
+                precioventa: precioVentaNum,
+                costoporcentual: costoPorcentualNum,
               })
             }
 
@@ -1722,6 +1784,56 @@ export default function EditarPlatilloPage() {
                 <p className="mt-6 text-right text-lg text-black-600">
                   <span className="text-yellow-600">*</span>Precio Mínimo: {formatCurrency(precioSugeridoPlatillo)}
                 </p>
+              </div>
+
+              {/* Nuevos inputs agregados */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6 p-4 border rounded-lg bg-gray-50">
+                
+                <div>
+                  <Label htmlFor="txtCostoPorcentual">Costo%</Label>
+                  <Input
+                    id="txtCostoPorcentual"
+                    name="txtCostoPorcentual"
+                    type="text"
+                    value={costoPorcentual}
+                    readOnly
+                    disabled
+                    className={`text-center ${
+                      costoPorcentual && Number(costoPorcentual) > 30.0
+                        ? "bg-red-100 border-red-300"
+                        : "bg-green-100 border-green-300"
+                    }`}
+                    placeholder="0.00"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="txtPrecioVenta">Precio Venta</Label>
+                  <Input
+                    id="txtPrecioVenta"
+                    name="txtPrecioVenta"
+                    type="number"
+                    step="0.01"
+                    value={precioVenta}
+                    onChange={handlePrecioVentaChange}
+                    placeholder="0.00"
+                    className="text-center"
+                  />
+                </div>
+                <div className="col-span-1">
+                </div>
+                <div className="col-span-1">
+                  <Label htmlFor="txtPrecioConIVA">Precio con IVA</Label>
+                  <Input
+                    id="txtPrecioConIVA"
+                    name="txtPrecioConIVA"
+                    type="text"
+                    value={precioConIVA}
+                    readOnly
+                    className="text-center"
+                    placeholder="0.00"
+                    disabled
+                  />
+                </div>
               </div>
             </CardContent>
           </Card>

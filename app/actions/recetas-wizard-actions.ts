@@ -80,7 +80,7 @@ export async function registrarRecetaConImagen(formData: FormData) {
       .insert({
         nombre: nombre,
         notaspreparacion: notaspreparacion,
-        //hotelid: Number(hotelId),
+        hotelid: Number(hotelId),
         costo: null, // Se calculará después
         activo: true,
         fechacreacion: new Date().toISOString(),

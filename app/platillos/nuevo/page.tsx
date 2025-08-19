@@ -65,7 +65,7 @@ interface UnidadMedida {
   descripcion: string
   calculoconversion: number | null // Necesario para el cálculo en el cliente
 }
-interface IngredienteAgregado {
+interface IngredienteAgregada {
   id: number
   nombre: string
   cantidad: number
@@ -150,6 +150,10 @@ export default function NuevoPlatilloPage() {
   const [totalCostoPlatillo, setTotalCostoPlatillo] = useState<number | null>(null) // Nuevo estado para el costo total
   const [costoAdministrativoPlatillo, setCostoAdministrativoPlatillo] = useState<number | null>(null) // Nuevo estado para el costo administrativo
   const [precioSugeridoPlatillo, setPrecioSugeridoPlatillo] = useState<number | null>(null) // Nuevo estado para el precio sugerido
+  const [precioVenta, setPrecioVenta] = useState("") // Nuevo estado para el precio de venta
+  // NUEVOS ESTADOS PARA LOS INPUTS ADICIONALES
+  const [costoPorcentual, setCostoPorcentual] = useState("0.00") // Estado para el costo porcentual
+  const [precioConIVA, setPrecioConIVA] = useState("0.00") // Estado para el precio con IVA
 
   // --- EFECTOS ---
 
@@ -265,6 +269,36 @@ export default function NuevoPlatilloPage() {
       fetchTotalCost()
     }
   }, [etapa, platilloId])
+
+  // NUEVO EFECTO: Calcular costo porcentual y precio con IVA cuando cambie el precio de venta o costo total
+  useEffect(() => {
+    if (precioVenta && costoAdministrativoPlatillo !== null) {
+      const precioVentaNum = Number(precioVenta)
+      if (precioVentaNum > 0) {
+        /*const { Costoporcentual } =  platillosActions.calcularCostoPorcentual(
+          costoAdministrativoPlatillo,
+          precioVentaNum,
+        )*/
+        const Costoporcentual = (costoAdministrativoPlatillo / precioVentaNum) * 100
+
+        console.log("dil1", costoAdministrativoPlatillo)
+        console.log("dil2", precioVentaNum)
+        console.log("dil3", Costoporcentual)
+
+        setCostoPorcentual(Costoporcentual.toFixed(2))
+
+        //const precioConIVACalculado = platillosActions.calcularPrecioConIVA(precioVentaNum)
+        const precioConIVACalculado = precioVentaNum * 0.16 + precioVentaNum
+        setPrecioConIVA(precioConIVACalculado.toFixed(2))
+      } else {
+        setCostoPorcentual("0.00")
+        setPrecioConIVA("0.00")
+      }
+    } else {
+      setCostoPorcentual("0.00")
+      setPrecioConIVA("0.00")
+    }
+  }, [precioVenta, costoAdministrativoPlatillo])
 
   // NUEVO EFECTO: Contador de tiempo para la Etapa 5 y redirección automática
   useEffect(() => {
@@ -463,6 +497,15 @@ export default function NuevoPlatilloPage() {
     setSelRecetaCantidad(value) // Sincronizar con el input numérico
   }
 
+  // NUEVO MANEJADOR: Para el input de precio de venta (solo números)
+  const handlePrecioVentaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value
+    // Solo permitir números y punto decimal
+    if (value === "" || /^\d*\.?\d*$/.test(value)) {
+      setPrecioVenta(value)
+    }
+  }
+
   const handleAgregarReceta = async () => {
     if (!selRecetaId || !selRecetaCantidad || Number(selRecetaCantidad) < 1) {
       toast.error("Favor de seleccionar una sub-receta e ingresar una cantidad válida.")
@@ -530,13 +573,39 @@ export default function NuevoPlatilloPage() {
       return
     }
 
+    if (!precioVenta || Number(precioVenta) <= 0) {
+      setErrorMessage("Favor de ingresar un precio de venta válido.")
+      setShowErrorDialog(true)
+      return
+    }
+
+    const precioVentaNum = Number(precioVenta)
+    const costoAdmin = costoAdministrativoPlatillo || 0
+    const precioConIVANum = Number(precioConIVA)
+    const costoPorcentualNum = Number(costoPorcentual)
+
+    if (precioVentaNum < (precioSugeridoPlatillo || 0)) {
+      setErrorMessage(
+        `El precio de venta no puede ser menor al precio mínimo sugerido ($${(precioSugeridoPlatillo || 0).toFixed(2)}).`,
+      )
+      setShowErrorDialog(true)
+      return
+    }
+
     setIsSubmitting(true)
     setShowCookingAnimation(true) // Mostrar la animación de cocinando
 
     try {
       // Ejecutar la acción y el temporizador de 6 segundos en paralelo
       const [result] = await Promise.all([
-        actions.finalizarRegistro(platilloId!, Number(menuId)),
+        actions.finalizarRegistro(
+          platilloId!,
+          Number(menuId),
+          precioVentaNum,
+          costoAdmin,
+          precioConIVANum,
+          costoPorcentualNum,
+        ),
         new Promise((resolve) => setTimeout(resolve, 6000)), // Mínimo 6 segundos de animación
       ])
 
@@ -1278,6 +1347,46 @@ export default function NuevoPlatilloPage() {
                   <span className="text-yellow-600">*</span> Precio Mínimo: ${precioSugeridoPlatillo.toFixed(2)}
                 </div>
               )}
+              {/* NUEVOS INPUTS PRECIO VENTA, COSTO% Y PRECIO CON IVA */}
+              <div className="mt-4 flex justify-end gap-4">
+                <div className="w-48">
+                  <Label htmlFor="txtCostoPorcentual">Costo%</Label>
+                  <Input
+                    id="txtCostoPorcentual"
+                    name="txtCostoPorcentual"
+                    type="text"
+                    value={`${costoPorcentual}%`}
+                    className={`text-right ${Number(costoPorcentual) > 30.0 ? "bg-red-100" : "bg-green-100"}`}
+                    disabled
+                  />
+                </div>
+                <div className="w-64">
+                  <Label htmlFor="txtPrecioVenta">Precio Venta</Label>
+                  <Input
+                    id="txtPrecioVenta"
+                    name="txtPrecioVenta"
+                    type="text"
+                    value={precioVenta}
+                    onChange={handlePrecioVentaChange}
+                    placeholder="0.00"
+                    className="text-right"
+                    required
+                  />
+                </div>
+              </div>
+              <div className="mt-4 flex justify-end">
+                <div className="w-64">
+                  <Label htmlFor="txtPrecioConIVA">Precio con IVA</Label>
+                  <Input
+                    id="txtPrecioConIVA"
+                    name="txtPrecioConIVA"
+                    type="text"
+                    value={`$${precioConIVA}`}
+                    className="text-right"
+                    disabled
+                  />
+                </div>
+              </div>
             </CardContent>
             <CardFooter className="flex justify-between">
               <Button variant="outline" onClick={() => setEtapa(3)}>

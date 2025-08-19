@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
+import { Slider } from "@/components/ui/slider"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,7 +27,7 @@ import { Loader2, ArrowLeft, Plus, CheckCircle, ImageIcon, X, Trash2 } from "luc
 import { getSession } from "@/app/actions/session-actions"
 import { toast } from "sonner"
 import { useNavigationGuard } from "@/contexts/navigation-guard-context"
-import { getUnidadMedidaForRecetaIngrediente, registrarRecetaConImagen } from "@/app/actions/recetas-wizard-actions" // Importar la nueva acción
+import { getUnidadMedidaForRecetaIngrediente, registrarRecetaConImagen } from "@/app/actions/recetas-wizard-actions"
 import Image from "next/image"
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -68,6 +69,14 @@ interface IngredienteRecetaDisplay {
   ingredientecostoparcial: number
 }
 
+interface Receta {
+  id: number
+  nombre: string
+  costo: number | null
+  cantidad: number | null
+  unidadbaseid: number | null
+}
+
 export default function NuevaRecetaPage() {
   const router = useRouter()
   const { setGuard, attemptNavigation } = useNavigationGuard()
@@ -96,13 +105,22 @@ export default function NuevaRecetaPage() {
   const [unidadesMedida, setUnidadesMedida] = useState<UnidadMedida[]>([])
   const [ingredientesReceta, setIngredientesReceta] = useState<IngredienteRecetaDisplay[]>([])
 
+  // Estados para sub-recetas (después de los estados de ingredientes)
+  const [recetas, setRecetas] = useState<Receta[]>([])
+  const [recetasSeleccionadas, setRecetasSeleccionadas] = useState<any[]>([])
+  const [ddlRecetas, setDdlRecetas] = useState("")
+  const [txtCantidadReceta, setTxtCantidadReceta] = useState("")
+  const [cantidadRangoReceta, setCantidadRangoReceta] = useState([1])
+  const [txtCostoReceta, setTxtCostoReceta] = useState("")
+  const [txtUnidadReceta, setTxtUnidadReceta] = useState("")
+  const [maxCantidadReceta, setMaxCantidadReceta] = useState(1)
+
   const [txtNombreRecetaNuevo, setTxtNombreRecetaNuevo] = useState("")
   const [txtNotasReceta, setTxtNotasReceta] = useState("")
   const [ddlHotel, setDdlHotel] = useState("")
   const [imagenFile, setImagenFile] = useState<File | null>(null)
   const [imagenPreview, setImagenPreview] = useState<string | null>(null)
   const [etapa1Bloqueada, setEtapa1Bloqueada] = useState(false)
-  // Removido isUploadingImage
 
   const [txtCantidadSubReceta, setTxtCantidadSubReceta] = useState("")
   const [ddlUnidadBaseSubReceta, setDdlUnidadBaseSubReceta] = useState("")
@@ -153,8 +171,43 @@ export default function NuevaRecetaPage() {
   useEffect(() => {
     if (ddlHotel) {
       cargarIngredientes(ddlHotel)
+      cargarRecetas(ddlHotel)
     }
   }, [ddlHotel])
+
+  // Efecto para sincronizar cantidad y rango de receta
+  useEffect(() => {
+    if (ddlRecetas) {
+      const recetaSeleccionada = recetas.find((r) => r.id.toString() === ddlRecetas)
+      if (recetaSeleccionada) {
+        const maxCantidad = recetaSeleccionada.cantidad || 1
+        setMaxCantidadReceta(maxCantidad)
+        setTxtCostoReceta(recetaSeleccionada.costo?.toString() || "0")
+
+        // Obtener la descripción de la unidad de medida
+        const unidadMedida = unidadesMedida.find((u) => u.id === recetaSeleccionada.unidadbaseid)
+        setTxtUnidadReceta(unidadMedida?.descripcion || "Sin unidad")
+
+        // Si la cantidad actual excede el máximo, ajustarla
+        const cantidadActual = Number.parseFloat(txtCantidadReceta) || 1
+        if (cantidadActual > maxCantidad) {
+          setTxtCantidadReceta(maxCantidad.toString())
+          setCantidadRangoReceta([maxCantidad])
+        } else if (cantidadActual >= 1) {
+          setCantidadRangoReceta([cantidadActual])
+        } else {
+          setTxtCantidadReceta("1")
+          setCantidadRangoReceta([1])
+        }
+      }
+    } else {
+      setTxtCostoReceta("")
+      setTxtUnidadReceta("")
+      setMaxCantidadReceta(1)
+      setTxtCantidadReceta("")
+      setCantidadRangoReceta([1])
+    }
+  }, [ddlRecetas, recetas, unidadesMedida])
 
   const actualizarCostoIngrediente = useCallback(
     (ingredienteId: string) => {
@@ -191,7 +244,6 @@ export default function NuevaRecetaPage() {
         setShowIngredienteDropdown(true)
       } else {
         setFilteredIngredientes([])
-        // setShowIngredienteDropdown(false) // Se elimina esta línea
       }
     }, 300)
 
@@ -207,10 +259,6 @@ export default function NuevaRecetaPage() {
         setIngredienteSearchTerm(`${selected.codigo} - ${selected.nombre}`)
         setTxtCostoIngrediente(selected.costo?.toString() || "0")
       }
-    } else {
-      // Mantener el término de búsqueda si no hay un ingrediente seleccionado
-      // setIngredienteSearchTerm("")
-      // setTxtCostoIngrediente("")
     }
   }, [ddlIngredientes, ingredientes, filteredIngredientes])
 
@@ -339,6 +387,28 @@ export default function NuevaRecetaPage() {
     }
   }, [])
 
+  const cargarRecetas = useCallback(async (hotelId: string) => {
+    try {
+      const { data, error } = await supabaseClient
+        .from("recetas")
+        .select("id, nombre, costo, cantidad, unidadbaseid")
+        .eq("hotelid", Number(hotelId))
+        .eq("activo", true)
+        .order("nombre", { ascending: true })
+
+      if (error) {
+        console.error("Error al cargar recetas:", error)
+        toast.error("Error al cargar recetas")
+        return
+      }
+
+      setRecetas(data || [])
+    } catch (error: any) {
+      console.error("Error cargando recetas:", error)
+      toast.error("Error al cargar recetas")
+    }
+  }, [])
+
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) {
@@ -348,14 +418,13 @@ export default function NuevaRecetaPage() {
       return
     }
 
-    // Client-side preview using FileReader
     const reader = new FileReader()
     reader.onloadend = () => {
       setImagenPreview(reader.result as string)
     }
     reader.readAsDataURL(file)
 
-    setImagenFile(file) // Store the file for potential later use in FormData
+    setImagenFile(file)
   }
 
   const handleRemoveImage = () => {
@@ -377,8 +446,8 @@ export default function NuevaRecetaPage() {
       formData.append("nombre", txtNombreRecetaNuevo)
       formData.append("notaspreparacion", txtNotasReceta)
       formData.append("hotelId", ddlHotel)
-      formData.append("cantidad", txtCantidadSubReceta || "0") // Asegurar que se envíe un valor
-      formData.append("unidadBaseId", ddlUnidadBaseSubReceta || "0") // Asegurar que se envíe un valor
+      formData.append("cantidad", txtCantidadSubReceta || "0")
+      formData.append("unidadBaseId", ddlUnidadBaseSubReceta || "0")
 
       if (imagenFile) {
         formData.append("imagen", imagenFile)
@@ -388,7 +457,7 @@ export default function NuevaRecetaPage() {
 
       if (result.success && result.recetaId) {
         recetaId.current = result.recetaId
-        urlName.current = result.imgUrl || null // Guardar la URL pública si se subió
+        urlName.current = result.imgUrl || null
         setEtapa1Bloqueada(true)
         setEtapaActual(2)
         toast.success("Información básica registrada. Agregue los ingredientes.")
@@ -400,40 +469,114 @@ export default function NuevaRecetaPage() {
     }
   }
 
+  // ✅ FUNCIÓN CORREGIDA: Sin usar relaciones directas
   const cargarIngredientesReceta = useCallback(async () => {
     if (!recetaId.current) return
 
     try {
-      const { data, error } = await supabaseClient
+      // 1. Obtener ingredientes de la receta
+      const { data: ingredientesRecetaData, error: ingredientesError } = await supabaseClient
         .from("ingredientesxreceta")
-        .select(`
-  id,
-  ingredienteid,
-  cantidad,
-  ingredientecostoparcial,
-  ingredientes (
-    nombre
-  )
-`)
+        .select("id, elementoid, cantidad, ingredientecostoparcial")
         .eq("recetaid", recetaId.current)
+        .eq("tiposegmentoid", 1)
 
-      if (error) {
-        console.error("Error al cargar ingredientes de la receta:", error)
+      if (ingredientesError) {
+        console.error("Error al cargar ingredientes de la receta:", ingredientesError)
         toast.error("Error al cargar ingredientes de la receta")
         return
       }
 
-      const ingredientesFormateados = (data || []).map((item) => ({
-        id: item.id,
-        ingredienteId: item.ingredienteid,
-        nombre: item.ingredientes?.nombre || "N/A",
-        cantidad: item.cantidad,
-        ingredientecostoparcial: item.ingredientecostoparcial,
-      }))
+      if (!ingredientesRecetaData || ingredientesRecetaData.length === 0) {
+        setIngredientesReceta([])
+        return
+      }
+
+      // 2. Obtener los IDs de ingredientes únicos
+      const ingredienteIds = [...new Set(ingredientesRecetaData.map((item) => item.elementoid))]
+
+      // 3. Consultar los nombres de los ingredientes por separado
+      const { data: ingredientesData, error: nombresError } = await supabaseClient
+        .from("ingredientes")
+        .select("id, nombre")
+        .in("id", ingredienteIds)
+
+      if (nombresError) {
+        console.error("Error al cargar nombres de ingredientes:", nombresError)
+        toast.error("Error al cargar nombres de ingredientes")
+        return
+      }
+
+      // 4. Combinar los datos manualmente
+      const ingredientesFormateados = ingredientesRecetaData.map((item) => {
+        const ingredienteInfo = ingredientesData?.find((ing) => ing.id === item.elementoid)
+        return {
+          id: item.id,
+          ingredienteId: item.elementoid,
+          nombre: ingredienteInfo?.nombre || "Ingrediente no encontrado",
+          cantidad: item.cantidad,
+          ingredientecostoparcial: item.ingredientecostoparcial,
+        }
+      })
+
       setIngredientesReceta(ingredientesFormateados)
     } catch (error: any) {
       console.error("Error cargando ingredientes de receta:", error)
       toast.error("Error al cargar ingredientes de la receta")
+    }
+  }, [])
+
+  const cargarRecetasReceta = useCallback(async () => {
+    if (!recetaId.current) return
+
+    try {
+      // 1. Obtener recetas de la receta principal
+      const { data: recetasRecetaData, error: recetasError } = await supabaseClient
+        .from("ingredientesxreceta")
+        .select("id, elementoid, cantidad, ingredientecostoparcial")
+        .eq("recetaid", recetaId.current)
+        .eq("tiposegmentoid", 2) // 2 para recetas
+
+      if (recetasError) {
+        console.error("Error al cargar recetas de la receta:", recetasError)
+        return
+      }
+
+      if (!recetasRecetaData || recetasRecetaData.length === 0) {
+        setRecetasSeleccionadas([])
+        return
+      }
+
+      // 2. Obtener los IDs de recetas únicos
+      const recetaIds = [...new Set(recetasRecetaData.map((item) => item.elementoid))]
+
+      // 3. Consultar los nombres de las recetas por separado
+      const { data: recetasData, error: nombresError } = await supabaseClient
+        .from("recetas")
+        .select("id, nombre, costo")
+        .in("id", recetaIds)
+
+      if (nombresError) {
+        console.error("Error al cargar nombres de recetas:", nombresError)
+        return
+      }
+
+      // 4. Combinar los datos manualmente
+      const recetasFormateadas = recetasRecetaData.map((item) => {
+        const recetaInfo = recetasData?.find((rec) => rec.id === item.elementoid)
+        return {
+          id: item.id,
+          recetaId: item.elementoid,
+          nombre: recetaInfo?.nombre || "Receta no encontrada",
+          cantidad: item.cantidad,
+          costototal: recetaInfo?.costo || 0,
+          ingredientecostoparcial: item.ingredientecostoparcial,
+        }
+      })
+
+      setRecetasSeleccionadas(recetasFormateadas)
+    } catch (error: any) {
+      console.error("Error cargando recetas de receta:", error)
     }
   }, [])
 
@@ -444,7 +587,6 @@ export default function NuevaRecetaPage() {
       ingredientes.find((i) => i.id.toString() === ddlIngredientes) ||
       filteredIngredientes.find((i) => i.id.toString() === ddlIngredientes)
     if (term === "") {
-      // Si el término de búsqueda está vacío, limpiar selección
       setDdlIngredientes("")
       setTxtCostoIngrediente("")
     } else if (ddlIngredientes && selectedIng && term !== `${selectedIng.codigo} - ${selectedIng.nombre}`) {
@@ -458,6 +600,33 @@ export default function NuevaRecetaPage() {
     setIngredienteSearchTerm(`${ing.codigo} - ${ing.nombre}`)
     setTxtCostoIngrediente(ing.costo?.toString() || "0")
     setShowIngredienteDropdown(false)
+  }
+
+  // Función para manejar cambios en el input de cantidad de receta
+  const handleCantidadRecetaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const valor = e.target.value
+    const numeroValor = Number.parseFloat(valor) || 0
+
+    if (numeroValor > maxCantidadReceta) {
+      setTxtCantidadReceta(maxCantidadReceta.toString())
+      setCantidadRangoReceta([maxCantidadReceta])
+      toast.warning(`La cantidad no puede exceder ${maxCantidadReceta}`)
+    } else if (numeroValor < 1 && valor !== "") {
+      setTxtCantidadReceta("1")
+      setCantidadRangoReceta([1])
+    } else {
+      setTxtCantidadReceta(valor)
+      if (numeroValor >= 1) {
+        setCantidadRangoReceta([numeroValor])
+      }
+    }
+  }
+
+  // Función para manejar cambios en el slider de cantidad de receta
+  const handleCantidadRangoRecetaChange = (value: number[]) => {
+    const nuevaCantidad = value[0]
+    setCantidadRangoReceta([nuevaCantidad])
+    setTxtCantidadReceta(nuevaCantidad.toString())
   }
 
   const btnAgregarIngrediente = async () => {
@@ -477,7 +646,7 @@ export default function NuevaRecetaPage() {
         .from("ingredientesxreceta")
         .select("id")
         .eq("recetaid", recetaId.current)
-        .eq("ingredienteid", Number.parseInt(ddlIngredientes))
+        .eq("elementoid", Number.parseInt(ddlIngredientes))
         .single()
 
       if (checkError && checkError.code !== "PGRST116") {
@@ -507,7 +676,8 @@ export default function NuevaRecetaPage() {
 
       const { error: insertError } = await supabaseClient.from("ingredientesxreceta").insert({
         recetaid: recetaId.current,
-        ingredienteid: Number.parseInt(ddlIngredientes),
+        tiposegmentoid: 1,
+        elementoid: Number.parseInt(ddlIngredientes),
         cantidad: cantidad,
         ingredientecostoparcial: costoParcial,
         activo: true,
@@ -548,7 +718,7 @@ export default function NuevaRecetaPage() {
         .from("ingredientesxreceta")
         .delete()
         .eq("recetaid", recetaId.current)
-        .eq("ingredienteid", ingredienteIdToDelete)
+        .eq("elementoid", ingredienteIdToDelete)
 
       if (error) {
         console.error("Error al eliminar ingrediente de la receta:", error)
@@ -561,6 +731,108 @@ export default function NuevaRecetaPage() {
     } catch (error: any) {
       console.error("Error inesperado al eliminar ingrediente:", error)
       toast.error("Error inesperado al eliminar ingrediente.")
+    }
+  }
+
+  const btnAgregarReceta = async () => {
+    if (!ddlRecetas || !txtCantidadReceta) {
+      setErrorMessage("Favor de llenar la información de la receta")
+      setShowErrorDialog(true)
+      return
+    }
+
+    if (!recetaId.current) {
+      toast.error("Error: ID de receta no disponible.")
+      return
+    }
+
+    try {
+      const { data: existingReceta, error: checkError } = await supabaseClient
+        .from("ingredientesxreceta")
+        .select("id")
+        .eq("recetaid", recetaId.current)
+        .eq("elementoid", Number.parseInt(ddlRecetas))
+        .eq("tiposegmentoid", 2)
+        .single()
+
+      if (checkError && checkError.code !== "PGRST116") {
+        console.error("Error al verificar receta existente:", checkError)
+        toast.error("Error al verificar receta existente: " + checkError.message)
+        return
+      }
+
+      if (existingReceta) {
+        toast.error("Esta receta ya está agregada")
+        return
+      }
+
+      const recetaSeleccionada = recetas.find((r) => r.id.toString() === ddlRecetas)
+      if (!recetaSeleccionada) {
+        toast.error("Receta no encontrada")
+        return
+      }
+
+      const cantidad = Number.parseFloat(txtCantidadReceta)
+      const costoParcial = (recetaSeleccionada.costo || 0) / (recetaSeleccionada.cantidad / cantidad)
+
+      const { error: insertError } = await supabaseClient.from("ingredientesxreceta").insert({
+        recetaid: recetaId.current,
+        tiposegmentoid: 2, // 2 para recetas
+        elementoid: Number.parseInt(ddlRecetas),
+        cantidad: cantidad,
+        ingredientecostoparcial: costoParcial,
+        activo: true,
+        fechacreacion: new Date().toISOString(),
+        fechamodificacion: new Date().toISOString(),
+      })
+
+      if (insertError) {
+        console.error("Error al agregar receta:", insertError)
+        toast.error(`Error al agregar receta: ${insertError.message}`)
+        return
+      }
+
+      await cargarRecetasReceta()
+
+      setDdlRecetas("")
+      setTxtCantidadReceta("")
+      setCantidadRangoReceta([1])
+      setTxtCostoReceta("")
+      setTxtUnidadReceta("")
+      setMaxCantidadReceta(1)
+
+      toast.success("Receta agregada")
+    } catch (error: any) {
+      console.error("Error inesperado al agregar receta:", error)
+      toast.error("Error inesperado al agregar receta")
+    }
+  }
+
+  const handleEliminarRecetaReceta = async (recetaIdToDelete: number) => {
+    if (!recetaId.current) {
+      toast.error("Error: ID de receta no disponible para eliminar receta.")
+      return
+    }
+
+    try {
+      const { error } = await supabaseClient
+        .from("ingredientesxreceta")
+        .delete()
+        .eq("recetaid", recetaId.current)
+        .eq("elementoid", recetaIdToDelete)
+        .eq("tiposegmentoid", 2)
+
+      if (error) {
+        console.error("Error al eliminar receta de la receta:", error)
+        toast.error(`Error al eliminar receta: ${error.message}`)
+        return
+      }
+
+      toast.success("Receta eliminada de la sub-receta.")
+      await cargarRecetasReceta()
+    } catch (error: any) {
+      console.error("Error inesperado al eliminar receta:", error)
+      toast.error("Error inesperado al eliminar receta.")
     }
   }
 
@@ -603,7 +875,7 @@ export default function NuevaRecetaPage() {
         return
       }
 
-      toast.success("Platillo registrado correctamente")
+      toast.success("Sub-receta registrada correctamente")
 
       setValidaRegistroId(1)
     } catch (error: any) {
@@ -667,6 +939,14 @@ export default function NuevaRecetaPage() {
   const btnAnterior = () => {
     if (etapaActual > 1) setEtapaActual(etapaActual - 1)
   }
+
+  // Cargar ingredientes cuando se cambia a etapa 2
+  useEffect(() => {
+    if (etapaActual === 2 && recetaId.current) {
+      cargarIngredientesReceta()
+      cargarRecetasReceta()
+    }
+  }, [etapaActual, cargarIngredientesReceta, cargarRecetasReceta])
 
   if (loading) {
     return (
@@ -882,7 +1162,7 @@ export default function NuevaRecetaPage() {
                           name="ImagenFile"
                           className="sr-only"
                           onChange={handleFileUpload}
-                          accept="image/jpeg, image/jpg, image/png, image/webp" // Aceptar más formatos si el backend los soporta
+                          accept="image/jpeg, image/jpg, image/png, image/webp"
                           disabled={etapa1Bloqueada}
                         />
                       </label>
@@ -948,124 +1228,253 @@ export default function NuevaRecetaPage() {
               </div>
             </div>
 
-            <div className="p-4 border rounded-lg">
-              <h3 className="font-semibold mb-4">Agregar Ingrediente</h3>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 items-end">
-                <div className="md:col-span-2 relative">
-                  <Label htmlFor="txtIngredienteSearch">Ingrediente</Label>
-                  <Input
-                    id="txtIngredienteSearch"
-                    name="txtIngredienteSearch"
-                    value={ingredienteSearchTerm}
-                    onChange={handleIngredienteSearchChange}
-                    onFocus={() => setShowIngredienteDropdown(true)}
-                    onBlur={() => setTimeout(() => setShowIngredienteDropdown(false), 100)}
-                    placeholder="Buscar por código o nombre..."
-                    autoComplete="off"
-                  />
-                  {showIngredienteDropdown && filteredIngredientes.length > 0 && (
-                    <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-y-auto mt-1">
-                      {filteredIngredientes.map((ing) => (
-                        <div
-                          key={ing.id}
-                          className="px-4 py-2 cursor-pointer hover:bg-gray-100"
-                          onMouseDown={() => handleSelectIngredienteFromDropdown(ing)}
-                        >
-                          {ing.codigo} - {ing.nombre}
+            {/* Mostrar secciones solo si hay cantidad y unidad base */}
+            {txtCantidadSubReceta && ddlUnidadBaseSubReceta && (
+              <>
+                <div className="p-4 border rounded-lg">
+                  <h3 className="font-semibold mb-4">Agregar Ingrediente</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 items-end">
+                    <div className="md:col-span-2 relative">
+                      <Label htmlFor="txtIngredienteSearch">Ingrediente</Label>
+                      <Input
+                        id="txtIngredienteSearch"
+                        name="txtIngredienteSearch"
+                        value={ingredienteSearchTerm}
+                        onChange={handleIngredienteSearchChange}
+                        onFocus={() => setShowIngredienteDropdown(true)}
+                        onBlur={() => setTimeout(() => setShowIngredienteDropdown(false), 100)}
+                        placeholder="Buscar por código o nombre..."
+                        autoComplete="off"
+                      />
+                      {showIngredienteDropdown && filteredIngredientes.length > 0 && (
+                        <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-y-auto mt-1">
+                          {filteredIngredientes.map((ing) => (
+                            <div
+                              key={ing.id}
+                              className="px-4 py-2 cursor-pointer hover:bg-gray-100"
+                              onMouseDown={() => handleSelectIngredienteFromDropdown(ing)}
+                            >
+                              {ing.codigo} - {ing.nombre}
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      )}
+                    </div>
+                    <div>
+                      <Label htmlFor="txtCantidadIngrediente">Cantidad</Label>
+                      <Input
+                        type="number"
+                        id="txtCantidadIngrediente"
+                        name="txtCantidadIngrediente"
+                        value={txtCantidadIngrediente}
+                        onChange={(e) => setTxtCantidadIngrediente(e.target.value)}
+                        min="0"
+                        step="any"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="ddlUnidadMedida">Unidad Medida</Label>
+                      <Select
+                        name="ddlUnidadMedida"
+                        value={ddlUnidadMedida}
+                        onValueChange={setDdlUnidadMedida}
+                        disabled={true}
+                      >
+                        <SelectTrigger id="ddlUnidadMedida">
+                          <SelectValue placeholder="Seleccionar unidad" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {unidadesMedida.map((unidad) => (
+                            <SelectItem key={unidad.id} value={unidad.id.toString()}>
+                              {unidad.descripcion}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="txtCostoIngrediente">Costo Ingrediente</Label>
+                      <Input
+                        type="text"
+                        id="txtCostoIngrediente"
+                        name="txtCostoIngrediente"
+                        value={txtCostoIngrediente}
+                        disabled
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-center">
+                    <Button
+                      type="button"
+                      id="btnAgregarIngrediente"
+                      name="btnAgregarIngrediente"
+                      onClick={btnAgregarIngrediente}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Agregar ingrediente
+                    </Button>
+                  </div>
+
+                  {ingredientesReceta.length > 0 && (
+                    <div className="mt-4">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>ID</TableHead>
+                            <TableHead>Nombre</TableHead>
+                            <TableHead>Cantidad</TableHead>
+                            <TableHead>Costo Parcial</TableHead>
+                            <TableHead className="text-right">Acciones</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {ingredientesReceta.map((ingrediente) => (
+                            <TableRow key={ingrediente.id}>
+                              <TableCell>{ingrediente.id}</TableCell>
+                              <TableCell>{ingrediente.nombre}</TableCell>
+                              <TableCell>{ingrediente.cantidad}</TableCell>
+                              <TableCell>${ingrediente.ingredientecostoparcial.toFixed(3)}</TableCell>
+                              <TableCell className="text-right">
+                                <Button
+                                  variant="destructive"
+                                  size="icon"
+                                  onClick={() => handleEliminarIngredienteReceta(ingrediente.ingredienteId)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
                     </div>
                   )}
                 </div>
-                <div>
-                  <Label htmlFor="txtCantidadIngrediente">Cantidad</Label>
-                  <Input
-                    type="number"
-                    id="txtCantidadIngrediente"
-                    name="txtCantidadIngrediente"
-                    value={txtCantidadIngrediente}
-                    onChange={(e) => setTxtCantidadIngrediente(e.target.value)}
-                    min="0"
-                    step="any"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="ddlUnidadMedida">Unidad Medida</Label>
-                  <Select
-                    name="ddlUnidadMedida"
-                    value={ddlUnidadMedida}
-                    onValueChange={setDdlUnidadMedida}
-                    disabled={true}
-                  >
-                    <SelectTrigger id="ddlUnidadMedida">
-                      <SelectValue placeholder="Seleccionar unidad" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {unidadesMedida.map((unidad) => (
-                        <SelectItem key={unidad.id} value={unidad.id.toString()}>
-                          {unidad.descripcion}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="txtCostoIngrediente">Costo Ingrediente</Label>
-                  <Input
-                    type="text"
-                    id="txtCostoIngrediente"
-                    name="txtCostoIngrediente"
-                    value={txtCostoIngrediente}
-                    disabled
-                  />
-                </div>
-              </div>
-              <div className="flex justify-center">
-                <Button
-                  type="button"
-                  id="btnAgregarIngrediente"
-                  name="btnAgregarIngrediente"
-                  onClick={btnAgregarIngrediente}
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Agregar ingrediente
-                </Button>
-              </div>
-            </div>
 
-            {ingredientesReceta.length > 0 && (
-              <div className="mt-4">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>ID</TableHead>
-                      <TableHead>Nombre</TableHead>
-                      <TableHead>Cantidad</TableHead>
-                      <TableHead>Costo Parcial</TableHead>
-                      <TableHead className="text-right">Acciones</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {ingredientesReceta.map((ingrediente) => (
-                      <TableRow key={ingrediente.id}>
-                        <TableCell>{ingrediente.id}</TableCell>
-                        <TableCell>{ingrediente.nombre}</TableCell>
-                        <TableCell>{ingrediente.cantidad}</TableCell>
-                        <TableCell>${ingrediente.ingredientecostoparcial.toFixed(2)}</TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            variant="destructive"
-                            size="icon"
-                            onClick={() => handleEliminarIngredienteReceta(ingrediente.ingredienteId)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                {/* Nueva sección para agregar sub-recetas - Solo mostrar si hay cantidad y unidad base */}
+                <div className="p-4 border rounded-lg">
+                  <h3 className="font-semibold mb-4">Agregar Sub-Receta</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                    <div>
+                      <Label htmlFor="ddlRecetas">Sub-Receta</Label>
+                      <Select name="ddlRecetas" value={ddlRecetas} onValueChange={setDdlRecetas}>
+                        <SelectTrigger id="ddlRecetas">
+                          <SelectValue placeholder="Seleccionar sub-receta" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {recetas.map((receta) => (
+                            <SelectItem key={receta.id} value={receta.id.toString()}>
+                              {receta.nombre} - ${receta.costo?.toFixed(2) || "0.00"}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="txtCostoReceta">Costo</Label>
+                      <Input
+                        type="text"
+                        id="txtCostoReceta"
+                        name="txtCostoReceta"
+                        value={txtCostoReceta}
+                        disabled
+                        placeholder="Seleccione una sub-receta"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="txtUnidadReceta">Unidad</Label>
+                      <Input
+                        type="text"
+                        id="txtUnidadReceta"
+                        name="txtUnidadReceta"
+                        value={txtUnidadReceta}
+                        disabled
+                        placeholder="Seleccione una sub-receta"
+                      />
+                    </div>
+                  </div>
+
+                  {ddlRecetas && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                      <div>
+                        <Label htmlFor="txtCantidadReceta">Cantidad</Label>
+                        <Input
+                          type="number"
+                          id="txtCantidadReceta"
+                          name="txtCantidadReceta"
+                          value={txtCantidadReceta}
+                          onChange={handleCantidadRecetaChange}
+                          min="1"
+                          max={maxCantidadReceta}
+                          step="any"
+                          placeholder={`Máximo: ${maxCantidadReceta}`}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="cantidadRangoReceta">Cantidad Rango: {cantidadRangoReceta[0]}</Label>
+                        <div className="px-2 py-2">
+                          <Slider
+                            id="cantidadRangoReceta"
+                            min={1}
+                            max={maxCantidadReceta}
+                            step={0.1}
+                            value={cantidadRangoReceta}
+                            onValueChange={handleCantidadRangoRecetaChange}
+                            className="w-full"
+                          />
+                          <div className="flex justify-between text-xs text-gray-500 mt-1">
+                            <span>1</span>
+                            <span>{maxCantidadReceta}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex justify-center">
+                    <Button type="button" id="btnAgregarReceta" name="btnAgregarReceta" onClick={btnAgregarReceta}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Agregar sub-receta
+                    </Button>
+                  </div>
+                  {/* Tabla de sub-recetas seleccionadas */}
+                  {recetasSeleccionadas.length > 0 && (
+                    <div className="mt-4">
+                      <h4 className="font-medium mb-3">Sub-Recetas Agregadas</h4>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>ID</TableHead>
+                            <TableHead>Nombre</TableHead>
+                            <TableHead>Cantidad</TableHead>
+                            <TableHead>Costo Parcial</TableHead>
+                            <TableHead className="text-right">Acciones</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {recetasSeleccionadas.map((receta) => (
+                            <TableRow key={receta.id}>
+                              <TableCell>{receta.id}</TableCell>
+                              <TableCell>{receta.nombre}</TableCell>
+                              <TableCell>{receta.cantidad}</TableCell>
+                              <TableCell>${receta.ingredientecostoparcial.toFixed(3)}</TableCell>
+                              <TableCell className="text-right">
+                                <Button
+                                  variant="destructive"
+                                  size="icon"
+                                  onClick={() => handleEliminarRecetaReceta(receta.recetaId)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </div>
+              </>
             )}
 
             <div className="flex justify-end">
@@ -1080,7 +1489,7 @@ export default function NuevaRecetaPage() {
                   }
                   setEtapaActual(3)
                 }}
-                disabled={ingredientesReceta.length < 2}
+                disabled={ingredientesReceta.length < 1}
               >
                 Continuar
               </Button>
@@ -1158,12 +1567,44 @@ export default function NuevaRecetaPage() {
                   ))}
                 </TableBody>
               </Table>
-              <div className="mt-4 p-4 bg-green-100 rounded-lg flex justify-between items-center">
-                <span className="font-bold text-lg">Costo Total de la Sub-Receta:</span>
-                <Badge className="text-xl">
-                  ${ingredientesReceta.reduce((sum, i) => sum + i.ingredientecostoparcial, 0).toFixed(2)}
-                </Badge>
-              </div>
+
+              {/* Tabla de sub-recetas en el resumen */}
+              {recetasSeleccionadas.length > 0 && (
+                <div className="mt-6">
+                  <h4 className="text-lg font-semibold mb-3">Sub-Recetas</h4>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>ID</TableHead>
+                        <TableHead>Nombre</TableHead>
+                        <TableHead>Cantidad</TableHead>
+                        <TableHead>Costo Parcial</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {recetasSeleccionadas.map((receta) => (
+                        <TableRow key={receta.id}>
+                          <TableCell>{receta.id}</TableCell>
+                          <TableCell>{receta.nombre}</TableCell>
+                          <TableCell>{receta.cantidad}</TableCell>
+                          <TableCell>${receta.ingredientecostoparcial.toFixed(2)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-4 p-4 bg-green-100 rounded-lg flex justify-between items-center">
+              <span className="font-bold text-lg">Costo Total de la Sub-Receta:</span>
+              <Badge className="text-xl">
+                $
+                {(
+                  ingredientesReceta.reduce((sum, i) => sum + i.ingredientecostoparcial, 0) +
+                  recetasSeleccionadas.reduce((sum, r) => sum + r.ingredientecostoparcial, 0)
+                ).toFixed(2)}
+              </Badge>
             </div>
 
             <Button

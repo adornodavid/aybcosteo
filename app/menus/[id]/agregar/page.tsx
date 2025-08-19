@@ -592,9 +592,9 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
                 type="number"
                 value={costoPorcentual}
                 className={`text-center col-span-3 ${
-                  costoPorcentual && Number.parseFloat(costoPorcentual) > 25.0
+                  costoPorcentual && Number.parseFloat(costoPorcentual) > 30.0
                     ? "border-red-500 bg-red-50"
-                    : costoPorcentual && Number.parseFloat(costoPorcentual) <= 25.0
+                    : costoPorcentual && Number.parseFloat(costoPorcentual) <= 30.0
                       ? "border-green-500 bg-green-50"
                       : ""
                 }`}

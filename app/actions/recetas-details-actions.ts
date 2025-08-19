@@ -52,34 +52,55 @@ export async function getRecetaDetails(recetaId: number): Promise<RecetaCompleta
     }
 
     // Consulta 2: Ingredientes de la Receta
-    const { data: ingredientesData, error: ingredientesError } = await supabase
+    const { data: ingredientesRelacion, error: ingredientesRelacionError } = await supabase
       .from("ingredientesxreceta")
-      .select(`
-        id,
-        cantidad,
-        ingredientecostoparcial,
-        ingredientes (
-          nombre
-        )
-      `)
+      .select("id, cantidad, ingredientecostoparcial, elementoid")
       .eq("recetaid", recetaId)
+      .eq("tiposegmentoid", 1)
 
-    if (ingredientesError) {
-      console.error("Error al obtener ingredientes de la receta:", ingredientesError)
+    if (ingredientesRelacionError) {
+      console.error("Error al obtener relación ingredientes de la receta:", ingredientesRelacionError)
       return {
         receta: recetaData,
         ingredientes: [],
         platillos: [],
-        error: `Error al obtener ingredientes de la receta: ${ingredientesError.message}`,
+        error: `Error al obtener relación ingredientes de la receta: ${ingredientesRelacionError.message}`,
       }
     }
 
-    const ingredientesFormateados: IngredienteReceta[] = (ingredientesData || []).map((item: any) => ({
-      id: item.id,
-      Ingrediente: item.ingredientes?.nombre || "N/A",
-      cantidad: item.cantidad,
-      ingredientecostoparcial: item.ingredientecostoparcial,
-    }))
+    let ingredientesFormateados: IngredienteReceta[] = []
+
+    if (ingredientesRelacion && ingredientesRelacion.length > 0) {
+      // Obtener los IDs de los ingredientes
+      const ingredienteIds = ingredientesRelacion.map((item) => item.elementoid)
+
+      // Consultar los ingredientes por separado
+      const { data: ingredientesData, error: ingredientesDataError } = await supabase
+        .from("ingredientes")
+        .select("id, nombre")
+        .in("id", ingredienteIds)
+
+      if (ingredientesDataError) {
+        console.error("Error al obtener datos de ingredientes:", ingredientesDataError)
+        return {
+          receta: recetaData,
+          ingredientes: [],
+          platillos: [],
+          error: `Error al obtener datos de ingredientes: ${ingredientesDataError.message}`,
+        }
+      }
+
+      // Combinar los datos
+      ingredientesFormateados = ingredientesRelacion.map((item: any) => {
+        const ingrediente = ingredientesData?.find((ing) => ing.id === item.elementoid)
+        return {
+          id: item.id,
+          Ingrediente: ingrediente?.nombre || "Ingrediente no encontrado",
+          cantidad: item.cantidad,
+          ingredientecostoparcial: item.ingredientecostoparcial,
+        }
+      })
+    }
 
     // Consulta 3: Platillos que usan esta Receta
     const { data: platillosData, error: platillosError } = await supabase
