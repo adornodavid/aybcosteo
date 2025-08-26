@@ -397,7 +397,7 @@ export async function obtenerAlertasCostoPorcentual() {
     const alertas = []
 
     for (const [key, registro] of ultimosRegistros) {
-      if (registro.costoporcentual >= 30) {
+      if (registro.costoporcentual >= 24) {
         const { data: platilloMenu, error: errorPlatilloMenu } = await supabase
           .from("platillosxmenu")
           .select(`

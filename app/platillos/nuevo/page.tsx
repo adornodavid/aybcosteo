@@ -282,7 +282,7 @@ export default function NuevoPlatilloPage() {
           costoAdministrativoPlatillo,
           precioVentaNum,
         )*/
-        const Costoporcentual = (costoAdministrativoPlatillo / precioVentaNum) * 100
+        const Costoporcentual = (totalCostoPlatillo / precioVentaNum) * 100
 
         console.log("dil1", costoAdministrativoPlatillo)
         console.log("dil2", precioVentaNum)

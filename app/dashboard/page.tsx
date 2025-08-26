@@ -1239,7 +1239,7 @@ export default function DashboardPage() {
               </CardTitle>
             </CardHeader>
 
-            <CardContent>
+            <CardContent className="p-4 pt-0">
               <Tabs defaultValue="platillos" className="w-full">
                 <TabsList className="grid w-full grid-cols-2 h-8">
                   <TabsTrigger value="platillos" className="text-xs">
@@ -1252,8 +1252,8 @@ export default function DashboardPage() {
 
                 <TabsContent value="platillos" className="mt-4">
                   <div className="h-[355px] space-y-2 w-full overflow-y-auto">
-                    {cambiosPlatillos.length > 0 ? (
-                      cambiosPlatillos.slice(0, 3).map((platillo, index) => (
+                    {cambiosPlatillos.length >= 0 ? (
+                      cambiosPlatillos.slice(0, 5).map((platillo, index) => (
                         <TooltipProvider key={index}>
                           <UITooltip>
                             <TooltipTrigger asChild>
@@ -1384,7 +1384,7 @@ export default function DashboardPage() {
 
                 <TabsContent value="recetas" className="mt-4">
                   <div className="h-96 w-full space-y-2 overflow-y-auto">
-                    {cambiosRecetas.length > 0 ? (
+                    {cambiosRecetas.length >= 0 ? (
                       cambiosRecetas.slice(0, 3).map((receta, index) => (
                         <TooltipProvider key={index}>
                           <UITooltip>
