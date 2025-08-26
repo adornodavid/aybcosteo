@@ -1,5 +1,8 @@
 "use client"
 
+/* ==================================================
+  Imports
+================================================== */
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { LogOut, CheckCircle } from "lucide-react"

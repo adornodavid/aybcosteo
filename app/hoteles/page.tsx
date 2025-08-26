@@ -1,5 +1,8 @@
 "use client"
 
+/* ==================================================
+  Imports
+================================================== */
 import { useState, useEffect, useCallback, useRef } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -21,7 +24,9 @@ import { Search, RotateCcw } from "lucide-react"
 import { obtenerHotelesFiltrados, obtenerTotalHoteles } from "@/app/actions/hoteles-actions"
 import Image from "next/image" // Importar Image de next/image
 
-
+/* ==================================================
+  Interfaces, tipados, clases
+================================================== */
 // Tipo para los resultados del query SQL específico
 type HotelResult = {
   Folio: number

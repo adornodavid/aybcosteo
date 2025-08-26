@@ -1,5 +1,8 @@
 "use client"
 
+/* ==================================================
+  Imports
+================================================== */
 import type React from "react"
 
 import { CardDescription } from "@/components/ui/card"
@@ -17,6 +20,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 
+/* ==================================================
+  Interfaces, tipados, clases
+================================================== */
 interface AnalisisResultado {
   totalFilas: number
   columnas: string[]

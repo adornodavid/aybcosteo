@@ -1,5 +1,8 @@
 "use client"
 
+/* ==================================================
+	Imports
+================================================== */
 import { useState, useEffect, useMemo, useCallback } from "react"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -28,6 +31,9 @@ import { Calendar } from "@/components/ui/calendar"
 import { CalendarIcon, SearchIcon, TrendingUp, TrendingDown, Minus } from "lucide-react"
 import { cn } from "@/lib/utils"
 
+/* ==================================================
+  Interfaces, tipados, clases
+================================================== */
 // Tipo para los detalles específicos del punto seleccionado
 interface SelectedPointDetails {
   fecha: string
@@ -42,7 +48,11 @@ interface SelectedPointDetails {
   menuId: number
 }
 
+/* ==================================================
+  Componente Principal, Pagina
+================================================== */
 export default function AnalisisCostosPage() {
+  // --- Estados ---
   const [menus, setMenus] = useState<MenuItem[]>([])
   const [selectedMenu, setSelectedMenu] = useState<string>("-1")
   const [platillos, setPlatillos] = useState<PlatilloItem[]>([])
@@ -57,16 +67,18 @@ export default function AnalisisCostosPage() {
   const [platilloActual, setPlatilloActual] = useState<PlatilloActualInfo | null>(null)
   const [platilloHistorico, setPlatilloHistorico] = useState<PlatilloHistoricoInfo | null>(null)
 
+  // --- Variables especiales ---
   // Formatear datos para el gráfico - mantener fechacreacionOriginal intacta
   const formattedChartData = useMemo(() => {
     return chartData.map((item, index) => ({
       ...item,
-      fechacreacion: format(new Date(item.fechacreacion), "dd/MM/yyyy"), // Solo formatear para mostrar en el eje X
+      //fechacreacion: format(new Date(item.fechacreacion), "yyyy-mm-dd"), // Solo formatear para mostrar en el eje X
       dataIndex: index, // Agregar índice para identificar el punto
       // fechacreacionOriginal se mantiene en formato YYYY-MM-DD
     }))
   }, [chartData])
 
+  // --- Cargas ---
   // Cargar menús al inicio
   useEffect(() => {
     const loadMenus = async () => {
@@ -88,6 +100,7 @@ export default function AnalisisCostosPage() {
     loadPlatillos()
   }, [selectedMenu, searchTermPlatillo])
 
+  // --- Funciones -- 
   // Función para manejar la búsqueda
   const handleSearch = useCallback(async () => {
     if (!selectedPlatillo || !fechaInicial || !fechaFinal) {
@@ -113,17 +126,17 @@ export default function AnalisisCostosPage() {
     setPlatilloHistorico(null)
   }, [selectedPlatillo, fechaInicial, fechaFinal, selectedMenu])
 
-  // Función para manejar el clic en los puntos - NUEVA IMPLEMENTACIÓN
+  // Función para manejar el clic en los puntos - CORRECCIÓN
   const handlePointClick = useCallback(
     async (dataIndex: number) => {
       try {
         console.log("Point clicked with dataIndex:", dataIndex)
-        console.log("FormattedChartData:", formattedChartData)
-        console.log("Original chartData:", chartData)
+        console.log("FormattedChartData length:", formattedChartData)
+        console.log("Original chartData length:", chartData)
 
         // Validaciones iniciales
-        if (dataIndex < 0 || dataIndex >= formattedChartData.length) {
-          console.error("Invalid dataIndex:", dataIndex)
+        if (dataIndex < 0 || dataIndex >= chartData.length) {
+          console.error("Invalid dataIndex:", dataIndex, "Array length:", chartData.length)
           return
         }
 
@@ -132,15 +145,23 @@ export default function AnalisisCostosPage() {
           return
         }
 
-        // Obtener los datos del punto usando el índice
-        const pointData = formattedChartData[dataIndex]
+        // Obtener los datos del punto usando el índice directamente de chartData
         const originalData = chartData[dataIndex] // Datos originales sin formatear
+        const pointData = formattedChartData[dataIndex] // Datos formateados
 
         console.log("Point data:", pointData)
         console.log("Original data:", originalData)
 
+        if (!originalData) {
+          console.error("No data found at index:", dataIndex)
+          return
+        }
+
         const platilloIdNum = Number.parseInt(selectedPlatillo)
         const menuIdNum = Number.parseInt(selectedMenu)
+
+        console.log("platilloIdNum:", platilloIdNum)
+        console.log("menuIdNum:", menuIdNum)
 
         // Usar la fecha original sin formatear
         const fechaOriginal = originalData.fechacreacionOriginal
@@ -494,7 +515,14 @@ export default function AnalisisCostosPage() {
                           cursor: "pointer",
                           onClick: (data: any, index: number) => {
                             console.log("ActiveDot clicked:", { data, index })
-                            handlePointClick(index)
+                            console.log("prueba:")
+                            console.log("dataplay:", formattedChartData)
+                            // Usar el índice del array de datos directamente
+                            const actualIndex = formattedChartData.findIndex(
+                              (item) => item.fechacreacionOriginal === index.payload.fechacreacionOriginal,
+                            )
+                            console.log("Calculated actualIndex:", actualIndex)
+                            handlePointClick(actualIndex >= 0 ? actualIndex : index)
                           },
                         }}
                         name="Costo %"
@@ -556,7 +584,7 @@ export default function AnalisisCostosPage() {
                     {/* Tarjeta de Información Actual */}
                     <div className="relative">
                       <div className="absolute inset-0 bg-gradient-to-br from-blue-50/80 via-white/60 to-indigo-50/80 backdrop-blur-sm rounded-2xl border border-blue-200/30"></div>
-                      <Card className="relative border-0 bg-transparent shadow-lg">
+                      <Card className="rounded-xs text-card-foreground relative border-0 bg-transparent shadow-lg">
                         <CardHeader className="text-center pb-4">
                           <CardTitle className="text-xl font-bold text-blue-700 flex items-center justify-center gap-2">
                             📊 Información Actual
@@ -575,17 +603,17 @@ export default function AnalisisCostosPage() {
                           )}
 
                           <div className="space-y-3">
-                            <div className="bg-white/60 backdrop-blur-sm rounded-xl p-4 border border-blue-200/20">
+                            <div className="bg-white/60 backdrop-blur-sm rounded-xs p-1 border border-blue-200/20">
                               <p className="text-sm text-slate-600 font-medium">Platillo</p>
                               <p className="text-lg font-bold text-slate-800">{platilloActual.nombre}</p>
                             </div>
 
-                            <div className="bg-white/60 backdrop-blur-sm rounded-xl p-4 border border-blue-200/20">
+                            <div className="bg-white/60 backdrop-blur-sm rounded-xs p-1 border border-blue-200/20">
                               <p className="text-sm text-slate-600 font-medium">Menú</p>
                               <p className="text-lg font-semibold text-slate-800">{platilloActual.menu}</p>
                             </div>
 
-                            <div className="bg-white/60 backdrop-blur-sm rounded-xl p-4 border border-blue-200/20">
+                            <div className="bg-white/60 backdrop-blur-sm rounded-xs p-1 border border-blue-200/20">
                               <p className="text-sm text-slate-600 font-medium">Costo Total</p>
                               <p className="text-2xl font-bold text-green-600">
                                 ${platilloActual.costototal.toFixed(2)}
@@ -593,7 +621,7 @@ export default function AnalisisCostosPage() {
                               {renderComparison(platilloActual.costototal, platilloHistorico.costototal)}
                             </div>
 
-                            <div className="bg-white/60 backdrop-blur-sm rounded-xl p-4 border border-blue-200/20">
+                            <div className="bg-white/60 backdrop-blur-sm rounded-xs p-1 border border-blue-200/20">
                               <p className="text-sm text-slate-600 font-medium">Precio de Venta</p>
                               <p className="text-2xl font-bold text-blue-600">
                                 ${platilloActual.precioventa.toFixed(2)}
@@ -601,7 +629,7 @@ export default function AnalisisCostosPage() {
                               {renderComparison(platilloActual.precioventa, platilloHistorico.precioventa)}
                             </div>
 
-                            <div className="bg-white/60 backdrop-blur-sm rounded-xl p-4 border border-blue-200/20">
+                            <div className="bg-white/60 backdrop-blur-sm rounded-xs p-1 border border-blue-200/20">
                               <p className="text-sm text-slate-600 font-medium">Margen de Utilidad</p>
                               <p className="text-2xl font-bold text-purple-600">
                                 ${platilloActual.margenutilidad.toFixed(2)}
@@ -609,7 +637,7 @@ export default function AnalisisCostosPage() {
                               {renderComparison(platilloActual.margenutilidad, platilloHistorico.margenutilidad)}
                             </div>
 
-                            <div className="bg-white/60 backdrop-blur-sm rounded-xl p-4 border border-blue-200/20">
+                            <div className="bg-white/60 backdrop-blur-sm rounded-xs p-1 border border-blue-200/20">
                               <p className="text-sm text-slate-600 font-medium">Fecha de Creación</p>
                               <p className="text-lg font-semibold text-slate-800">
                                 {format(new Date(platilloActual.fechacreacion), "dd/MM/yyyy")}
@@ -696,11 +724,12 @@ export default function AnalisisCostosPage() {
                     </Button>
                   </div>
                 </div>
-              ) : (
+              ) 
+              : (
                 platilloDetails && (
                   <div className="mt-6 relative">
-                    {/* Fondo glass para los detalles generales */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-blue-50/60 via-white/40 to-purple-50/60 backdrop-blur-sm rounded-2xl border border-white/30"></div>
+                    
+                   {/* <div className="absolute inset-0 bg-gradient-to-r from-blue-50/60 via-white/40 to-purple-50/60 backdrop-blur-sm rounded-2xl border border-white/30"></div>
                     <div className="relative z-10 p-6 rounded-2xl">
                       <h3 className="font-bold text-xl mb-4 bg-gradient-to-r from-slate-700 to-blue-600 bg-clip-text text-transparent">
                         Detalles Generales del Platillo: {platilloDetails.Platillo}
@@ -745,10 +774,11 @@ export default function AnalisisCostosPage() {
                           detallada
                         </p>
                       </div>
-                    </div>
+                    </div> */}
                   </div>
                 )
-              )}
+              )
+              }
             </CardContent>
           </Card>
         </div>

@@ -1,5 +1,8 @@
 "use client"
 
+/* ==================================================
+  Imports
+================================================== */
 import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import Image from "next/image"

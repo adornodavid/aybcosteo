@@ -1,5 +1,8 @@
 "use client"
 
+/* ==================================================
+  Imports
+================================================== */
 import type React from "react"
 
 import { CardDescription } from "@/components/ui/card"
@@ -17,6 +20,9 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { useToast as useCustomToast } from "@/hooks/use-toast"
 
+/* ==================================================
+  Interfaces, tipados, clases
+================================================== */
 interface ImportResults {
   categorias: number
   ingredientes: number

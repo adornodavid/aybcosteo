@@ -1,5 +1,8 @@
 "use client"
 
+/* ==================================================
+  Imports
+================================================== */
 import { useState, useEffect } from "react"
 import Image from "next/image" // Importar Image de next/image
 import { Button } from "@/components/ui/button"

@@ -1,5 +1,8 @@
 "use client"
 
+/* ==================================================
+  Imports
+================================================== */
 import { useEffect, useState } from "react"
 import { useFormState } from "react-dom"
 import { Button } from "@/components/ui/button"
@@ -11,6 +14,9 @@ import { Loader2 } from "lucide-react"
 import { actualizarIngrediente } from "@/app/actions/ingredientes-actions-correcto"
 import { createClient } from "@/lib/supabase" // Import the correct client for server-side fetching
 
+/* ==================================================
+  Interfaces, tipados, clases
+================================================== */
 interface Ingrediente {
   id: number
   clave: string

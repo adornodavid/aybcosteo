@@ -1,14 +1,44 @@
 "use server"
 
+/* ==================================================
+  Imports
+================================================== */
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { redirect } from "next/navigation"
 
+/* ==================================================
+  Interfaces, clases, objetos
+================================================== */
 export interface LoginResult {
   success: boolean
   message: string
   user?: any
 }
 
+/* ==================================================
+	  Conexion a la base de datos: Supabase
+	================================================== */
+const supabase = createClientComponentClient()
+
+/* ==================================================
+  Variables (especiales, constantes)
+================================================== */
+
+/* ==================================================
+  Funciones
+  --------------------
+  * CREATES-CREAR (INSERTS)
+    - insXXXXX
+  * READS-OBTENER (SELECTS)
+    - selXXXXX
+  * UPDATES-ACTUALIZAR (UPDATES)
+    - updXXXXX
+  * DELETES-ELIMINAR (DELETES)
+    - delXXXXX
+  * SPECIALS-ESPECIALES ()
+    - loginUser
+    - logoutUser
+================================================== */
 export async function loginUser(formData: FormData): Promise<LoginResult> {
   try {
     const email = formData.get("txtCorreo") as string
@@ -20,8 +50,6 @@ export async function loginUser(formData: FormData): Promise<LoginResult> {
         message: "Por favor ingrese correo y contraseña",
       }
     }
-
-    const supabase = createClientComponentClient()
 
     const { data, error } = await supabase.auth.signInWithPassword({
       email: email,
@@ -50,7 +78,6 @@ export async function loginUser(formData: FormData): Promise<LoginResult> {
 }
 
 export async function logoutUser() {
-  const supabase = createClientComponentClient()
   try {
     const { error } = await supabase.auth.signOut()
     if (error) {

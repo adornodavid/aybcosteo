@@ -1,5 +1,8 @@
 "use client"
 
+/* ==================================================
+  Imports
+================================================== */
 import { useUserSession } from "@/hooks/use-user-session"
 import { UserInfo } from "@/components/user-info"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"

@@ -1,3 +1,6 @@
+/* ==================================================
+  Imports
+================================================== */
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tags, Package, TrendingUp } from "lucide-react"
 import { obtenerCategorias } from "@/app/actions/categorias-actions"
@@ -5,6 +8,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 // No se necesita Badge si la columna 'activo' se elimina de la UI
 // import { Badge } from "@/components/ui/badge"
 
+/* ==================================================
+  Interfaces, tipados, clases
+================================================== */
 // Definir la interfaz para la categoría, incluyendo 'activo' ya que la acción lo trae con select("*")
 interface CategoriaIngrediente {
   id: number

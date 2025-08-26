@@ -1,3 +1,6 @@
+/* ==================================================
+  Imports
+================================================== */
 //import { createServerSupabaseClientWrapper } from "@/lib/supabase"
 import { getSession } from "@/app/actions/session-actions" // Importación correcta de la función getSession
 import {
