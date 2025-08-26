@@ -214,7 +214,7 @@ export async function obtenerCambiosCostosRecetas(mes: number, año: number, hot
         const variacion = ((costoActual - costoInicial) / costoActual) * 100
 
         // Filtrar cambios significativos (≥5%)
-        if (Math.abs(variacion) >= 0) {
+        if (variacion >= 0) {
           cambiosSignificativos.push({
             nombre: receta.nombre,
             costo_inicial: costoInicial,
@@ -473,7 +473,7 @@ export async function obtenerIngredientesAumentoPrecio(mes: number, año: number
         const aumentoPorcentaje = ((costoActual - costoHistorico) / costoActual) * 100
 
         // Filtrar aumentos significativos (≥5%)
-        if (aumentoPorcentaje >= 5) {
+        if (aumentoPorcentaje >= 2) {
           aumentosSignificativos.push({
             codigo: ingrediente.codigo || "",
             nombre: ingrediente.nombre,
@@ -940,5 +940,102 @@ export async function obtenerDetallesPlatilloRecetasHistorico(
   } catch (error) {
     console.error("Error en obtenerDetallesPlatilloRecetasHistorico:", error)
     return { success: false, data: [] }
+  }
+}
+
+// Nueva función para obtener detalles del platillo para tooltip
+export async function obtenerDetallesPlatilloTooltip(platilloId: number) {
+  try {
+    const supabase = createSupabaseServerClient()
+
+    const { data, error } = await supabase
+      .from("platillos")
+      .select(`
+        id,
+        imgurl,
+        nombre,
+        costototal,
+        costoadministrativo
+      `)
+      .eq("id", platilloId)
+      .eq("activo", true)
+      .single()
+
+    if (error) {
+      console.error("Error obteniendo detalles del platillo para tooltip:", error)
+      return { success: false, data: null }
+    }
+
+    if (!data) {
+      return { success: false, data: null }
+    }
+
+    // Transformar los datos para que coincidan con la estructura esperada
+    const detallesTransformados = {
+      id: data.id,
+      imgurl: data.imgurl,
+      //hotel: data.platillosxmenu?.menus?.restaurantes?.hoteles?.nombre,
+      //restaurante: data.platillosxmenu?.menus?.restaurantes?.nombre,
+      //menu: data.platillosxmenu?.menus?.nombre,
+      nombre: data.nombre,
+      costototal: data.costototal,
+      costoadministrativo: data.costoadministrativo,
+      //precioconiva: data.platillosxmenu?.precioconiva,
+      //margenutilidad: data.platillosxmenu?.margenutilidad,
+    }
+    
+    
+    
+    return { success: true, data: detallesTransformados}
+  } catch (error) {
+    console.error("Error en obtenerDetallesPlatilloTooltip:", error)
+    return { success: false, data: null }
+  }
+}
+
+// Nueva función para obtener detalles de la receta para tooltip
+export async function obtenerDetallesRecetaTooltip(recetaId: number) {
+  try {
+    const supabase = createSupabaseServerClient()
+
+    const { data, error } = await supabase
+      .from("recetas")
+      .select(`
+        id,
+        imgurl,
+        nombre,
+        costo,
+        cantidad,
+        tipounidadmedida!inner(descripcion),
+        hoteles!inner(nombre)
+      `)
+      .eq("id", recetaId)
+      .eq("activo", true)
+      .single()
+
+    if (error) {
+      console.error("Error obteniendo detalles de la receta para tooltip:", error)
+      return { success: false, data: null }
+    }
+
+    if (!data) {
+      return { success: false, data: null }
+    }
+
+    // Transformar los datos para que coincidan con la estructura esperada
+    const detallesTransformados = {
+      id: data.id,
+      imgurl: data.imgurl,
+      hotel: data.hoteles.nombre,
+      nombre: data.nombre,
+      costo: data.costo,
+      cantidad: data.cantidad,
+      unidadbase: data.tipounidadmedida.descripcion,
+    }
+
+    return { success: true, data: detallesTransformados }
+  } catch (error) {
+    console.error("Error en obtenerDetallesRecetaTooltip:", error)
+    return { success: false, data: null }
   }
 }

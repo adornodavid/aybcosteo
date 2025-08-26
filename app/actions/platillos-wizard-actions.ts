@@ -236,10 +236,8 @@ export async function getPlatilloTotalCost(
 
     const valorFloatConfig = configError || !configData ? 0 : configData.valorfloat || 0
     const costoAdministrativo = totalCost * valorFloatConfig + totalCost
-    console.log("getPlatilloTotalCost (Error Recetas):")
-    console.log("  totalCost:", totalCost)
-    console.log("  valorFloatConfig (ID 1):", valorFloatConfig)
-    console.log("  costoAdministrativo:", costoAdministrativo)
+    
+    
     return { totalCost, costoAdministrativo, precioSugerido: 0 }
   }
   const totalRecetasCost = recetasSum.reduce((sum, item) => sum + (item.recetacostoparcial || 0), 0)
