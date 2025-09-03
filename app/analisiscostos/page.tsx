@@ -9,15 +9,27 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ChartLegend } from "@/components/ui/chart"
 import { Line, LineChart, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip, ReferenceLine } from "recharts"
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
+  getHotelesForAnalisis,
+  getRestaurantesForAnalisis,
   getMenusForAnalisis,
   getPlatillosForAnalisis,
   getPlatilloCostHistory,
   getPlatilloDetailsForTooltip,
   getPlatilloActualInfo,
   getPlatilloHistoricoInfo,
+  type HotelItem,
+  type RestauranteItem,
   type MenuItem,
   type PlatilloItem,
   type CostHistoryItem,
@@ -48,51 +60,166 @@ interface SelectedPointDetails {
   menuId: number
 }
 
+// Tipo para los datos procesados por platillo
+interface PlatilloDataset {
+  id: number
+  nombre: string
+  color: string
+  data: CostHistoryItem[]
+}
+
 /* ==================================================
   Componente Principal, Pagina
 ================================================== */
 export default function AnalisisCostosPage() {
   // --- Estados ---
+  const [hoteles, setHoteles] = useState<HotelItem[]>([])
+  const [selectedHotel, setSelectedHotel] = useState<string>("")
+  const [restaurantes, setRestaurantes] = useState<RestauranteItem[]>([])
+  const [selectedRestaurante, setSelectedRestaurante] = useState<string>("")
   const [menus, setMenus] = useState<MenuItem[]>([])
-  const [selectedMenu, setSelectedMenu] = useState<string>("-1")
+  const [selectedMenu, setSelectedMenu] = useState<string>("")
   const [platillos, setPlatillos] = useState<PlatilloItem[]>([])
-  const [selectedPlatillo, setSelectedPlatillo] = useState<string>("")
+  const [selectedPlatillo, setSelectedPlatillo] = useState<string>("-1")
   const [searchTermPlatillo, setSearchTermPlatillo] = useState<string>("")
   const [fechaInicial, setFechaInicial] = useState<Date | undefined>(undefined)
   const [fechaFinal, setFechaFinal] = useState<Date | undefined>(undefined)
   const [chartData, setChartData] = useState<CostHistoryItem[]>([])
+  const [platillosDatasets, setPlatillosDatasets] = useState<PlatilloDataset[]>([])
   const [loading, setLoading] = useState<boolean>(true)
   const [platilloDetails, setPlatilloDetails] = useState<PlatilloTooltipDetail | null>(null)
   const [selectedPointDetails, setSelectedPointDetails] = useState<SelectedPointDetails | null>(null)
   const [platilloActual, setPlatilloActual] = useState<PlatilloActualInfo | null>(null)
   const [platilloHistorico, setPlatilloHistorico] = useState<PlatilloHistoricoInfo | null>(null)
+  const [showValidationDialog, setShowValidationDialog] = useState<boolean>(false)
+  const [validationMessage, setValidationMessage] = useState<string>("")
+
+  // Colores para las líneas de los platillos
+  const colors = [
+    "#8884d8",
+    "#82ca9d",
+    "#ffc658",
+    "#ff7300",
+    "#8dd1e1",
+    "#d084d0",
+    "#ffb347",
+    "#87ceeb",
+    "#dda0dd",
+    "#98fb98",
+  ]
 
   // --- Variables especiales ---
-  // Formatear datos para el gráfico - mantener fechacreacionOriginal intacta
-  const formattedChartData = useMemo(() => {
-    return chartData.map((item, index) => ({
-      ...item,
-      //fechacreacion: format(new Date(item.fechacreacion), "yyyy-mm-dd"), // Solo formatear para mostrar en el eje X
-      dataIndex: index, // Agregar índice para identificar el punto
-      // fechacreacionOriginal se mantiene en formato YYYY-MM-DD
-    }))
+  // Procesar datos para crear datasets por platillo
+  const processDataByPlatillo = useMemo(() => {
+    if (chartData.length === 0) return []
+
+    // Obtener platillos únicos
+    const uniquePlatillos = Array.from(new Set(chartData.map((item) => item.platilloid)))
+
+    // Crear dataset para cada platillo
+    const datasets: PlatilloDataset[] = uniquePlatillos.map((platilloId, index) => {
+      const platilloData = chartData.filter((item) => item.platilloid === platilloId)
+      const platilloNombre = platilloData[0]?.nombreplatillo || `Platillo ${platilloId}`
+
+      return {
+        id: platilloId,
+        nombre: platilloNombre,
+        color: colors[index % colors.length],
+        data: platilloData.sort((a, b) => new Date(a.fechacreacion).getTime() - new Date(b.fechacreacion).getTime()),
+      }
+    })
+
+    return datasets
   }, [chartData])
 
+  // Crear datos combinados para el gráfico - NUEVA LÓGICA CORREGIDA
+  const combinedChartData = useMemo(() => {
+    if (chartData.length === 0) return []
+
+    // Obtener todas las fechas únicas y ordenarlas
+    const allDates = Array.from(new Set(chartData.map((item) => item.fechacreacion))).sort()
+
+    // Crear el array de datos combinados
+    return allDates.map((fecha) => {
+      const dataPoint: any = { fechacreacion: fecha }
+
+      // Para cada platillo, buscar si tiene datos en esta fecha
+      platillosDatasets.forEach((dataset) => {
+        const itemForDate = dataset.data.find((item) => item.fechacreacion === fecha)
+        if (itemForDate) {
+          dataPoint[`platillo_${dataset.id}`] = itemForDate.costoporcentual
+          // Guardar referencia al item completo para el tooltip
+          dataPoint[`item_${dataset.id}`] = itemForDate
+        }
+        // NO asignar null si no hay datos - esto es clave para la conexión de líneas
+      })
+
+      return dataPoint
+    })
+  }, [chartData, platillosDatasets])
+
   // --- Cargas ---
-  // Cargar menús al inicio
+  // Cargar hoteles al inicio y seleccionar el primero
   useEffect(() => {
-    const loadMenus = async () => {
-      const fetchedMenus = await getMenusForAnalisis()
-      setMenus(fetchedMenus)
+    const loadHoteles = async () => {
+      const fetchedHoteles = await getHotelesForAnalisis()
+      setHoteles(fetchedHoteles)
+
+      // Seleccionar el primer hotel automáticamente
+      if (fetchedHoteles.length > 0) {
+        setSelectedHotel(fetchedHoteles[0].id.toString())
+      }
+
       setLoading(false)
     }
-    loadMenus()
+    loadHoteles()
   }, [])
+
+  // Cargar restaurantes cuando cambia el hotel seleccionado y seleccionar el primero
+  useEffect(() => {
+    const loadRestaurantes = async () => {
+      if (selectedHotel === "") return
+      const hotelIdNum = Number.parseInt(selectedHotel)
+      const fetchedRestaurantes = await getRestaurantesForAnalisis(hotelIdNum)
+      setRestaurantes(fetchedRestaurantes)
+
+      // Seleccionar el primer restaurante automáticamente
+      if (fetchedRestaurantes.length > 0) {
+        setSelectedRestaurante(fetchedRestaurantes[0].id.toString())
+      } else {
+        setSelectedRestaurante("")
+      }
+
+      setSelectedMenu("")
+      setSelectedPlatillo("-1")
+    }
+    loadRestaurantes()
+  }, [selectedHotel])
+
+  // Cargar menús cuando cambia el restaurante seleccionado y seleccionar el primero
+  useEffect(() => {
+    const loadMenus = async () => {
+      if (selectedRestaurante === "") return
+      const restauranteIdNum = Number.parseInt(selectedRestaurante)
+      const fetchedMenus = await getMenusForAnalisis(restauranteIdNum)
+      setMenus(fetchedMenus)
+
+      // Seleccionar el primer menú automáticamente
+      if (fetchedMenus.length > 0) {
+        setSelectedMenu(fetchedMenus[0].id.toString())
+      } else {
+        setSelectedMenu("")
+      }
+
+      setSelectedPlatillo("-1")
+    }
+    loadMenus()
+  }, [selectedRestaurante])
 
   // Cargar platillos cuando cambia el menú seleccionado o el término de búsqueda
   useEffect(() => {
     const loadPlatillos = async () => {
-      if (selectedMenu === "") return // Evitar cargar si no hay menú seleccionado (inicialmente)
+      if (selectedMenu === "") return
       const menuIdNum = Number.parseInt(selectedMenu)
       const fetchedPlatillos = await getPlatillosForAnalisis(menuIdNum, searchTermPlatillo)
       setPlatillos(fetchedPlatillos)
@@ -100,20 +227,33 @@ export default function AnalisisCostosPage() {
     loadPlatillos()
   }, [selectedMenu, searchTermPlatillo])
 
-  // --- Funciones -- 
+  // Actualizar datasets cuando cambian los datos del gráfico
+  useEffect(() => {
+    const datasets = processDataByPlatillo
+    setPlatillosDatasets(datasets)
+  }, [processDataByPlatillo])
+
+  // --- Funciones --
   // Función para manejar la búsqueda
   const handleSearch = useCallback(async () => {
     if (!selectedPlatillo || !fechaInicial || !fechaFinal) {
-      alert("Por favor, selecciona un platillo y un rango de fechas.")
+      setValidationMessage("Por favor, selecciona un platillo y un rango de fechas.")
+      setShowValidationDialog(true)
       return
     }
 
     const platilloIdNum = Number.parseInt(selectedPlatillo)
     const menuIdNum = Number.parseInt(selectedMenu)
+    const restauranteIdNum = Number.parseInt(selectedRestaurante)
+    const hotelIdNum = Number.parseInt(selectedHotel)
+
     const history = await getPlatilloCostHistory(
       platilloIdNum,
       format(fechaInicial, "yyyy-MM-dd"),
       format(fechaFinal, "yyyy-MM-dd"),
+      menuIdNum,
+      restauranteIdNum,
+      hotelIdNum,
     )
     setChartData(history)
 
@@ -124,104 +264,68 @@ export default function AnalisisCostosPage() {
     setSelectedPointDetails(null)
     setPlatilloActual(null)
     setPlatilloHistorico(null)
-  }, [selectedPlatillo, fechaInicial, fechaFinal, selectedMenu])
+  }, [selectedPlatillo, fechaInicial, fechaFinal, selectedMenu, selectedRestaurante, selectedHotel])
 
-  // Función para manejar el clic en los puntos - CORRECCIÓN
+  // Función para manejar el clic en los puntos
   const handlePointClick = useCallback(
-    async (dataIndex: number) => {
+    async (data: any, platilloId: number, index ) => {
       try {
-        console.log("Point clicked with dataIndex:", dataIndex)
-        console.log("FormattedChartData length:", formattedChartData)
-        console.log("Original chartData length:", chartData)
+        console.log("Point clicked with data:", data, "platilloId:", platilloId)
+       
+        const originalItem = index.payload
 
-        // Validaciones iniciales
-        if (dataIndex < 0 || dataIndex >= chartData.length) {
-          console.error("Invalid dataIndex:", dataIndex, "Array length:", chartData.length)
+        if (!originalItem) {
+          console.error("No original item found for platillo:", platilloId)
           return
         }
+        
+        const fechaOriginal = originalItem.fechacreacion
+        
 
-        if (!selectedPlatillo || !platilloDetails) {
-          console.error("Missing selectedPlatillo or platilloDetails")
-          return
-        }
+        console.log("orig", fechaOriginal)
+         console.log("pla", platilloId)
 
-        // Obtener los datos del punto usando el índice directamente de chartData
-        const originalData = chartData[dataIndex] // Datos originales sin formatear
-        const pointData = formattedChartData[dataIndex] // Datos formateados
-
-        console.log("Point data:", pointData)
-        console.log("Original data:", originalData)
-
-        if (!originalData) {
-          console.error("No data found at index:", dataIndex)
-          return
-        }
-
-        const platilloIdNum = Number.parseInt(selectedPlatillo)
-        const menuIdNum = Number.parseInt(selectedMenu)
-
-        console.log("platilloIdNum:", platilloIdNum)
-        console.log("menuIdNum:", menuIdNum)
-
-        // Usar la fecha original sin formatear
-        const fechaOriginal = originalData.fechacreacionOriginal
-
-        console.log("fechaOriginal from originalData:", fechaOriginal)
-
-        // Validar que tengamos una fecha válida en formato YYYY-MM-DD
-        if (!fechaOriginal || fechaOriginal === "undefined" || !/^\d{4}-\d{2}-\d{2}$/.test(fechaOriginal)) {
+        if (!fechaOriginal || !/^\d{4}-\d{2}-\d{2}$/.test(fechaOriginal)) {
           console.error("Invalid fechaOriginal:", fechaOriginal)
-          alert("Error: No se pudo obtener la fecha del punto seleccionado en formato válido.")
+          setValidationMessage("Error: No se pudo obtener la fecha del punto seleccionado en formato válido.")
+          setShowValidationDialog(true)
           return
         }
+        console.log("fecha", fechaOriginal)
+        const menuIdNum = Number.parseInt(selectedMenu)
 
         // Crear los detalles específicos del punto seleccionado
         const pointDetails: SelectedPointDetails = {
-          fecha: format(new Date(fechaOriginal), "dd/MM/yyyy"), // Fecha formateada para mostrar
-          fechaOriginal: fechaOriginal, // Fecha original en formato YYYY-MM-DD para consultas
-          costo: originalData.costo || 0,
-          precioventa: originalData.precioventa || 0,
-          margenutilidad: originalData.margenutilidad || 0,
-          costoporcentual: originalData.costoporcentual || 0,
-          platilloNombre: originalData.nombreplatillo || platilloDetails.Platillo,
-          restaurante: platilloDetails.Restaurante,
-          menu: originalData.nombremenu || platilloDetails.Menu,
+          fecha: format(new Date(fechaOriginal), "dd/MM/yyyy"),
+          fechaOriginal: fechaOriginal,
+          costo: originalItem.costo || 0,
+          precioventa: originalItem.precioventa || 0,
+          margenutilidad: originalItem.margenutilidad || 0,
+          costoporcentual: originalItem.costoporcentual || 0,
+          platilloNombre: originalItem.nombreplatillo,
+          restaurante: "N/A", // Se obtendrá de platilloDetails
+          menu: originalItem.nombremenu,
           menuId: menuIdNum,
         }
 
         setSelectedPointDetails(pointDetails)
 
         // Obtener información actual y histórica del platillo
-        console.log("Fetching info with fechaOriginal:", fechaOriginal)
         const [actualInfo, historicoInfo] = await Promise.all([
-          getPlatilloActualInfo(platilloIdNum, menuIdNum),
-          getPlatilloHistoricoInfo(platilloIdNum, fechaOriginal),
+          getPlatilloActualInfo(platilloId, menuIdNum),
+          getPlatilloHistoricoInfo(platilloId, fechaOriginal),
         ])
 
         setPlatilloActual(actualInfo)
         setPlatilloHistorico(historicoInfo)
       } catch (error) {
         console.error("Error in handlePointClick:", error)
-        alert("Error al obtener la información del platillo.")
+        setValidationMessage("Error al obtener la información del platillo.")
+        setShowValidationDialog(true)
       }
     },
-    [selectedPlatillo, platilloDetails, selectedMenu, formattedChartData, chartData],
+    [selectedMenu],
   )
-
-  const chartConfig = {
-    costo: {
-      label: "Costo",
-    },
-    precioventa: {
-      label: "Precio Venta",
-    },
-    margenutilidad: {
-      label: "Margen Utilidad",
-    },
-    costoporcentual: {
-      label: "Costo %",
-    },
-  }
 
   // Función para calcular la diferencia y mostrar el indicador
   const renderComparison = (actual: number, historico: number, isPercentage = false) => {
@@ -261,23 +365,85 @@ export default function AnalisisCostosPage() {
 
   return (
     <div className="flex flex-col gap-6 p-6">
-      <h1 className="text-3xl font-bold">Análisis de Costos</h1>
+      <h1 className="text-3xl font-bold">Analisis de Costos</h1>
+
+      {/* AlertDialog para validaciones */}
+      <AlertDialog open={showValidationDialog} onOpenChange={setShowValidationDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Validación de Datos</AlertDialogTitle>
+            <AlertDialogDescription>{validationMessage}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setShowValidationDialog(false)}>Entendido</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Card className="w-full">
         <CardHeader>
           <CardTitle>Filtros de Búsqueda</CardTitle>
         </CardHeader>
         <CardContent>
-          <form id="frmAnalisisCostoBuscar" className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+          <form id="frmAnalisisCostoBuscar" className="grid grid-cols-1 md:grid-cols-7 gap-4 items-end">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="ddlHotel">Hotel</Label>
+              <Select
+                value={selectedHotel}
+                onValueChange={(value) => {
+                  setSelectedHotel(value)
+                  setSelectedRestaurante("")
+                  setSelectedMenu("")
+                  setSelectedPlatillo("-1")
+                }}
+              >
+                <SelectTrigger id="ddlHotel" name="ddlHotel">
+                  <SelectValue placeholder="Selecciona un hotel" />
+                </SelectTrigger>
+                <SelectContent>
+                  {hoteles.map((hotel) => (
+                    <SelectItem key={hotel.id} value={hotel.id.toString()}>
+                      {hotel.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="ddlRestaurante">Restaurante</Label>
+              <Select
+                value={selectedRestaurante}
+                onValueChange={(value) => {
+                  setSelectedRestaurante(value)
+                  setSelectedMenu("")
+                  setSelectedPlatillo("-1")
+                }}
+                disabled={selectedHotel === ""}
+              >
+                <SelectTrigger id="ddlRestaurante" name="ddlRestaurante">
+                  <SelectValue placeholder="Selecciona un restaurante" />
+                </SelectTrigger>
+                <SelectContent>
+                  {restaurantes.map((restaurante) => (
+                    <SelectItem key={restaurante.id} value={restaurante.id.toString()}>
+                      {restaurante.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="flex flex-col gap-2">
               <Label htmlFor="ddlMenu">Menú</Label>
               <Select
                 value={selectedMenu}
                 onValueChange={(value) => {
                   setSelectedMenu(value)
-                  setSelectedPlatillo("") // Reset platillo cuando cambia el menú
+                  setSelectedPlatillo("-1")
                   setSearchTermPlatillo("")
                 }}
+                disabled={selectedRestaurante === ""}
               >
                 <SelectTrigger id="ddlMenu" name="ddlMenu">
                   <SelectValue placeholder="Selecciona un menú" />
@@ -294,7 +460,7 @@ export default function AnalisisCostosPage() {
 
             <div className="flex flex-col gap-2">
               <Label htmlFor="txtPlatilloCostoNombre">Platillo</Label>
-              <Select value={selectedPlatillo} onValueChange={setSelectedPlatillo}>
+              <Select value={selectedPlatillo} onValueChange={setSelectedPlatillo} disabled={selectedMenu === ""}>
                 <SelectTrigger id="txtPlatilloCostoNombre" name="txtPlatilloCostoNombre">
                   <SelectValue placeholder="Selecciona un platillo" />
                 </SelectTrigger>
@@ -382,7 +548,7 @@ export default function AnalisisCostosPage() {
 
       {loading ? (
         <p>Cargando datos del gráfico...</p>
-      ) : chartData.length > 0 ? (
+      ) : combinedChartData.length > 0 ? (
         <div className="relative w-full">
           {/* Fondo con efecto glass-liquid */}
           <div className="absolute inset-0 bg-gradient-to-br from-blue-50/80 via-purple-50/60 to-cyan-50/80 backdrop-blur-sm rounded-3xl"></div>
@@ -401,20 +567,32 @@ export default function AnalisisCostosPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="relative z-10 p-8">
+              {/* Leyenda de platillos */}
+              {platillosDatasets.length > 1 && (
+                <div className="mb-6 p-4 bg-white/50 backdrop-blur-sm rounded-xl border border-white/20">
+                  <h4 className="text-lg font-semibold mb-3 text-slate-700">Platillos en el gráfico:</h4>
+                  <div className="flex flex-wrap gap-4">
+                    {platillosDatasets.map((dataset) => (
+                      <div key={dataset.id} className="flex items-center gap-2">
+                        <div
+                          className="w-4 h-4 rounded-full border-2 border-white"
+                          style={{ backgroundColor: dataset.color }}
+                        ></div>
+                        <span className="text-sm font-medium text-slate-700">{dataset.nombre}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="relative h-[400px] w-full">
                 {/* Contenedor del gráfico con efecto glass */}
                 <div className="absolute inset-0 bg-gradient-to-br from-white/60 via-blue-50/40 to-purple-50/30 backdrop-blur-sm rounded-2xl border border-white/30 shadow-inner"></div>
                 <div className="absolute inset-2 bg-white/40 backdrop-blur-sm rounded-xl border border-white/20"></div>
 
                 <div className="relative z-10 h-full w-full p-4">
-                  <ResponsiveContainer width="100%" height="100%" key={JSON.stringify(formattedChartData)}>
-                    <LineChart data={formattedChartData} accessibilityLayer width={700} height={300}>
-                      <defs>
-                        <linearGradient id="costGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#8884d8" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="#8884d8" stopOpacity={0.1} />
-                        </linearGradient>
-                      </defs>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={combinedChartData} accessibilityLayer width={700} height={300}>
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.3)" strokeWidth={1} />
                       <XAxis
                         dataKey="fechacreacion"
@@ -435,99 +613,123 @@ export default function AnalisisCostosPage() {
                         axisLine={{ stroke: "rgba(148, 163, 184, 0.4)" }}
                       />
                       <Tooltip
-                        formatter={(value: number, name: string, props: any) => {
-                          const data = props.payload
-                          return [
-                            <div key="tooltip-content" className="space-y-1">
-                              <div className="flex justify-between items-center">
-                                <span className="text-slate-600">Platillo:</span>
-                                <span className="font-semibold text-slate-800">{data.nombreplatillo || "N/A"}</span>
+                        content={({ active, payload, label }) => {
+                          if (!active || !payload || payload.length === 0) return null
+
+                          // Filtrar solo los payloads que tienen valor (no null/undefined)
+                          const validPayloads = payload.filter((p) => p.value !== null && p.value !== undefined)
+
+                          if (validPayloads.length === 0) return null
+
+                          return (
+                            <div className="bg-white/95 backdrop-blur-md border border-white/30 rounded-xl shadow-2xl p-4 max-w-sm">
+                              <div className="text-sm font-semibold text-slate-700 mb-3 border-b border-slate-200 pb-2">
+                                Fecha: {label}
                               </div>
-                              <div className="flex justify-between items-center">
-                                <span className="text-slate-600">Menú:</span>
-                                <span className="font-semibold text-slate-800">{data.nombremenu || "N/A"}</span>
+                              <div className="space-y-3">
+                                {validPayloads.map((entry, index) => {
+                                  const platilloId = entry.dataKey?.toString().replace("platillo_", "")
+                                  const originalItem = entry.payload[`item_${platilloId}`]
+
+                                  if (!originalItem) return null
+
+                                  const dataset = platillosDatasets.find((d) => d.id.toString() === platilloId)
+
+                                  return (
+                                    <div
+                                      key={index}
+                                      className="space-y-2 p-3 bg-slate-50/50 rounded-lg border border-slate-200/30"
+                                    >
+                                      <div className="flex items-center gap-2 mb-2">
+                                        <div
+                                          className="w-3 h-3 rounded-full"
+                                          style={{ backgroundColor: dataset?.color || "#8884d8" }}
+                                        ></div>
+                                        <span className="font-semibold text-slate-800">{dataset?.nombre || "N/A"}</span>
+                                      </div>
+
+                                      <div className="grid grid-cols-2 gap-2 text-xs">
+                                        <div className="flex justify-between">
+                                          <span className="text-slate-600">Menú:</span>
+                                          <span className="font-medium text-slate-800">
+                                            {originalItem.nombremenu || "N/A"}
+                                          </span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                          <span className="text-slate-600">Fecha:</span>
+                                          <span className="font-medium text-slate-800">
+                                            {originalItem.fechacreacion || "N/A"}
+                                          </span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                          <span className="text-slate-600">Costo:</span>
+                                          <span className="font-medium text-green-600">
+                                            ${(originalItem.costo || 0).toFixed(2)}
+                                          </span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                          <span className="text-slate-600">Precio Venta:</span>
+                                          <span className="font-medium text-blue-600">
+                                            ${(originalItem.precioventa || 0).toFixed(2)}
+                                          </span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                          <span className="text-slate-600">Margen:</span>
+                                          <span className="font-medium text-purple-600">
+                                            ${(originalItem.margenutilidad || 0).toFixed(2)}
+                                          </span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                          <span className="text-slate-600">Costo %:</span>
+                                          <span className="font-medium text-orange-600">
+                                            {(originalItem.costoporcentual || 0).toFixed(2)}%
+                                          </span>
+                                        </div>
+                                      </div>
+
+                                      {/*<div className="text-xs text-slate-500 mt-2 pt-2 border-t border-slate-200 text-center">
+                                        Haz clic para comparación detallada
+                                      </div>*/}
+                                    </div>
+                                  )
+                                })}
                               </div>
-                              <div className="flex justify-between items-center">
-                                <span className="text-slate-600">Fecha Original:</span>
-                                <span className="font-semibold text-slate-800">
-                                  {data.fechacreacionOriginal || "N/A"}
-                                </span>
-                              </div>
-                              <div className="flex justify-between items-center">
-                                <span className="text-slate-600">Costo:</span>
-                                <span className="font-semibold text-green-600">
-                                  ${data.costo ? data.costo.toFixed(2) : "0.00"}
-                                </span>
-                              </div>
-                              <div className="flex justify-between items-center">
-                                <span className="text-slate-600">Precio Venta:</span>
-                                <span className="font-semibold text-blue-600">
-                                  ${data.precioventa ? data.precioventa.toFixed(2) : "0.00"}
-                                </span>
-                              </div>
-                              <div className="flex justify-between items-center">
-                                <span className="text-slate-600">Margen Utilidad:</span>
-                                <span className="font-semibold text-purple-600">
-                                  ${data.margenutilidad ? data.margenutilidad.toFixed(2) : "0.00"}
-                                </span>
-                              </div>
-                              <div className="flex justify-between items-center">
-                                <span className="text-slate-600">Costo %:</span>
-                                <span className="font-semibold text-orange-600">{value.toFixed(2)}%</span>
-                              </div>
-                              <div className="text-xs text-slate-500 mt-2 pt-2 border-t border-slate-200">
-                                Haz clic para ver comparación detallada
-                              </div>
-                            </div>,
-                            "",
-                          ]
+                            </div>
+                          )
                         }}
-                        labelFormatter={(label) => `Fecha: ${label}`}
-                        contentStyle={{
-                          backgroundColor: "rgba(255, 255, 255, 0.95)",
-                          backdropFilter: "blur(10px)",
-                          border: "1px solid rgba(255, 255, 255, 0.3)",
-                          borderRadius: "12px",
-                          boxShadow: "0 8px 32px rgba(0, 0, 0, 0.1)",
-                          fontSize: "13px",
-                          padding: "12px",
-                        }}
-                        labelStyle={{ color: "#374151", fontWeight: "600", marginBottom: "8px" }}
                       />
-                      <Line
-                        dataKey="costoporcentual"
-                        type="monotone"
-                        stroke="#8884d8"
-                        strokeWidth={3}
-                        dot={{
-                          fill: "#8884d8",
-                          strokeWidth: 2,
-                          r: 6,
-                          filter: "drop-shadow(0 2px 4px rgba(136, 132, 216, 0.3))",
-                          cursor: "pointer",
-                        }}
-                        activeDot={{
-                          r: 8,
-                          fill: "#8884d8",
-                          stroke: "#ffffff",
-                          strokeWidth: 3,
-                          filter: "drop-shadow(0 4px 8px rgba(136, 132, 216, 0.4))",
-                          cursor: "pointer",
-                          onClick: (data: any, index: number) => {
-                            console.log("ActiveDot clicked:", { data, index })
-                            console.log("prueba:")
-                            console.log("dataplay:", formattedChartData)
-                            // Usar el índice del array de datos directamente
-                            const actualIndex = formattedChartData.findIndex(
-                              (item) => item.fechacreacionOriginal === index.payload.fechacreacionOriginal,
-                            )
-                            console.log("Calculated actualIndex:", actualIndex)
-                            handlePointClick(actualIndex >= 0 ? actualIndex : index)
-                          },
-                        }}
-                        name="Costo %"
-                      />
-                      <ChartLegend content={<ChartLegend />} />
+
+                      {/* Generar una línea por cada platillo - CORREGIDO CON connectNulls={true} */}
+                      {platillosDatasets.map((dataset) => (
+                        <Line
+                          key={dataset.id}
+                          dataKey={`platillo_${dataset.id}`}
+                          type="monotone"
+                          stroke={dataset.color}
+                          strokeWidth={3}
+                          connectNulls={true}
+                          dot={{
+                            fill: dataset.color,
+                            strokeWidth: 2,
+                            r: 6,
+                            filter: `drop-shadow(0 2px 4px ${dataset.color}30)`,
+                            cursor: "pointer",
+                          }}
+                          activeDot={{
+                            r: 8,
+                            fill: dataset.color,
+                            stroke: "#ffffff",
+                            strokeWidth: 3,
+                            filter: `drop-shadow(0 4px 8px ${dataset.color}40)`,
+                            cursor: "pointer",
+                            onClick: (data: any, index) => {
+                              handlePointClick(data, dataset.id, index)
+                            },
+                          }}
+                          name={`platillo_${dataset.id}`}
+                        />
+                      ))}
+
                       <ReferenceLine
                         y={30}
                         stroke="#ef4444"
@@ -549,25 +751,6 @@ export default function AnalisisCostosPage() {
                 </div>
               </div>
 
-              {/* Lista de puntos clickeables debajo del gráfico */}
-              <div className="mt-6 p-4 bg-white/50 backdrop-blur-sm rounded-xl border border-white/20">
-                <h4 className="text-lg font-semibold mb-3 text-slate-700">
-                  Puntos del Gráfico (Haz clic para comparar):
-                </h4>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                  {formattedChartData.map((point, index) => (
-                    <button
-                      key={index}
-                      onClick={() => handlePointClick(index)}
-                      className="p-3 bg-white/70 hover:bg-blue-50/80 rounded-lg border border-blue-200/30 transition-all duration-200 text-left"
-                    >
-                      <div className="text-sm font-medium text-slate-700">{point.fechacreacion}</div>
-                      <div className="text-xs text-slate-500">Costo: {point.costoporcentual.toFixed(1)}%</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
               {/* Mostrar tarjetas comparativas cuando se selecciona un punto */}
               {selectedPointDetails && platilloActual && platilloHistorico ? (
                 <div className="mt-8 space-y-6">
@@ -582,8 +765,8 @@ export default function AnalisisCostosPage() {
 
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                     {/* Tarjeta de Información Actual */}
-                    <div className="relative">
-                      <div className="absolute inset-0 bg-gradient-to-br from-blue-50/80 via-white/60 to-indigo-50/80 backdrop-blur-sm rounded-2xl border border-blue-200/30"></div>
+                    <div className="relative h-[705px]">
+                      <div className="absolute inset-0 bg-gradient-to-br from-blue-50/80 via-white/60 to-indigo-50/80 backdrop-blur-sm rounded-xs border border-blue-200/30"></div>
                       <Card className="rounded-xs text-card-foreground relative border-0 bg-transparent shadow-lg">
                         <CardHeader className="text-center pb-4">
                           <CardTitle className="text-xl font-bold text-blue-700 flex items-center justify-center gap-2">
@@ -592,64 +775,70 @@ export default function AnalisisCostosPage() {
                           <p className="text-sm text-slate-600">Datos más recientes del platillo</p>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                          {platilloActual.imgurl && (
-                            <div className="flex justify-center mb-4">
+                            <div className="h-[95px] flex justify-center mb-4">
                               <img
-                                src={platilloActual.imgurl || "/placeholder.svg"}
-                                alt={platilloActual.nombre}
+                                src= {platilloActual.imgurl ||"/placeholder.svg"}
+                                //alt={platilloActual.nombre}
                                 className="w-24 h-24 object-cover rounded-full border-4 border-blue-200/50"
                               />
                             </div>
-                          )}
 
-                          <div className="space-y-3">
-                            <div className="bg-white/60 backdrop-blur-sm rounded-xs p-1 border border-blue-200/20">
+                          <div className="space-y-2">
+                            <div className="backdrop-blur-sm rounded-xs p-1">
                               <p className="text-sm text-slate-600 font-medium">Platillo</p>
                               <p className="text-lg font-bold text-slate-800">{platilloActual.nombre}</p>
                             </div>
 
-                            <div className="bg-white/60 backdrop-blur-sm rounded-xs p-1 border border-blue-200/20">
+                            <div className="backdrop-blur-sm rounded-xs p-1">
                               <p className="text-sm text-slate-600 font-medium">Menú</p>
                               <p className="text-lg font-semibold text-slate-800">{platilloActual.menu}</p>
                             </div>
 
-                            <div className="bg-white/60 backdrop-blur-sm rounded-xs p-1 border border-blue-200/20">
+                            <div className="backdrop-blur-sm rounded-xs p-1">
                               <p className="text-sm text-slate-600 font-medium">Costo Total</p>
-                              <p className="text-2xl font-bold text-green-600">
+                              <p className="text-2xl font-bold text-green-400">
                                 ${platilloActual.costototal.toFixed(2)}
                               </p>
                               {renderComparison(platilloActual.costototal, platilloHistorico.costototal)}
                             </div>
 
-                            <div className="bg-white/60 backdrop-blur-sm rounded-xs p-1 border border-blue-200/20">
+                            <div className="backdrop-blur-sm rounded-xs p-1">
                               <p className="text-sm text-slate-600 font-medium">Precio de Venta</p>
-                              <p className="text-2xl font-bold text-blue-600">
+                              <p className="text-2xl font-bold text-blue-400">
                                 ${platilloActual.precioventa.toFixed(2)}
                               </p>
                               {renderComparison(platilloActual.precioventa, platilloHistorico.precioventa)}
                             </div>
 
-                            <div className="bg-white/60 backdrop-blur-sm rounded-xs p-1 border border-blue-200/20">
+                            <div className="backdrop-blur-sm rounded-xs p-1">
                               <p className="text-sm text-slate-600 font-medium">Margen de Utilidad</p>
-                              <p className="text-2xl font-bold text-purple-600">
+                              <p className="text-2xl font-bold text-purple-400">
                                 ${platilloActual.margenutilidad.toFixed(2)}
                               </p>
                               {renderComparison(platilloActual.margenutilidad, platilloHistorico.margenutilidad)}
                             </div>
 
-                            <div className="bg-white/60 backdrop-blur-sm rounded-xs p-1 border border-blue-200/20">
+                            <div className="backdrop-blur-sm rounded-xs p-1">
+                              <p className="text-sm text-slate-600 font-medium">Costo Porcentual</p>
+                              <p className="text-2xl font-bold text-orange-400">
+                                ${platilloActual.costoporcentual.toFixed(2)}
+                              </p>
+                              {renderComparison(platilloActual.costoporcentual, platilloHistorico.costoporcentual)}
+                            </div>
+
+                            {/*<div className="backdrop-blur-sm rounded-xs p-1">
                               <p className="text-sm text-slate-600 font-medium">Fecha de Creación</p>
                               <p className="text-lg font-semibold text-slate-800">
                                 {format(new Date(platilloActual.fechacreacion), "dd/MM/yyyy")}
                               </p>
-                            </div>
+                            </div>*/}
                           </div>
                         </CardContent>
                       </Card>
                     </div>
 
                     {/* Tarjeta de Información Histórica */}
-                    <div className="relative">
+                    <div className="relative h-[715px]">
                       <div className="absolute inset-0 bg-gradient-to-br from-amber-50/80 via-white/60 to-orange-50/80 backdrop-blur-sm rounded-2xl border border-amber-200/30"></div>
                       <Card className="relative border-0 bg-transparent shadow-lg">
                         <CardHeader className="text-center pb-4">
@@ -665,41 +854,41 @@ export default function AnalisisCostosPage() {
                             </div>
                           </div>
 
-                          <div className="space-y-3">
-                            <div className="bg-white/60 backdrop-blur-sm rounded-xl p-4 border border-amber-200/20">
+                          <div className="space-y-2">
+                            <div className="backdrop-blur-sm rounded-xl p-2">
                               <p className="text-sm text-slate-600 font-medium">Platillo</p>
                               <p className="text-lg font-semibold text-slate-800">{platilloHistorico.platillo}</p>
                             </div>
 
-                            <div className="bg-white/60 backdrop-blur-sm rounded-xl p-4 border border-amber-200/20">
+                            <div className="backdrop-blur-sm rounded-xl p-2">
                               <p className="text-sm text-slate-600 font-medium">Fecha</p>
                               <p className="text-lg font-semibold text-slate-800">{selectedPointDetails.fecha}</p>
                             </div>
 
-                            <div className="bg-white/60 backdrop-blur-sm rounded-xl p-4 border border-amber-200/20">
+                            <div className="backdrop-blur-sm rounded-xl p-3">
                               <p className="text-sm text-slate-600 font-medium">Costo Total</p>
-                              <p className="text-2xl font-bold text-green-600">
+                              <p className="text-2xl font-bold text-green-400">
                                 ${platilloHistorico.costototal.toFixed(2)}
                               </p>
                             </div>
 
-                            <div className="bg-white/60 backdrop-blur-sm rounded-xl p-4 border border-amber-200/20">
+                            <div className="backdrop-blur-sm rounded-xl p-3">
                               <p className="text-sm text-slate-600 font-medium">Precio de Venta</p>
-                              <p className="text-2xl font-bold text-blue-600">
+                              <p className="text-2xl font-bold text-blue-400">
                                 ${platilloHistorico.precioventa.toFixed(2)}
                               </p>
                             </div>
 
-                            <div className="bg-white/60 backdrop-blur-sm rounded-xl p-4 border border-amber-200/20">
+                            <div className="backdrop-blur-sm rounded-xl p-3">
                               <p className="text-sm text-slate-600 font-medium">Margen de Utilidad</p>
-                              <p className="text-2xl font-bold text-purple-600">
+                              <p className="text-2xl font-bold text-purple-400">
                                 ${platilloHistorico.margenutilidad.toFixed(2)}
                               </p>
                             </div>
 
-                            <div className="bg-white/60 backdrop-blur-sm rounded-xl p-4 border border-amber-200/20">
+                            <div className="backdrop-blur-sm rounded-xl p-3">
                               <p className="text-sm text-slate-600 font-medium">Costo Porcentual</p>
-                              <p className="text-2xl font-bold text-orange-600">
+                              <p className="text-2xl font-bold text-orange-400">
                                 {platilloHistorico.costoporcentual.toFixed(2)}%
                               </p>
                             </div>
@@ -724,61 +913,7 @@ export default function AnalisisCostosPage() {
                     </Button>
                   </div>
                 </div>
-              ) 
-              : (
-                platilloDetails && (
-                  <div className="mt-6 relative">
-                    
-                   {/* <div className="absolute inset-0 bg-gradient-to-r from-blue-50/60 via-white/40 to-purple-50/60 backdrop-blur-sm rounded-2xl border border-white/30"></div>
-                    <div className="relative z-10 p-6 rounded-2xl">
-                      <h3 className="font-bold text-xl mb-4 bg-gradient-to-r from-slate-700 to-blue-600 bg-clip-text text-transparent">
-                        Detalles Generales del Platillo: {platilloDetails.Platillo}
-                      </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        <div className="bg-white/50 backdrop-blur-sm rounded-xl p-4 border border-white/20">
-                          <p className="text-sm text-slate-600 font-medium">Restaurante</p>
-                          <p className="text-lg font-semibold text-slate-800">{platilloDetails.Restaurante}</p>
-                        </div>
-                        <div className="bg-white/50 backdrop-blur-sm rounded-xl p-4 border border-white/20">
-                          <p className="text-sm text-slate-600 font-medium">Menú</p>
-                          <p className="text-lg font-semibold text-slate-800">{platilloDetails.Menu}</p>
-                        </div>
-                        <div className="bg-white/50 backdrop-blur-sm rounded-xl p-4 border border-white/20">
-                          <p className="text-sm text-slate-600 font-medium">Costo de Elaboración</p>
-                          <p className="text-lg font-semibold text-green-600">
-                            ${platilloDetails.CostoElaboracion?.toFixed(2)}
-                          </p>
-                        </div>
-                        <div className="bg-white/50 backdrop-blur-sm rounded-xl p-4 border border-white/20">
-                          <p className="text-sm text-slate-600 font-medium">Precio de Venta</p>
-                          <p className="text-lg font-semibold text-blue-600">
-                            ${platilloDetails.PrecioVenta?.toFixed(2)}
-                          </p>
-                        </div>
-                        <div className="bg-white/50 backdrop-blur-sm rounded-xl p-4 border border-white/20">
-                          <p className="text-sm text-slate-600 font-medium">Margen de Utilidad</p>
-                          <p className="text-lg font-semibold text-purple-600">
-                            ${platilloDetails.MargenUtilidad?.toFixed(2)}
-                          </p>
-                        </div>
-                        <div className="bg-white/50 backdrop-blur-sm rounded-xl p-4 border border-white/20">
-                          <p className="text-sm text-slate-600 font-medium">Costo %</p>
-                          <p className="text-lg font-semibold text-orange-600">
-                            {platilloDetails.CostoPorcentual?.toFixed(2)}%
-                          </p>
-                        </div>
-                      </div>
-                      <div className="mt-4 text-center">
-                        <p className="text-sm text-slate-500">
-                          Haz clic en cualquier punto del gráfico o en los botones de abajo para ver la comparación
-                          detallada
-                        </p>
-                      </div>
-                    </div> */}
-                  </div>
-                )
-              )
-              }
+              ) : null}
             </CardContent>
           </Card>
         </div>

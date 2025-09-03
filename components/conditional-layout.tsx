@@ -23,7 +23,7 @@ export default function ConditionalLayout({ children }: ConditionalLayoutProps) 
   return (
     <div className="flex min-h-screen flex-row items-stretch">
       <AppSidebar />
-      <main className="flex-1 overflow-auto bg-gray-50">{children}</main>
+      <main className="flex-1 bg-gray-50">{children}</main>
     </div>
   )
 }

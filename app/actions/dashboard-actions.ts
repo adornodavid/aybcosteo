@@ -154,7 +154,7 @@ export async function obtenerCambiosCostosPlatillos(mes: number, año: number, h
 
       // Verificar que ambos costos sean válidos
       if (costoInicial && costoActual && costoInicial > 0) {
-        const variacion = ((costoActual - costoInicial) / costoActual) * 100
+        const variacion = ((costoActual - costoInicial) / costoInicial) * 100
 
         // Filtrar cambios significativos (≥5%)
         if (Math.abs(variacion) >= 0) {
@@ -211,7 +211,7 @@ export async function obtenerCambiosCostosRecetas(mes: number, año: number, hot
 
       // Verificar que ambos costos sean válidos
       if (costoInicial && costoActual && costoInicial > 0) {
-        const variacion = ((costoActual - costoInicial) / costoActual) * 100
+        const variacion = ((costoActual - costoInicial) / costoInicial) * 100
 
         // Filtrar cambios significativos (≥5%)
         if (variacion >= 0) {
@@ -272,9 +272,13 @@ export async function obtenerMejoresMargenesUtilidad() {
       .map((item) => {
         const margenUtilidad = ((item.precioventa - item.platillos.costototal) / item.precioventa) * 100
         return {
+          platilloid: item.platilloid,
           nombrePlatillo: item.platillos.nombre,
           nombreHotel: item.menus.restaurantes.hoteles.nombre,
           nombreMenu: item.menus.nombre,
+          nombreRestaurante: item.menus.restaurantes.nombre,
+          costoTotal: item.platillos.costototal,
+          precioVenta: item.precioventa,
           margenUtilidad: margenUtilidad,
         }
       })
@@ -339,101 +343,22 @@ export async function obtenerPeoresMargenesUtilidad() {
   }
 }
 
-// Nueva función para obtener alertas de costo porcentual
-export async function obtenerAlertasCostoPorcentual() {
+// Nueva función para obtener alertas de costo porcentual usando función de Supabase
+export async function obtenerAlertasCostoPorcentual(hotelId: number) {
   try {
     const supabase = createSupabaseServerClient()
 
-    // Calcular fechas del mes anterior
-    const fechaActual = new Date()
-    const mesAnterior = new Date(fechaActual.getFullYear(), fechaActual.getMonth() - 1, 1)
-    const finMesAnterior = new Date(fechaActual.getFullYear(), fechaActual.getMonth(), 0)
+    // Llamar a la función de Supabase con RPC
+    const { data: alertas, error } = await supabase.rpc("selalertascostoporcentual", {
+      hotelesid: hotelId,
+    })
 
-    const inicioMesAnterior = mesAnterior.toISOString().split("T")[0]
-    const finMesAnteriorStr = finMesAnterior.toISOString().split("T")[0]
-
-    // Obtener todos los registros históricos del mes anterior
-    const { data: historicos, error: errorHistorico } = await supabase
-      .from("historico")
-      .select(`
-        platilloid,
-        menuid,
-        costoporcentual,
-        fechacreacion,
-        platillos!inner(id, nombre, activo)
-      `)
-      .eq("platillos.activo", true)
-      .gte("fechacreacion", inicioMesAnterior)
-      .lte("fechacreacion", finMesAnteriorStr)
-      .order("fechacreacion", { ascending: false })
-
-    if (errorHistorico) {
-      console.error("Error obteniendo histórico:", errorHistorico)
+    if (error) {
+      console.error("Error obteniendo alertas de costo porcentual:", error)
       return { success: false, data: [] }
     }
 
-    if (!historicos || historicos.length === 0) {
-      return { success: true, data: [] }
-    }
-
-    // Procesar para obtener el último registro por platillo/menú del mes anterior
-    const ultimosRegistros = new Map()
-
-    historicos.forEach((registro) => {
-      const key = `${registro.platilloid}-${registro.menuid}`
-
-      if (!ultimosRegistros.has(key)) {
-        ultimosRegistros.set(key, registro)
-      } else {
-        const registroExistente = ultimosRegistros.get(key)
-        // Si este registro es más reciente, reemplazar
-        if (new Date(registro.fechacreacion) > new Date(registroExistente.fechacreacion)) {
-          ultimosRegistros.set(key, registro)
-        }
-      }
-    })
-
-    // Filtrar por costo porcentual ≥ 25% y obtener información adicional
-    const alertas = []
-
-    for (const [key, registro] of ultimosRegistros) {
-      if (registro.costoporcentual >= 24) {
-        const { data: platilloMenu, error: errorPlatilloMenu } = await supabase
-          .from("platillosxmenu")
-          .select(`
-            precioventa,
-            menus!inner(
-              nombre,
-              restauranteid,
-              restaurantes!inner(
-                nombre,
-                hotelid,
-                hoteles!inner(nombre)
-              )
-            )
-          `)
-          .eq("platilloid", registro.platilloid)
-          .eq("menuid", registro.menuid)
-          .eq("activo", true)
-          .single()
-
-        if (!errorPlatilloMenu && platilloMenu) {
-          alertas.push({
-            nombrePlatillo: registro.platillos.nombre,
-            nombreHotel: platilloMenu.menus.restaurantes.hoteles.nombre,
-            nombreRestaurante: platilloMenu.menus.restaurantes.nombre,
-            nombreMenu: platilloMenu.menus.nombre,
-            precioVenta: platilloMenu.precioventa,
-            costoPorcentual: registro.costoporcentual,
-          })
-        }
-      }
-    }
-
-    // Ordenar por costo porcentual más alto y tomar top 10
-    const resultado = alertas.sort((a, b) => b.costoPorcentual - a.costoPorcentual).slice(0, 10)
-
-    return { success: true, data: resultado }
+    return { success: true, data: alertas || [] }
   } catch (error) {
     console.error("Error en obtenerAlertasCostoPorcentual:", error)
     return { success: false, data: [] }
@@ -470,7 +395,7 @@ export async function obtenerIngredientesAumentoPrecio(mes: number, año: number
 
       // Verificar que ambos costos sean válidos y que haya un aumento
       if (costoHistorico && costoActual && costoHistorico > 0 && costoActual > costoHistorico) {
-        const aumentoPorcentaje = ((costoActual - costoHistorico) / costoActual) * 100
+        const aumentoPorcentaje = ((costoActual - costoHistorico) / costoHistorico) * 100
 
         // Filtrar aumentos significativos (≥5%)
         if (aumentoPorcentaje >= 2) {
@@ -525,7 +450,7 @@ export async function obtenerIngredientesDisminucionPrecio(mes: number, año: nu
 
       // Verificar que ambos costos sean válidos y que haya una disminución
       if (costoHistorico && costoActual && costoHistorico > 0 && costoActual < costoHistorico) {
-        const disminucionPorcentaje = ((costoActual - costoHistorico) / costoActual) * 100
+        const disminucionPorcentaje = ((costoActual - costoHistorico) / costoHistorico) * 100
 
         // Filtrar disminuciones significativas (≥5%)
         if (disminucionPorcentaje <= 0) {
@@ -655,9 +580,7 @@ export async function obtenerPlatillosPorMenu(menuId: number) {
 // Nueva función para obtener histórico de costeo usando función de Supabase
 export async function obtenerHistoricoCosteo(
   hotelId: number,
-  restauranteId: number,
   platilloId: number,
-  menuId: number,
 ) {
   try {
     const supabase = createSupabaseServerClient()
@@ -665,9 +588,7 @@ export async function obtenerHistoricoCosteo(
     // Llamar a la función de Supabase con RPC
     const { data: historicos, error } = await supabase.rpc("selcostoplatilloshistorico", {
       hotelesid: hotelId,
-      restaurantesid: restauranteId,
       platillosid: platilloId,
-      menus: menuId,
     })
 
     if (error) {
@@ -739,7 +660,17 @@ export async function obtenerTopIngredientesPorCosto(mes: number, año: number, 
       return { success: false, data: [] }
     }
 
-    return { success: true, data: topIngredientes || [] }
+    // Agregar información adicional para tooltips
+    const ingredientesConDetalles = (topIngredientes || []).map((ingrediente) => ({
+      ...ingrediente,
+      codigo: ingrediente.codigo || "",
+      descripcion: ingrediente.descripcion || "",
+      categoria: ingrediente.categoria || "",
+      unidadmedida: ingrediente.unidadmedida || "",
+      proveedor: ingrediente.proveedor || "",
+    }))
+
+    return { success: true, data: ingredientesConDetalles }
   } catch (error) {
     console.error("Error en obtenerTopIngredientesPorCosto:", error)
     return { success: false, data: [] }
@@ -981,12 +912,10 @@ export async function obtenerDetallesPlatilloTooltip(platilloId: number) {
       costototal: data.costototal,
       costoadministrativo: data.costoadministrativo,
       //precioconiva: data.platillosxmenu?.precioconiva,
-      //margenutilidad: data.platillosxmenu?.margenutilidad,
+      //margenutilidad: data.platillosxmenu?.margenutilidad
     }
-    
-    
-    
-    return { success: true, data: detallesTransformados}
+
+    return { success: true, data: detallesTransformados }
   } catch (error) {
     console.error("Error en obtenerDetallesPlatilloTooltip:", error)
     return { success: false, data: null }

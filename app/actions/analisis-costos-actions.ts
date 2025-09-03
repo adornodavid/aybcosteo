@@ -4,6 +4,16 @@ import { cookies } from "next/headers"
 import { createClient } from "@/lib/supabase" // Usamos el cliente de Supabase para el usuario
 
 // Tipos para los datos que se devolverán
+export type HotelItem = {
+  id: number
+  nombre: string
+}
+
+export type RestauranteItem = {
+  id: number
+  nombre: string
+}
+
 export type MenuItem = {
   id: number
   nombre: string
@@ -75,13 +85,11 @@ export type PlatilloHistoricoInfo = {
   costoporcentual: number
 }
 
-// Función para obtener los menús para el dropdown
-export async function getMenusForAnalisis(): Promise<MenuItem[]> {
-  const supabase = createClient(cookies()) // Cliente de Supabase para la consulta de datos
+// Nueva función para obtener hoteles (sin "Todos")
+export async function getHotelesForAnalisis(): Promise<HotelItem[]> {
+  const supabase = createClient(cookies())
 
-  let auxHotelid = -1 // Variable auxiliar para el hotelId
-
-  // 1. Obtener RolId y HotelId directamente de las cookies
+  // Obtener RolId de las cookies
   const allCookies = cookies()
   const rolIdCookie = allCookies.get("RolId")
   const hotelIdCookie = allCookies.get("HotelId")
@@ -91,67 +99,91 @@ export async function getMenusForAnalisis(): Promise<MenuItem[]> {
 
   if (rolIdCookie && !isNaN(Number.parseInt(rolIdCookie.value))) {
     rolId = Number.parseInt(rolIdCookie.value)
-  } else {
-    console.warn("RolId cookie not found or invalid, defaulting to 0.")
   }
 
   if (hotelIdCookie && !isNaN(Number.parseInt(hotelIdCookie.value))) {
     hotelId = Number.parseInt(hotelIdCookie.value)
-  } else {
-    console.warn("HotelId cookie not found or invalid, defaulting to 0.")
-  }
-
-  // 2. Asignar valor a auxHotelid según el RolId obtenido de la cookie
-  if (rolId !== 1 && rolId !== 2 && rolId !== 3 && rolId !== 4) {
-    auxHotelid = hotelId
-  } else {
-    auxHotelid = -1
   }
 
   try {
-    // 3. Ejecutar la consulta SQL adaptada a Supabase Client
-    let query = supabase
-      .from("menus")
-      .select(`
-        id,
-        nombre,
-        restaurantes!inner(
-          hoteles!inner(
-            id
-          )
-        )
-      `)
-      .order("id", { ascending: true })
+    let query = supabase.from("hoteles").select("id, nombre").order("id", { ascending: true })
 
-    // Aplicar el filtro si auxHotelid no es -1
-    if (auxHotelid !== -1) {
-      query = query.eq("restaurantes.hoteles.id", auxHotelid)
+    // Si el rol no es 1, 2, 3 o 4, filtrar por el hotel del usuario
+    if (rolId !== 1 && rolId !== 2 && rolId !== 3 && rolId !== 4) {
+      query = query.eq("id", hotelId)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      console.error("Error fetching hoteles:", error.message)
+      return []
+    }
+
+    return data
+  } catch (error) {
+    console.error("Exception fetching hoteles:", error)
+    return []
+  }
+}
+
+// Nueva función para obtener restaurantes basados en el hotel seleccionado (sin "Todos")
+export async function getRestaurantesForAnalisis(hotelId: number): Promise<RestauranteItem[]> {
+  const supabase = createClient(cookies())
+
+  try {
+    let query = supabase.from("restaurantes").select("id, nombre").order("nombre", { ascending: true })
+
+    if (hotelId !== -1) {
+      query = query.eq("hotelid", hotelId)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      console.error("Error fetching restaurantes:", error.message)
+      return []
+    }
+
+    return data.map((restaurante: any) => ({
+      id: restaurante.id,
+      nombre: restaurante.nombre,
+    }))
+  } catch (error) {
+    console.error("Exception fetching restaurantes:", error)
+    return []
+  }
+}
+
+// Función modificada para obtener los menús basados en el restaurante seleccionado (sin "Todos")
+export async function getMenusForAnalisis(restauranteId: number): Promise<MenuItem[]> {
+  const supabase = createClient(cookies())
+
+  try {
+    let query = supabase.from("menus").select("id, nombre").order("nombre", { ascending: true })
+
+    if (restauranteId !== -1) {
+      query = query.eq("restauranteid", restauranteId)
     }
 
     const { data, error } = await query
 
     if (error) {
       console.error("Error fetching menus:", error.message)
-      return [{ id: -1, nombre: "Todos" }]
+      return []
     }
 
-    // 4. Formatear las opciones de la lista desplegable
-    const menuItems: MenuItem[] = [
-      { id: -1, nombre: "Todos" }, // Añadir la opción "Todos" al inicio
-      ...data.map((menu: any) => ({
-        id: menu.id,
-        nombre: menu.nombre,
-      })),
-    ]
-
-    return menuItems
+    return data.map((menu: any) => ({
+      id: menu.id,
+      nombre: menu.nombre,
+    }))
   } catch (error) {
     console.error("Exception fetching menus:", error)
-    return [{ id: -1, nombre: "Todos" }]
+    return []
   }
 }
 
-// Función para obtener platillos basados en el menú seleccionado y un término de búsqueda
+// Función modificada para obtener platillos basados en el menú seleccionado y un término de búsqueda
 export async function getPlatillosForAnalisis(menuId: number, searchTerm = ""): Promise<PlatilloItem[]> {
   const supabase = createClient(cookies())
 
@@ -169,103 +201,91 @@ export async function getPlatillosForAnalisis(menuId: number, searchTerm = ""): 
     }
 
     if (searchTerm) {
-      query = query.ilike("nombre", `%${searchTerm}%`) // 'ilike' para búsqueda insensible a mayúsculas/minúsculas
+      query = query.ilike("nombre", `%${searchTerm}%`)
     }
 
     const { data, error } = await query.order("nombre", { ascending: true })
 
     if (error) {
       console.error("Error fetching platillos:", error.message)
-      return []
+      return [{ id: -1, nombre: "Todos" }]
     }
 
-    const platilloItems: PlatilloItem[] = data.map((platillo: any) => ({
-      id: platillo.id,
-      nombre: platillo.nombre,
-    }))
+    const platilloItems: PlatilloItem[] = [
+      { id: -1, nombre: "Todos" }, // Agregar "Todos" como primer elemento
+      ...data.map((platillo: any) => ({
+        id: platillo.id,
+        nombre: platillo.nombre,
+      })),
+    ]
 
     return platilloItems
   } catch (error) {
     console.error("Exception fetching platillos:", error)
-    return []
+    return [{ id: -1, nombre: "Todos" }]
   }
 }
 
-// Función para obtener el historial de costos de un platillo
+// Función modificada para obtener el historial de costos usando la función de Supabase
 export async function getPlatilloCostHistory(
   platilloId: number,
   fechaInicial: string,
   fechaFinal: string,
+  menuId: number,
+  restauranteId: number,
+  hotelId: number,
 ): Promise<CostHistoryItem[]> {
   const supabase = createClient(cookies())
-  console.log("Fetching cost history for:", { platilloId, fechaInicial, fechaFinal })
+  console.log("Fetching cost history with params:", {
+    platilloId,
+    fechaInicial,
+    fechaFinal,
+    menuId,
+    restauranteId,
+    hotelId,
+  })
 
   try {
-    // 1. Obtener datos del histórico con join directo a platillos y menus
-    const { data, error } = await supabase
-      .from("historico")
-      .select(`
-        fechacreacion, 
-        platilloid, 
-        menuid,
-        costo, 
-        precioventa, 
-        costoporcentual,
-        platillos!inner(
-          nombre
-        ),
-        menus!inner(
-          nombre
-        )
-      `)
-      .eq("platilloid", platilloId)
-      .gte("fechacreacion", fechaInicial)
-      .lte("fechacreacion", fechaFinal)
-      .order("fechacreacion", { ascending: true }) // Ordenar por fecha para el gráfico
+    // Llamar a la función de Supabase
+    const { data, error } = await supabase.rpc("selhistoricocostoporcentual", {
+      platillosid: platilloId,
+      fechainicial: fechaInicial,
+      fechafinal: fechaFinal,
+      menusid: menuId,
+      restaurantesid: restauranteId,
+      hotelesid: hotelId,
+    })
 
     if (error) {
-      console.error("Error fetching platillo cost history:", error.message)
+      console.error("Error calling selhistoricocostoporcentual:", error.message)
       return []
     }
 
-    console.log("Raw data from historico:", data)
+    console.log("Raw data from selhistoricocostoporcentual:", data)
 
-    // 2. Agrupar y sumar costos por fecha y platillo
-    const groupedData = data.reduce((acc: any, item: any) => {
-      const key = `${item.fechacreacion}-${item.platilloid}`
-      if (!acc[key]) {
-        acc[key] = {
-          fechacreacion: item.fechacreacion,
-          fechacreacionOriginal: item.fechacreacion, // Guardamos la fecha original en formato YYYY-MM-DD
-          platilloid: item.platilloid,
-          costo: 0,
-          precioventa: item.precioventa, // Tomar el primer precio de venta encontrado para esa fecha/platillo
-          margenutilidad: 0, // Inicializar, se calculará después
-          costoporcentual: item.costoporcentual,
-          nombreplatillo: item.platillos?.nombre || "N/A", // Nombre del platillo
-          nombremenu: item.menus?.nombre || "N/A", // Nombre del menú desde join directo
-        }
-      }
-      acc[key].costo += item.costo
-      return acc
-    }, {})
+    if (!data || data.length === 0) {
+      console.log("No data returned from function")
+      return []
+    }
 
-    const chartData = Object.values(groupedData).map((item: any) => ({
-      fechacreacion: item.fechacreacion, // Mantenemos como string en formato YYYY-MM-DD
-      fechacreacionOriginal: item.fechacreacion, // Fecha original para consultas en formato YYYY-MM-DD
-      costo: item.costo,
-      precioventa: item.precioventa,
-      platilloid: item.platilloid,
-      margenutilidad: item.precioventa - item.costo, // Calcular el margen de utilidad
-      costoporcentual: item.costoporcentual,
-      nombreplatillo: item.nombreplatillo, // Nombre del platillo
-      nombremenu: item.nombremenu, // Nombre del menú
+    // Transformar los datos para el formato esperado
+    const chartData = data.map((item: any) => ({
+      fechacreacion: item.fechacreacion, // Mantener como string en formato YYYY-MM-DD
+      fechacreacionOriginal: item.fechacreacion, // Fecha original para consultas
+      platilloid: item.platilloid || item.platillosid,
+      costo: item.costoelaboracion || 0,
+      precioventa: item.precioventa || 0,
+      margenutilidad: (item.precioventa || 0) - (item.costo || 0), // Calcular margen
+      costoporcentual: item.costoporcentual || 0,
+      nombreplatillo: item.nombre || item.platillo || "N/A",
+      nombremenu: item.nombremenu || item.menu || "N/A",
+      menuid:  item.menuid || "N/A", 
     }))
 
     console.log("Processed chart data:", chartData)
     return chartData
   } catch (error) {
-    console.error("Exception fetching platillo cost history:", error)
+    console.error("Exception calling selhistoricocostoporcentual:", error)
     return []
   }
 }
@@ -425,21 +445,20 @@ export async function getPlatilloActualInfo(platilloId: number, menuId: number):
       `)
       .eq("id", platilloId)
       .eq("platillosxmenu.menuid", menuId)
-      .order("fechacreacion", { ascending: false }) // Tomar el más reciente
-      .limit(1) // Limitar a 1 resultado en lugar de usar .single()
+      .order("fechacreacion", { ascending: false })
+      .limit(1)
 
     if (error) {
       console.error("Error fetching platillo actual info:", error.message)
       return null
     }
 
-    // Verificar que tengamos datos
     if (!data || data.length === 0) {
       console.warn("No data found for platillo:", platilloId, "menu:", menuId)
       return null
     }
 
-    const platilloData = data[0] // Tomar el primer (y único) resultado
+    const platilloData = data[0]
 
     const platilloActual: PlatilloActualInfo = {
       id: platilloData.id,
@@ -449,6 +468,7 @@ export async function getPlatilloActualInfo(platilloId: number, menuId: number):
       costototal: platilloData.costototal || 0,
       fechacreacion: platilloData.fechacreacion,
       precioventa: platilloData.platillosxmenu[0]?.precioventa || 0,
+      costoporcentual: (platilloData.costototal / platilloData.platillosxmenu[0]?.precioventa) * 100 || 0,
       margenutilidad: platilloData.platillosxmenu[0]?.margenutilidad || 0,
     }
 
@@ -466,13 +486,11 @@ export async function getPlatilloHistoricoInfo(
 ): Promise<PlatilloHistoricoInfo | null> {
   const supabase = createClient(cookies())
 
-  // Validar que la fecha no sea undefined o null
   if (!fecha || fecha === "undefined" || fecha === "null") {
     console.error("Invalid fecha provided to getPlatilloHistoricoInfo:", fecha)
     return null
   }
 
-  // Validar formato de fecha (YYYY-MM-DD)
   const fechaRegex = /^\d{4}-\d{2}-\d{2}$/
   if (!fechaRegex.test(fecha)) {
     console.error("Invalid fecha format provided to getPlatilloHistoricoInfo:", fecha)
@@ -505,10 +523,9 @@ export async function getPlatilloHistoricoInfo(
       return null
     }
 
-    // Agrupar y sumar costos
     const costototal = data.reduce((sum, item) => sum + item.costo, 0)
     const precioventa = data[0].precioventa
-    const margenutilidad = precioventa - costototal
+    const margenutilidad = precioventa - ((costototal * 0.05) + costototal)
     const costoporcentual = data[0].costoporcentual
 
     const platilloHistorico: PlatilloHistoricoInfo = {

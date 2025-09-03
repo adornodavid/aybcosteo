@@ -13,6 +13,15 @@ import {
   type PlatilloMargin,
   type PlatilloComparisonData, // Importar la nueva interfaz
 } from "@/app/actions/margenes-actions"
+import {
+  obtenerCambiosCostosPlatillos,
+  obtenerCambiosCostosRecetas,
+  obtenerIngredientesAumentoPrecio,
+  obtenerIngredientesDisminucionPrecio,
+  obtenerHotelesPorRol,
+  obtenerDetallesPlatilloTooltip,
+  obtenerDetallesRecetaTooltip,
+} from "@/app/actions/dashboard-actions"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -22,7 +31,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandList, CommandGroup, CommandInput, CommandItem, CommandEmpty } from "@/components/ui/command"
 import { Calendar } from "@/components/ui/calendar"
 import { format } from "date-fns"
-import { CalendarIcon, SearchIcon, CheckIcon } from "lucide-react"
+import { CalendarIcon, SearchIcon, CheckIcon, ChefHat, HelpCircle, ShoppingCart } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   LineChart,
@@ -46,6 +55,7 @@ import {
   type MarginPlatilloSummary,
   type PlatilloDetail,
 } from "@/app/actions/margenes-actions"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 interface MenuOption {
   id: number
@@ -61,6 +71,58 @@ interface CostHistoryItem {
   fechacreacion: string
   costo: number
 }
+
+interface CambioCosto {
+  id?: number
+  nombre: string
+  costo_inicial: number
+  costo_actual: number
+  variacion_porcentaje: number
+}
+
+interface CambioIngrediente {
+  codigo: string
+  nombre: string
+  costo_inicial: number
+  costo_actual: number
+  aumento_porcentaje?: number
+  disminucion_porcentaje?: number
+}
+
+interface OpcionSelect {
+  id: number
+  nombre: string
+}
+
+interface DetallesPlatilloTooltip {
+  id: number
+  imgurl?: string
+  nombre: string
+  costototal: number
+  costoadministrativo: number
+}
+
+interface DetallesRecetaTooltip {
+  id: number
+  imgurl?: string
+  hotel: string
+  nombre: string
+  costo: number
+  cantidad: number
+  unidadbase: string
+}
+
+const mesesDelAño = [
+  { id: 1, nombre: "Enero" },
+  { id: 2, nombre: "Febrero" },
+  { id: 3, nombre: "Marzo" },
+  { id: 4, nombre: "Abril" },
+  { id: 5, nombre: "Mayo" },
+  { id: 6, nombre: "Junio" },
+  { id: 7, nombre: "Julio" },
+]
+
+const añosDisponibles = [{ id: 2025, nombre: "2025" }]
 
 export default function MargenesUtilidadPage() {
   const [menuOptions, setMenuOptions] = useState<MenuOption[]>([])
@@ -93,6 +155,21 @@ export default function MargenesUtilidadPage() {
   const [activeTooltipPlatilloId, setActiveTooltipPlatilloId] = useState<number | null>(null)
   const [activeTooltipMenuId, setActiveTooltipMenuId] = useState<number | null>(null)
 
+  // Estados para la nueva sección de Variación de Costos
+  const [cambiosPlatillos, setCambiosPlatillos] = useState<CambioCosto[]>([])
+  const [cambiosRecetas, setCambiosRecetas] = useState<CambioCosto[]>([])
+  const [ingredientesAumento, setIngredientesAumento] = useState<CambioIngrediente[]>([])
+  const [ingredientesDisminucion, setIngredientesDisminucion] = useState<CambioIngrediente[]>([])
+  const [hoteles, setHoteles] = useState<OpcionSelect[]>([])
+  const [hotelSeleccionado, setHotelSeleccionado] = useState<string>("")
+  const [mesSeleccionado, setMesSeleccionado] = useState<string>("7")
+  const [añoSeleccionado, setAñoSeleccionado] = useState<string>("2025")
+
+  // Estados para tooltips
+  const [detallesPlatilloTooltip, setDetallesPlatilloTooltip] = useState<DetallesPlatilloTooltip | null>(null)
+  const [detallesRecetaTooltip, setDetallesRecetaTooltip] = useState<DetallesRecetaTooltip | null>(null)
+  const [loadingTooltip, setLoadingTooltip] = useState(false)
+
   useEffect(() => {
     async function loadMenus() {
       setIsLoadingMenus(true)
@@ -119,6 +196,57 @@ export default function MargenesUtilidadPage() {
     }
     loadMargins()
   }, [])
+
+  // Cargar hoteles al inicializar
+  useEffect(() => {
+    async function loadHoteles() {
+      const hotelesData = await obtenerHotelesPorRol()
+      if (hotelesData.success) {
+        setHoteles(hotelesData.data)
+        if (hotelesData.data.length > 0) {
+          setHotelSeleccionado(hotelesData.data[0].id.toString())
+        }
+      }
+    }
+    loadHoteles()
+  }, [])
+
+  // Cargar datos de variación de costos cuando cambien los filtros
+  useEffect(() => {
+    async function loadVariacionCostos() {
+      if (hotelSeleccionado && mesSeleccionado && añoSeleccionado) {
+        const [cambiosPlatillosData, cambiosRecetasData, ingredientesAumentoData, ingredientesDisminucionData] =
+          await Promise.all([
+            obtenerCambiosCostosPlatillos(
+              Number.parseInt(mesSeleccionado),
+              Number.parseInt(añoSeleccionado),
+              Number.parseInt(hotelSeleccionado),
+            ),
+            obtenerCambiosCostosRecetas(
+              Number.parseInt(mesSeleccionado),
+              Number.parseInt(añoSeleccionado),
+              Number.parseInt(hotelSeleccionado),
+            ),
+            obtenerIngredientesAumentoPrecio(
+              Number.parseInt(mesSeleccionado),
+              Number.parseInt(añoSeleccionado),
+              Number.parseInt(hotelSeleccionado),
+            ),
+            obtenerIngredientesDisminucionPrecio(
+              Number.parseInt(mesSeleccionado),
+              Number.parseInt(añoSeleccionado),
+              Number.parseInt(hotelSeleccionado),
+            ),
+          ])
+
+        if (cambiosPlatillosData.success) setCambiosPlatillos(cambiosPlatillosData.data)
+        if (cambiosRecetasData.success) setCambiosRecetas(cambiosRecetasData.data)
+        if (ingredientesAumentoData.success) setIngredientesAumento(ingredientesAumentoData.data)
+        if (ingredientesDisminucionData.success) setIngredientesDisminucion(ingredientesDisminucionData.data)
+      }
+    }
+    loadVariacionCostos()
+  }, [hotelSeleccionado, mesSeleccionado, añoSeleccionado])
 
   useEffect(() => {
     const delayDebounceFn = setTimeout(async () => {
@@ -189,6 +317,42 @@ export default function MargenesUtilidadPage() {
     setIsTooltipLoading(false)
   }
 
+  // Función para cargar detalles del platillo para tooltip
+  const cargarDetallesPlatilloTooltip = async (platilloId: number) => {
+    setLoadingTooltip(true)
+    try {
+      const response = await obtenerDetallesPlatilloTooltip(platilloId)
+      if (response.success && response.data) {
+        setDetallesPlatilloTooltip(response.data)
+      } else {
+        setDetallesPlatilloTooltip(null)
+      }
+    } catch (error) {
+      console.error("Error cargando detalles del platillo:", error)
+      setDetallesPlatilloTooltip(null)
+    } finally {
+      setLoadingTooltip(false)
+    }
+  }
+
+  // Función para cargar detalles de la receta para tooltip
+  const cargarDetallesRecetaTooltip = async (recetaId: number) => {
+    setLoadingTooltip(true)
+    try {
+      const response = await obtenerDetallesRecetaTooltip(recetaId)
+      if (response.success && response.data) {
+        setDetallesRecetaTooltip(response.data)
+      } else {
+        setDetallesRecetaTooltip(null)
+      }
+    } catch (error) {
+      console.error("Error cargando detalles de la receta:", error)
+      setDetallesRecetaTooltip(null)
+    } finally {
+      setLoadingTooltip(false)
+    }
+  }
+
   const formattedCostHistoryData = useMemo(() => {
     return costHistoryData.map((item) => ({
       ...item,
@@ -199,6 +363,329 @@ export default function MargenesUtilidadPage() {
   return (
     <div className="flex flex-col min-h-screen p-6 bg-gray-50">
       <h1 className="text-4xl font-bold mb-8 text-gray-800">Estadísticas Costos</h1>
+
+      {/* Nueva sección de Variación de Costos */}
+      <Card className="mb-8 shadow-lg">
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between text-orange-800">
+            <div className="flex items-center gap-2">
+              <ChefHat className="h-6 w-6" />
+              Variacion Costos(Top 5)
+            </div>
+            <TooltipProvider>
+              <UITooltip>
+                <TooltipTrigger asChild>
+                  <HelpCircle className="h-5 w-5 text-orange-600 hover:text-orange-800 cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent className="max-w-md p-4 bg-white border border-orange-200 shadow-lg">
+                  <div className="space-y-3">
+                    <h4 className="font-semibold text-orange-800 text-sm">Variacion de Costos(top 5)</h4>
+                    <p className="text-sm text-gray-700 leading-relaxed">
+                      Esta sección compara el costo actual de la receta con el mes anterior seleccionado en las opciones
+                      Mes y Año mostrando la variación porcentual entre estos 2 costos (Costo Mes Actual vs Costo Mes
+                      Anterior). Le ayuda a identificar tendencias de costos rápidamente mostrando las 5 recetas con
+                      mayor porcentaje de variación, de esta manera ayuda a identificar que recetas han subido su costo
+                      drásticamente conforme al mes anterior y así tomar decisiones informadas sobre precios y
+                      proveedores.
+                    </p>
+                    <div className="border-t border-orange-100 pt-2">
+                      <p className="text-xs font-medium text-orange-700 mb-1">Modo de Consultar:</p>
+                      <p className="text-xs text-gray-600 leading-relaxed">
+                        Seleccionar un Hotel, Mes y Año de las opciones del listado para poder consultar mi top 10
+                        recetas con mayor variación de costos.
+                      </p>
+                    </div>
+                  </div>
+                </TooltipContent>
+              </UITooltip>
+            </TooltipProvider>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {/* Filtros para la sección de variación de costos */}
+          <div className="flex items-center gap-4 mb-6">
+            <div className="space-y-2">
+              <Label htmlFor="hotel-variacion">Hotel</Label>
+              <Select value={hotelSeleccionado} onValueChange={setHotelSeleccionado}>
+                <SelectTrigger className="w-48">
+                  <SelectValue placeholder="Seleccionar hotel" />
+                </SelectTrigger>
+                <SelectContent>
+                  {hoteles.map((hotel) => (
+                    <SelectItem key={hotel.id} value={hotel.id.toString()}>
+                      {hotel.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="mes-variacion">Mes</Label>
+              <Select value={mesSeleccionado} onValueChange={setMesSeleccionado}>
+                <SelectTrigger className="w-40">
+                  <SelectValue placeholder="Seleccionar mes" />
+                </SelectTrigger>
+                <SelectContent>
+                  {mesesDelAño.map((mes) => (
+                    <SelectItem key={mes.id} value={mes.id.toString()}>
+                      {mes.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="año-variacion">Año</Label>
+              <Select value={añoSeleccionado} onValueChange={setAñoSeleccionado}>
+                <SelectTrigger className="w-32">
+                  <SelectValue placeholder="Seleccionar año" />
+                </SelectTrigger>
+                <SelectContent>
+                  {añosDisponibles.map((año) => (
+                    <SelectItem key={año.id} value={año.id.toString()}>
+                      {año.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Contenido de la sección de variación de costos */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Tarjetas de análisis de costos */}
+            <div className="bg-gradient-to-r col-span-3 from-amber-50 to-orange-50 border border-orange-100 w-[1100px]  rounded-lg p-4">
+              <Tabs defaultValue="platillos" className="w-full">
+                <TabsList className="grid w-full grid-cols-2 h-8">
+                  <TabsTrigger value="platillos" className="text-xs">
+                    Recetas
+                  </TabsTrigger>
+                  <TabsTrigger value="recetas" className="text-xs">
+                    SubRecetas
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="platillos" className="mt-4">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-1 h-[400px] w-full overflow-y-auto">
+                    {cambiosPlatillos.length >= 0 ? (
+                      cambiosPlatillos.slice(0, 5).map((platillo, index) => (
+                        <TooltipProvider key={index}>
+                          <UITooltip>
+                            <TooltipTrigger asChild>
+                              <Card
+                                className="rounded-xs border bg-card text-card-foreground p-3 bg-gradient-to-r h-[100px] w-64 from-orange-50 to-red-50 border-orange-200 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                                onMouseEnter={() => platillo.id && cargarDetallesPlatilloTooltip(platillo.id)}
+                              >
+                                <div className="grid grid-cols-3 grid-rows-2 h-16">
+                                  {/* Nombre del platillo - ocupa 2 columnas en la primera fila */}
+                                  <div className="col-span-2 row-span-1">
+                                    <h4 className="text-sm font-semibold text-gray-800 truncate leading-tight">
+                                      {platillo.nombre}
+                                    </h4>
+                                  </div>
+
+                                  {/* Variación % - ocupa 1 columna y 2 filas del lado derecho */}
+                                  <div className="col-span-1 row-span-2 flex flex-col items-center justify-center bg-white rounded-lg border-2 border-dashed border-gray-200">
+                                    <div
+                                      className={`text-lg font-bold ${platillo.variacion_porcentaje > 0 ? "text-red-600" : "text-green-600"}`}
+                                    >
+                                      +{Math.abs(platillo.variacion_porcentaje).toFixed(2)}%
+                                    </div>
+                                  </div>
+
+                                  {/* Costo inicial - primera columna, segunda fila */}
+                                  <div className="col-span-1 row-span-1">
+                                    <div className="text-xs text-gray-500">Mes Anterior</div>
+                                    <div className="text-sm font-medium text-gray-700">
+                                      ${platillo.costo_inicial.toFixed(2)}
+                                    </div>
+                                  </div>
+
+                                  {/* Costo actual - segunda columna, segunda fila */}
+                                  <div className="col-span-1 row-span-1">
+                                    <div className="text-xs text-gray-500">Mes Actual</div>
+                                    <div className="text-sm font-medium text-gray-700">
+                                      ${platillo.costo_actual.toFixed(2)}
+                                    </div>
+                                  </div>
+                                </div>
+                              </Card>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-sm p-0 bg-white/95 backdrop-blur-sm border border-orange-200 shadow-2xl rounded-xl overflow-hidden">
+                              {loadingTooltip ? (
+                                <div className="flex items-center justify-center p-4">
+                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-600"></div>
+                                  <span className="ml-2 text-sm text-gray-600">Cargando...</span>
+                                </div>
+                              ) : detallesPlatilloTooltip ? (
+                                <div className="bg-gradient-to-br from-orange-50/90 to-red-50/90">
+                                  <div className="p-4 border-b border-orange-200/50 bg-gradient-to-r from-orange-100/80 to-red-100/80">
+                                    <div className="flex items-center gap-3">
+                                      {detallesPlatilloTooltip.imgurl && (
+                                        <img
+                                          src={detallesPlatilloTooltip.imgurl || "/placeholder.svg"}
+                                          alt={detallesPlatilloTooltip.nombre}
+                                          className="w-12 h-12 rounded-lg object-cover border-2 border-orange-200/50"
+                                        />
+                                      )}
+                                      <div>
+                                        <h4 className="font-bold text-orange-800 text-sm">
+                                          {detallesPlatilloTooltip.nombre}
+                                        </h4>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="p-4 space-y-3">
+                                    <div className="grid grid-cols-2 gap-3 text-xs">
+                                      <div className="bg-white/60 rounded-lg p-2 border border-orange-200/50">
+                                        <span className="text-gray-600">Costo Elaboracion:</span>
+                                        <p className="font-bold text-green-600">
+                                          ${detallesPlatilloTooltip.costototal.toFixed(2)}
+                                        </p>
+                                      </div>
+                                      <div className="bg-white/60 rounded-lg p-2 border border-orange-200/50">
+                                        <span className="text-gray-600">Costo Total:</span>
+                                        <p className="font-bold text-blue-600">
+                                          ${detallesPlatilloTooltip.costoadministrativo.toFixed(2)}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="p-4 text-center text-gray-500">
+                                  <p className="text-sm">No se pudo cargar la información</p>
+                                </div>
+                              )}
+                            </TooltipContent>
+                          </UITooltip>
+                        </TooltipProvider>
+                      ))
+                    ) : (
+                      <Card className="p-4 bg-gray-50 border-gray-200">
+                        <div className="text-center text-sm text-gray-500">No hay cambios significativos</div>
+                      </Card>
+                    )}
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="recetas" className="mt-4">
+                  <div className="h-[330px] w-full space-y-2 overflow-y-auto">
+                    {cambiosRecetas.length >= 0 ? (
+                      cambiosRecetas.slice(0, 3).map((receta, index) => (
+                        <TooltipProvider key={index}>
+                          <UITooltip>
+                            <TooltipTrigger asChild>
+                              <Card
+                                className="rounded-xs border bg-card text-card-foreground p-3 bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                                onMouseEnter={() => receta.id && cargarDetallesRecetaTooltip(receta.id)}
+                              >
+                                <div className="grid grid-cols-3 grid-rows-2 h-16">
+                                  {/* Nombre de la receta - ocupa 2 columnas en la primera fila */}
+                                  <div className="col-span-2 row-span-1">
+                                    <h4 className="text-sm font-semibold text-gray-800 truncate leading-tight">
+                                      {receta.nombre}
+                                    </h4>
+                                  </div>
+
+                                  {/* Variación % - ocupa 1 columna y 2 filas del lado derecho */}
+                                  <div className="col-span-1 row-span-2 flex flex-col items-center justify-center bg-white rounded-lg border-2 border-dashed border-gray-200">
+                                    <div
+                                      className={`text-lg font-bold ${receta.variacion_porcentaje > 0 ? "text-red-600" : "text-green-600"}`}
+                                    >
+                                      {receta.variacion_porcentaje.toFixed(2)}%
+                                    </div>
+                                  </div>
+
+                                  {/* Costo inicial - primera columna, segunda fila */}
+                                  <div className="col-span-1 row-span-1">
+                                    <div className="text-xs text-gray-500">Mes Anterior</div>
+                                    <div className="text-sm font-medium text-gray-700">
+                                      ${receta.costo_inicial.toFixed(2)}
+                                    </div>
+                                  </div>
+
+                                  {/* Costo actual - segunda columna, segunda fila */}
+                                  <div className="col-span-1 row-span-1">
+                                    <div className="text-xs text-gray-500">Mes Actual</div>
+                                    <div className="text-sm font-medium text-gray-700">
+                                      ${receta.costo_actual.toFixed(2)}
+                                    </div>
+                                  </div>
+                                </div>
+                              </Card>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-sm p-0 bg-white/95 backdrop-blur-sm border border-blue-200 shadow-2xl rounded-xl overflow-hidden">
+                              {loadingTooltip ? (
+                                <div className="flex items-center justify-center p-4">
+                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                                  <span className="ml-2 text-sm text-gray-600">Cargando...</span>
+                                </div>
+                              ) : detallesRecetaTooltip ? (
+                                <div className="bg-gradient-to-br from-blue-50/90 to-indigo-50/90">
+                                  <div className="p-4 border-b border-blue-200/50 bg-gradient-to-r from-blue-100/80 to-indigo-100/80">
+                                    <div className="flex items-center gap-3">
+                                      {detallesRecetaTooltip.imgurl && (
+                                        <img
+                                          src={detallesRecetaTooltip.imgurl || "/placeholder.svg"}
+                                          alt={detallesRecetaTooltip.nombre}
+                                          className="w-12 h-12 rounded-lg object-cover border-2 border-blue-200/50"
+                                        />
+                                      )}
+                                      <div>
+                                        <h4 className="font-bold text-blue-800 text-sm">
+                                          {detallesRecetaTooltip.nombre}
+                                        </h4>
+                                        <p className="text-xs text-blue-600">{detallesRecetaTooltip.hotel}</p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="p-4 space-y-3">
+                                    <div className="grid grid-cols-2 gap-3 text-xs">
+                                      <div className="bg-white/60 rounded-lg p-2 border border-blue-200/50">
+                                        <span className="text-gray-600">Costo:</span>
+                                        <p className="font-bold text-green-600">
+                                          ${detallesRecetaTooltip.costo.toFixed(2)}
+                                        </p>
+                                      </div>
+                                      <div className="bg-white/60 rounded-lg p-2 border border-blue-200/50">
+                                        <span className="text-gray-600">Cantidad:</span>
+                                        <p className="font-bold text-blue-600">
+                                          {detallesRecetaTooltip.cantidad.toFixed(2)}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <div className="bg-white/60 rounded-lg p-2 border border-blue-200/50">
+                                      <span className="text-gray-600">Unidad Base:</span>
+                                      <p className="font-semibold text-gray-800">{detallesRecetaTooltip.unidadbase}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="p-4 text-center text-gray-500">
+                                  <p className="text-sm">No se pudo cargar la información</p>
+                                </div>
+                              )}
+                            </TooltipContent>
+                          </UITooltip>
+                        </TooltipProvider>
+                      ))
+                    ) : (
+                      <Card className="p-4 bg-gray-50 border-gray-200">
+                        <div className="text-center text-sm text-gray-500">No hay cambios significativos</div>
+                      </Card>
+                    )}
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </div>
+
+            
+          </div>
+        </CardContent>
+      </Card>
 
       <Card className="mb-8 shadow-lg">
         <CardHeader>
@@ -363,263 +850,9 @@ export default function MargenesUtilidadPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
         {/* Top Margen Utilidad */}
-        <Card className="shadow-lg">
-          <CardHeader>
-            <CardTitle className="text-2xl font-semibold text-gray-700">Top 10 Márgenes de Utilidad</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {isLoadingTopMargins ? (
-              <div className="flex items-center justify-center h-64">
-                <Loader2 className="h-8 w-8 animate-spin" />
-              </div>
-            ) : topMargins.length > 0 ? (
-              <Table id="tblMargenesAltos">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Platillo</TableHead>
-                    <TableHead>Menú</TableHead>
-                    <TableHead>Margen Utilidad (%)</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {topMargins.map((platillo) => (
-                    <TableRow key={platillo.id}>
-                      <TableCell className="font-medium">
-                        <TooltipProvider>
-                          <UITooltip>
-                            <TooltipTrigger asChild>
-                              <span
-                                onMouseEnter={() => handleTooltipHover(platillo.id, platillo.MenuId)}
-                                className="cursor-help underline decoration-dotted"
-                              >
-                                {platillo.Platillo}
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              {isTooltipLoading &&
-                              activeTooltipPlatilloId === platillo.id &&
-                              activeTooltipMenuId === platillo.MenuId ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : tooltipContent &&
-                                activeTooltipPlatilloId === platillo.id &&
-                                activeTooltipMenuId === platillo.MenuId ? (
-                                <div className="flex flex-col text-sm">
-                                  <p>
-                                    <strong>Restaurante:</strong> {tooltipContent.Restaurante}
-                                  </p>
-                                  <p>
-                                    <strong>Menú:</strong> {tooltipContent.Menu}
-                                  </p>
-                                  <p>
-                                    <strong>Platillo:</strong> {tooltipContent.Platillo}
-                                  </p>
-                                  <p>
-                                    <strong>Costo Elaboración:</strong> ${tooltipContent.CostoElaboracion.toFixed(2)}
-                                  </p>
-                                  <p>
-                                    <strong>Precio Venta:</strong> ${tooltipContent.precioventa.toFixed(2)}
-                                  </p>
-                                  <p>
-                                    <strong>Margen Utilidad:</strong> {tooltipContent.margenutilidad.toFixed(2)}%
-                                  </p>
-                                </div>
-                              ) : (
-                                "Cargando detalles..."
-                              )}
-                            </TooltipContent>
-                          </UITooltip>
-                        </TooltipProvider>
-                      </TableCell>
-                      <TableCell>{platillo.Menu}</TableCell>
-                      <TableCell>{platillo.margenutilidad.toFixed(2)}%</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            ) : (
-              <p className="text-center text-gray-500">No hay datos de márgenes altos disponibles.</p>
-            )}
-          </CardContent>
-        </Card>
 
-        {/* Bottom Margen Utilidad */}
-        <Card className="shadow-lg">
-          <CardHeader>
-            <CardTitle className="text-2xl font-semibold text-gray-700">Top 10 Márgenes de Utilidad Bajos</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {isLoadingBottomMargins ? (
-              <div className="flex items-center justify-center h-64">
-                <Loader2 className="h-8 w-8 animate-spin" />
-              </div>
-            ) : bottomMargins.length > 0 ? (
-              <Table id="tblMargenesBajos">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Platillo</TableHead>
-                    <TableHead>Menú</TableHead>
-                    <TableHead>Margen Utilidad (%)</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {bottomMargins.map((platillo) => (
-                    <TableRow key={platillo.id}>
-                      <TableCell className="font-medium">
-                        <TooltipProvider>
-                          <UITooltip>
-                            <TooltipTrigger asChild>
-                              <span
-                                onMouseEnter={() => handleTooltipHover(platillo.id, platillo.MenuId)}
-                                className="cursor-help underline decoration-dotted"
-                              >
-                                {platillo.Platillo}
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              {isTooltipLoading &&
-                              activeTooltipPlatilloId === platillo.id &&
-                              activeTooltipMenuId === platillo.MenuId ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : tooltipContent &&
-                                activeTooltipPlatilloId === platillo.id &&
-                                activeTooltipMenuId === platillo.MenuId ? (
-                                <div className="flex flex-col text-sm">
-                                  <p>
-                                    <strong>Restaurante:</strong> {tooltipContent.Restaurante}
-                                  </p>
-                                  <p>
-                                    <strong>Menú:</strong> {tooltipContent.Menu}
-                                  </p>
-                                  <p>
-                                    <strong>Platillo:</strong> {tooltipContent.Platillo}
-                                  </p>
-                                  <p>
-                                    <strong>Costo Elaboración:</strong> ${tooltipContent.CostoElaboracion.toFixed(2)}
-                                  </p>
-                                  <p>
-                                    <strong>Precio Venta:</strong> ${tooltipContent.precioventa.toFixed(2)}
-                                  </p>
-                                  <p>
-                                    <strong>Margen Utilidad:</strong> {tooltipContent.margenutilidad.toFixed(2)}%
-                                  </p>
-                                </div>
-                              ) : (
-                                "Cargando detalles..."
-                              )}
-                            </TooltipContent>
-                          </UITooltip>
-                        </TooltipProvider>
-                      </TableCell>
-                      <TableCell>{platillo.Menu}</TableCell>
-                      <TableCell>{platillo.margenutilidad.toFixed(2)}%</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            ) : (
-              <p className="text-center text-gray-500">No hay datos de márgenes bajos disponibles.</p>
-            )}
-          </CardContent>
-        </Card>
       </div>
 
-      <Card className="mb-8 shadow-lg">
-        <CardHeader>
-          <CardTitle className="text-2xl font-semibold text-gray-700">Gráfico de Costos por Platillo</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoadingChartData ? (
-            <div className="flex items-center justify-center h-64">
-              <Loader2 className="h-8 w-8 animate-spin" />
-            </div>
-          ) : formattedCostHistoryData.length > 0 ? (
-            <div className="h-[400px] w-full border border-gray-200 rounded-lg p-2">
-              {console.log("Data for Line Chart:", formattedCostHistoryData)}
-              <ResponsiveContainer
-                width="100%"
-                height="100%"
-                minWidth={0}
-                minHeight={0}
-                key={JSON.stringify(formattedCostHistoryData)}
-              >
-                <LineChart
-                  data={formattedCostHistoryData}
-                  margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                  width={700}
-                  height={300}
-                >
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="fechacreacion" minTickGap={20} />
-                  <YAxis tickFormatter={(value) => `$${value.toFixed(2)}`} padding={{ top: 10, bottom: 10 }} />
-                  <Tooltip formatter={(value: number) => [`$${value.toFixed(2)}`, "Costo"]} />
-                  <Line type="monotone" dataKey="costo" stroke="#8884d8" activeDot={{ r: 8 }} strokeWidth={2} />
-                </LineChart>
-              </ResponsiveContainer>
-              
-            </div>
-          ) : (
-            <p className="text-center text-gray-500">
-              {selectedPlatilloId && fechaInicial && fechaFinal
-                ? "No hay datos de costos para el platillo y rango de fechas seleccionados."
-                : "Selecciona un platillo y un rango de fechas para ver el historial de costos."}
-            </p>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Nueva Card para el Gráfico de Barras Comparativo */}
-      <Card className="mb-8 shadow-lg">
-        <CardHeader>
-          <CardTitle className="text-2xl font-semibold text-gray-700">Comparativa de Valores del Platillo</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoadingComparisonChart ? (
-            <div className="flex items-center justify-center h-64">
-              <Loader2 className="h-8 w-8 animate-spin" />
-            </div>
-          ) : platilloComparisonData ? (
-            <div className="h-[400px] w-full border border-gray-200 rounded-lg p-2">
-              {console.log("Data for Bar Chart:", platilloComparisonData)}
-              <ResponsiveContainer
-                width="700%"
-                height="300%"
-                minWidth={0}
-                minHeight={0}
-                key={JSON.stringify(platilloComparisonData)}
-              >
-                <BarChart
-                  data={[platilloComparisonData]}
-                  margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
-                  width={700}
-                  height={300}
-                >
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="platilloNombre" minTickGap={20} />
-                  <YAxis
-                    domain={[0, 1000]}
-                    tickFormatter={(value) => `$${value.toFixed(2)}`}
-                    ticks={[
-                      0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700, 750, 800, 850, 900, 950,
-                      1000,
-                    ]}
-                  />
-                  <Tooltip formatter={(value: number, name: string) => [`$${value.toFixed(2)}`, name]} />
-                  <Legend />
-                  <Bar dataKey="costoTotal" fill="#8884d8" name="Costo Total" />
-                  <Bar dataKey="precioVenta" fill="#82ca9d" name="Precio Venta" />
-                  <Bar dataKey="margenUtilidad" fill="#ffc658" name="Margen Utilidad" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <p className="text-center text-gray-500">
-              {selectedPlatilloId
-                ? "No hay datos de comparación para el platillo seleccionado."
-                : "Selecciona un platillo para ver su comparativa de valores."}
-            </p>
-          )}
-        </CardContent>
-      </Card>
 
       <Card className="shadow-lg">
         <CardHeader>

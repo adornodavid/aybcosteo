@@ -88,7 +88,7 @@ export function AppSidebar() {
       hasSubmenu: true,
       submenu: [
         { name: "Análisis de Costos", href: "/analisiscostos", icon: Icons.TrendingUp },
-        { name: "Márgenes de Utilidad", href: "/margenesutilidad", icon: Icons.PieChart },
+        { name: "Reportes Completos ", href: "/margenesutilidad", icon: Icons.PieChart },
         //{ name: "Reporte Comparativo", href: "/reportecomparativo", icon: Icons.FileBarChart },
       ],
     },
