@@ -1519,7 +1519,7 @@ export default function DashboardPage() {
                 </div>
               </div>
             ) : combinedChartData().length > 0 ? (
-              <>
+              <div>
                 {/* Leyenda de platillos 
                 {platillosDatasets.length > 1 && (
                   <div className="mb-6 p-4 bg-white/50 backdrop-blur-sm rounded-xl border border-white/20">
@@ -1849,7 +1849,7 @@ export default function DashboardPage() {
                     </div>
                   </div>
                 ) : null}
-              </>
+              </div>
             ) : (
               <div className="flex items-center justify-center h-[200px]">
                 <div className="text-center text-gray-500">
@@ -2555,7 +2555,7 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         </div>
-    </div>
+      </div>              
   
 
       {/* Nuevo contenedor horizontal dividido en 3 */}
@@ -3177,7 +3177,7 @@ export default function DashboardPage() {
           )}
         </DialogContent>
       </Dialog>
-
+    
       <style jsx>{`
         @keyframes scroll-left {
           0% {
@@ -3196,6 +3196,6 @@ export default function DashboardPage() {
           animation-play-state: paused;
         }
       `}</style>
-      </div>
+    </div>
   )
 }
