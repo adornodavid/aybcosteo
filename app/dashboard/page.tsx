@@ -3196,4 +3196,6 @@ export default function DashboardPage() {
           animation-play-state: paused;
         }
       `}</style>
-  )\
+      </div>
+  )
+}
