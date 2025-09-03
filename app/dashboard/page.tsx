@@ -1402,7 +1402,469 @@ export default function DashboardPage() {
       {/* Sección del gráfico histórico de costeo */}
       <div className="w-full flex grid grid-cols-4 grid-rows-4 h-[650px] gap-6">
 
-      
+      {/* Nuevo gráfico de análisis de costos */}
+      <div className="w-full col-span-2 row-span-2 h-[320px]">
+        <Card className="rounded-xs border bg-card text-card-foreground shadow bg-gradient-to-r h-[320px] from-cyan-50 to-blue-50 border-cyan-200">
+          <CardHeader className="flex flex-col space-y-1.5 p-2">
+            <CardTitle className="flex items-center justify-between text-cyan-800">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="h-6 w-6" />
+                Variación de Costos y Precios de Venta
+              </div>
+              <TooltipProvider>
+                <UITooltip>
+                  <TooltipTrigger asChild>
+                    <HelpCircle className="h-5 w-5 text-cyan-600 hover:text-cyan-800 cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-md p-4 bg-white border border-cyan-200 shadow-lg">
+                    <div className="space-y-3">
+                      <h4 className="font-semibold text-cyan-800 text-sm">Variación de Costos y Precios de Venta</h4>
+                      <p className="text-sm text-gray-700 leading-relaxed">
+                        Este gráfico muestra la evolución de los costos porcentuales de las recetas seleccionadas en un
+                        rango de fechas específico. Permite identificar tendencias y variaciones en los costos de
+                        producción y precios de venta a lo largo del tiempo.
+                      </p>
+                      <div className="border-t border-cyan-100 pt-2">
+                        <p className="text-xs font-medium text-cyan-700 mb-1">Modo de Consultar:</p>
+                        <p className="text-xs text-gray-600 leading-relaxed">
+                          Seleccionar un Hotel, Restaurante, Menú, Receta y un rango de fechas para poder consultar la
+                          información del gráfico.
+                        </p>
+                      </div>
+                    </div>
+                  </TooltipContent>
+                </UITooltip>
+              </TooltipProvider>
+            </CardTitle>
+          </CardHeader>
+
+          <CardContent className="p-1 pt-0 space-y-2">
+            {/* Filtros de fecha */}
+            <div className="mb-3 p-2 backdrop-blur-sm rounded-xl border border-white/20">
+              <div className="flex items-end gap-4">
+                <div className="flex flex-col space-y-2">
+                  <Label htmlFor="txtFechaInicialCosto">Fecha Inicial</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant={"outline"}
+                        className={cn(
+                          "w-full justify-start text-left font-normal bg-white text-gray-900",
+                          !fechaInicial && "text-muted-foreground",
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {fechaInicial ? format(fechaInicial, "PPP") : <span>Selecciona una fecha</span>}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                      <Calendar mode="single" selected={fechaInicial} onSelect={setFechaInicial} initialFocus />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                <div className="flex flex-col space-y-2">
+                  <Label htmlFor="txtFechaFinalCosto">Fecha Final</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant={"outline"}
+                        className={cn(
+                          "w-full justify-start text-left font-normal bg-white text-gray-900",
+                          !fechaFinal && "text-muted-foreground",
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {fechaFinal ? format(fechaFinal, "PPP") : <span>Selecciona una fecha</span>}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                      <Calendar mode="single" selected={fechaFinal} onSelect={setFechaFinal} initialFocus />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                <div className="space-y-1 relative">
+                  <Label htmlFor="platillo">Receta</Label>
+                  <Input
+                    type="text"
+                    placeholder="Buscar receta..."
+                    value={busquedaPlatillo}
+                    onChange={(e) => handleBusquedaPlatillo(e.target.value)}
+                    disabled={!menuSeleccionado}
+                    className="w-full"
+                  />
+                  {mostrarDropdownPlatillo && platillosBusqueda.length >= 0 && (
+                    <div className="absolute top-full left-0 right-0 z-50 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                      {platillosBusqueda.map((platillo) => (
+                        <div
+                          key={platillo.id}
+                          className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
+                          onClick={() => seleccionarPlatillo(platillo)}
+                        >
+                          {platillo.nombre}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {loadingAnalisisCostos ? (
+              <div className="flex items-center justify-center h-[200px]">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-600 mx-auto mb-2"></div>
+                  <p className="text-sm text-gray-600">Cargando datos del gráfico...</p>
+                </div>
+              </div>
+            ) : combinedChartData().length > 0 ? (
+              <>
+                {/* Leyenda de platillos 
+                {platillosDatasets.length > 1 && (
+                  <div className="mb-6 p-4 bg-white/50 backdrop-blur-sm rounded-xl border border-white/20">
+                    <h4 className="text-lg font-semibold mb-3 text-slate-700">Platillos en el gráfico:</h4>
+                    <div className="flex flex-wrap gap-4">
+                      {platillosDatasets.map((dataset) => (
+                        <div key={dataset.id} className="flex items-center gap-2">
+                          <div
+                            className="w-4 h-4 rounded-full border-2 border-white"
+                            style={{ backgroundColor: dataset.color }}
+                          ></div>
+                          <span className="text-sm font-medium text-slate-700">{dataset.nombre}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}*/}
+
+                <div className="h-[190px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={combinedChartData()} accessibilityLayer width={700} height={300}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.3)" strokeWidth={1} />
+                      <XAxis
+                        dataKey="fechacreacion"
+                        minTickGap={20}
+                        tick={{ fill: "#64748b", fontSize: 12 }}
+                        axisLine={{ stroke: "rgba(148, 163, 184, 0.4)" }}
+                      />
+                      <YAxis
+                        domain={[0, 60]}
+                        tickMargin={8}
+                        label={{
+                          value: "Costo %",
+                          angle: -90,
+                          position: "insideLeft",
+                          style: { textAnchor: "middle", fill: "#64748b", fontSize: "14px", fontWeight: "500" },
+                        }}
+                        tick={{ fill: "#64748b", fontSize: 12 }}
+                        axisLine={{ stroke: "rgba(148, 163, 184, 0.4)" }}
+                      />
+                      <Tooltip
+                        content={({ active, payload, label }) => {
+                          if (!active || !payload || payload.length === 0) return null
+
+                          // Filtrar solo los payloads que tienen valor (no null/undefined)
+                          const validPayloads = payload.filter((p) => p.value !== null && p.value !== undefined)
+
+                          if (validPayloads.length === 0) return null
+
+                          return (
+                            <div className="bg-white/95 backdrop-blur-md border border-white/30 rounded-xl shadow-2xl p-2 max-w-sm">
+                              <div className="text-sm font-semibold text-slate-700 mb-3 border-b border-slate-200 pb-2">
+                                Fecha: {label}
+                              </div>
+                              <div className="space-y-2">
+                                {validPayloads.map((entry, index) => {
+                                  const datasetId = entry.dataKey?.toString().replace("platillo_", "")
+                                  const originalItem = entry.payload[`item_${datasetId}`]
+
+                                  if (!originalItem) return null
+
+                                  const dataset = platillosDatasets.find((d) => d.id === datasetId)
+
+                                  return (
+                                    <div
+                                      key={index}
+                                      className="space-y-1 p-2 bg-slate-50/50 rounded-lg border border-slate-200/30"
+                                    >
+                                      <div className="flex items-center gap-2 mb-2">
+                                        <div
+                                          className="w-3 h-3 rounded-full"
+                                          style={{ backgroundColor: dataset?.color || "#8884d8" }}
+                                        ></div>
+                                        <span className="font-semibold text-slate-800">{dataset?.nombre || "N/A"}</span>
+                                      </div>
+
+                                      <div className="grid grid-cols-2 gap-2 text-xs">
+                                        <div className="flex justify-between">
+                                          <span className="text-slate-600">Menú:</span>
+                                          <span className="font-medium text-slate-800">
+                                            {originalItem.nombremenu || "N/A"}
+                                          </span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                          <span className="text-slate-600">Fecha:</span>
+                                          <span className="font-medium text-slate-800">
+                                            {originalItem.fechacreacion || "N/A"}
+                                          </span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                          <span className="text-slate-600">Costo:</span>
+                                          <span className="font-medium text-green-600">
+                                            ${(originalItem.costo || 0).toFixed(2)}
+                                          </span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                          <span className="text-slate-600">Precio Venta:</span>
+                                          <span className="font-medium text-blue-600">
+                                            ${(originalItem.precioventa || 0).toFixed(2)}
+                                          </span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                          <span className="text-slate-600">Margen:</span>
+                                          <span className="font-medium text-purple-600">
+                                            ${(originalItem.margenutilidad || 0).toFixed(2)}
+                                          </span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                          <span className="text-slate-600">Costo %:</span>
+                                          <span className="font-medium text-orange-600">
+                                            {(originalItem.costoporcentual || 0).toFixed(2)}%
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )
+                        }}
+                      />
+
+                      {/* Generar una línea por cada combinación platillo-menú */}
+                      {platillosDatasets.map((dataset) => (
+                        <Line
+                          key={dataset.id}
+                          dataKey={`platillo_${dataset.id}`}
+                          type="monotone"
+                          stroke={dataset.color}
+                          strokeWidth={3}
+                          connectNulls={true}
+                          dot={{
+                            fill: dataset.color,
+                            strokeWidth: 2,
+                            r: 6,
+                            filter: `drop-shadow(0 2px 4px ${dataset.color}30)`,
+                            cursor: "pointer",
+                          }}
+                          activeDot={{
+                            r: 8,
+                            fill: dataset.color,
+                            stroke: "#ffffff",
+                            strokeWidth: 3,
+                            filter: `drop-shadow(0 4px 8px ${dataset.color}40)`,
+                            cursor: "pointer",
+                            onClick: (data: any, index) => {
+                              handlePointClick(data, dataset.id, index)
+                            },
+                          }}
+                          name={dataset.nombre}
+                        />
+                      ))}
+
+                      <ReferenceLine
+                        y={30}
+                        stroke="#ef4444"
+                        strokeDasharray="8 4"
+                        strokeWidth={2}
+                        label={{
+                          value: "Objetivo (30%)",
+                          position: "topRight",
+                          style: {
+                            fill: "#ef4444",
+                            fontSize: "12px",
+                            fontWeight: "600",
+                            filter: "drop-shadow(0 1px 2px rgba(239, 68, 68, 0.3))",
+                          },
+                        }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Mostrar tarjetas comparativas cuando se selecciona un punto */}
+                {selectedPointDetails && platilloActual && platilloHistorico ? (
+                  <div className="mt-8 space-y-6">
+                    <div className="text-center">
+                      <h3 className="text-2xl font-bold bg-gradient-to-r from-emerald-700 to-teal-600 bg-clip-text text-transparent mb-2">
+                        Comparación de Costos: {selectedPointDetails.platilloNombre}
+                      </h3>
+                      <p className="text-slate-600">
+                        Comparando datos actuales vs. fecha seleccionada ({selectedPointDetails.fecha})
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                      {/* Tarjeta de Información Actual */}
+                      <div className="relative h-[705px]">
+                        <div className="absolute inset-0 bg-gradient-to-br from-blue-50/80 via-white/60 to-indigo-50/80 backdrop-blur-sm rounded-xs border border-blue-200/30"></div>
+                        <Card className="rounded-xs text-card-foreground relative border-0 bg-transparent shadow-lg">
+                          <CardHeader className="text-center pb-4">
+                            <CardTitle className="text-xl font-bold text-blue-700 flex items-center justify-center gap-2">
+                              📊 Información Actual
+                            </CardTitle>
+                            <p className="text-sm text-slate-600">Datos más recientes del platillo</p>
+                          </CardHeader>
+                          <CardContent className="space-y-4">
+                            <div className="h-[95px] flex justify-center mb-4">
+                              <img
+                                src={platilloActual.imgurl || "/placeholder.svg"}
+                                className="w-24 h-24 object-cover rounded-full border-4 border-blue-200/50"
+                              />
+                            </div>
+
+                            <div className="space-y-2">
+                              <div className="backdrop-blur-sm rounded-xs p-1">
+                                <p className="text-sm text-slate-600 font-medium">Platillo</p>
+                                <p className="text-lg font-bold text-slate-800">{platilloActual.nombre}</p>
+                              </div>
+
+                              <div className="backdrop-blur-sm rounded-xs p-1">
+                                <p className="text-sm text-slate-600 font-medium">Menú</p>
+                                <p className="text-lg font-semibold text-slate-800">{platilloActual.menu}</p>
+                              </div>
+
+                              <div className="backdrop-blur-sm rounded-xs p-1">
+                                <p className="text-sm text-slate-600 font-medium">Costo Total</p>
+                                <p className="text-2xl font-bold text-green-400">
+                                  ${platilloActual.costototal.toFixed(2)}
+                                </p>
+                                {renderComparison(platilloActual.costototal, platilloHistorico.costototal)}
+                              </div>
+
+                              <div className="backdrop-blur-sm rounded-xs p-1">
+                                <p className="text-sm text-slate-600 font-medium">Precio de Venta</p>
+                                <p className="text-2xl font-bold text-blue-400">
+                                  ${platilloActual.precioventa.toFixed(2)}
+                                </p>
+                                {renderComparison(platilloActual.precioventa, platilloHistorico.precioventa)}
+                              </div>
+
+                              <div className="backdrop-blur-sm rounded-xs p-1">
+                                <p className="text-sm text-slate-600 font-medium">Margen de Utilidad</p>
+                                <p className="text-2xl font-bold text-purple-400">
+                                  ${platilloActual.margenutilidad.toFixed(2)}
+                                </p>
+                                {renderComparison(platilloActual.margenutilidad, platilloHistorico.margenutilidad)}
+                              </div>
+
+                              <div className="backdrop-blur-sm rounded-xs p-1">
+                                <p className="text-sm text-slate-600 font-medium">Costo Porcentual</p>
+                                <p className="text-2xl font-bold text-orange-400">
+                                  ${platilloActual.costoporcentual.toFixed(2)}
+                                </p>
+                                {renderComparison(platilloActual.costoporcentual, platilloHistorico.costoporcentual)}
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </div>
+
+                      {/* Tarjeta de Información Histórica */}
+                      <div className="relative h-[715px]">
+                        <div className="absolute inset-0 bg-gradient-to-br from-amber-50/80 via-white/60 to-orange-50/80 backdrop-blur-sm rounded-2xl border border-amber-200/30"></div>
+                        <Card className="relative border-0 bg-transparent shadow-lg">
+                          <CardHeader className="text-center pb-4">
+                            <CardTitle className="text-xl font-bold text-amber-700 flex items-center justify-center gap-2">
+                              📅 Información Histórica
+                            </CardTitle>
+                            <p className="text-sm text-slate-600">Datos del {selectedPointDetails.fecha}</p>
+                          </CardHeader>
+                          <CardContent className="space-y-4">
+                            <div className="flex justify-center mb-4">
+                              <div className="w-24 h-24 bg-gradient-to-br from-amber-200 to-orange-200 rounded-full flex items-center justify-center border-4 border-amber-200/50">
+                                <span className="text-2xl">📊</span>
+                              </div>
+                            </div>
+
+                            <div className="space-y-2">
+                              <div className="backdrop-blur-sm rounded-xl p-2">
+                                <p className="text-sm text-slate-600 font-medium">Platillo</p>
+                                <p className="text-lg font-semibold text-slate-800">{platilloHistorico.platillo}</p>
+                              </div>
+
+                              <div className="backdrop-blur-sm rounded-xl p-2">
+                                <p className="text-sm text-slate-600 font-medium">Fecha</p>
+                                <p className="text-lg font-semibold text-slate-800">{selectedPointDetails.fecha}</p>
+                              </div>
+
+                              <div className="backdrop-blur-sm rounded-xl p-3">
+                                <p className="text-sm text-slate-600 font-medium">Costo Total</p>
+                                <p className="text-2xl font-bold text-green-400">
+                                  ${platilloHistorico.costototal.toFixed(2)}
+                                </p>
+                              </div>
+
+                              <div className="backdrop-blur-sm rounded-xl p-3">
+                                <p className="text-sm text-slate-600 font-medium">Precio de Venta</p>
+                                <p className="text-2xl font-bold text-blue-400">
+                                  ${platilloHistorico.precioventa.toFixed(2)}
+                                </p>
+                              </div>
+
+                              <div className="backdrop-blur-sm rounded-xl p-3">
+                                <p className="text-sm text-slate-600 font-medium">Margen de Utilidad</p>
+                                <p className="text-2xl font-bold text-purple-400">
+                                  ${platilloHistorico.margenutilidad.toFixed(2)}
+                                </p>
+                              </div>
+
+                              <div className="backdrop-blur-sm rounded-xl p-3">
+                                <p className="text-sm text-slate-600 font-medium">Costo Porcentual</p>
+                                <p className="text-2xl font-bold text-orange-400">
+                                  {platilloHistorico.costoporcentual.toFixed(2)}%
+                                </p>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </div>
+                    </div>
+
+                    <div className="text-center">
+                      <Button
+                        onClick={() => {
+                          setSelectedPointDetails(null)
+                          setPlatilloActual(null)
+                          setPlatilloHistorico(null)
+                        }}
+                        variant="outline"
+                        size="sm"
+                        className="text-slate-600 hover:text-slate-800"
+                      >
+                        Cerrar comparación
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <div className="flex items-center justify-center h-[200px]">
+                <div className="text-center text-gray-500">
+                  <BarChart3 className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">
+                    {platilloSeleccionadoObj
+                      ? "No hay datos disponibles para el rango de fechas seleccionado"
+                      : "Selecciona una receta y rango de fechas para ver el gráfico"}
+                  </p>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
       
         
         {/* Tarjetas de análisis de costos del lado derecho */}
@@ -1440,6 +1902,7 @@ export default function DashboardPage() {
                       </div>
                     </TooltipContent>
                   </UITooltip>
+                </TooltipProvider>
                 </CardTitle>
             </CardHeader>
 
@@ -1767,6 +2230,7 @@ export default function DashboardPage() {
                       </div>
                     </TooltipContent>
                   </UITooltip>
+                </TooltipProvider>
                 </CardTitle>
             </CardHeader>
             <CardContent className="p-4 pt-0">
@@ -1947,6 +2411,7 @@ export default function DashboardPage() {
                       </div>
                     </TooltipContent>
                   </UITooltip>
+                </TooltipProvider>
                 </CardTitle>
             </CardHeader>
 
@@ -2093,7 +2558,7 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         </div>
-      </div>              
+      </div>
   
 
       {/* Nuevo contenedor horizontal dividido en 3 */}
@@ -2137,6 +2602,7 @@ export default function DashboardPage() {
                       </div>
                     </TooltipContent>
                   </UITooltip>
+                </TooltipProvider>
                 </CardTitle>
             </CardHeader>
             <CardContent>
@@ -2263,6 +2729,7 @@ export default function DashboardPage() {
                       </div>
                     </TooltipContent>
                   </UITooltip>
+                </TooltipProvider>
                 </CardTitle>
             </CardHeader>
             <CardContent>
@@ -2426,6 +2893,7 @@ export default function DashboardPage() {
                       </div>
                     </TooltipContent>
                   </UITooltip>
+                </TooltipProvider>
                 </CardTitle>
             </CardHeader>
             <CardContent>
