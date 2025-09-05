@@ -270,7 +270,7 @@ export async function obtenerMejoresMargenesUtilidad() {
     // Calcular márgenes y ordenar
     const margenesCalculados = (data || [])
       .map((item) => {
-        const margenUtilidad = ((item.precioventa - item.platillos.costototal) / item.precioventa) * 100
+        const margenUtilidad = ((item.precioventa - item.platillos.costototal) / item.platillos.costototal) * 100
         return {
           platilloid: item.platilloid,
           nombrePlatillo: item.platillos.nombre,
@@ -325,7 +325,7 @@ export async function obtenerPeoresMargenesUtilidad() {
     // Calcular márgenes y ordenar (peores primero)
     const margenesCalculados = (data || [])
       .map((item) => {
-        const margenUtilidad = ((item.precioventa - item.platillos.costototal) / item.precioventa) * 100
+        const margenUtilidad = ((item.precioventa - item.platillos.costototal) / item.platillos.costototal) * 100
         return {
           nombrePlatillo: item.platillos.nombre,
           nombreHotel: item.menus.restaurantes.hoteles.nombre,
@@ -344,13 +344,15 @@ export async function obtenerPeoresMargenesUtilidad() {
 }
 
 // Nueva función para obtener alertas de costo porcentual usando función de Supabase
-export async function obtenerAlertasCostoPorcentual(hotelId: number) {
+export async function obtenerAlertasCostoPorcentual(hotelId: number, restauranteId: number, menuId: number) {
   try {
     const supabase = createSupabaseServerClient()
 
     // Llamar a la función de Supabase con RPC
     const { data: alertas, error } = await supabase.rpc("selalertascostoporcentual", {
       hotelesid: hotelId,
+      restaurantesid: restauranteId,
+      menusid: menuId,
     })
 
     if (error) {

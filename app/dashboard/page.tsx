@@ -483,6 +483,18 @@ export default function DashboardPage() {
         const restaurantesConTodos = [{ id: -1, nombre: "Todos" }, ...restaurantesData.data]
         setRestaurantes(restaurantesConTodos)
       }
+
+       // Como el restaurante por defecto es "Todos" (-1), cargar todos los menús
+                const todosLosMenus = []
+                for (const restaurante of restaurantesData.data) {
+                  const menusData = await obtenerMenusPorRestaurante(restaurante.id)
+                  if (menusData.success) {
+                    todosLosMenus.push(...menusData.data)
+                  }
+                }
+                // Agregar opción "Todos" al inicio de los menús
+                const menusConTodos = [{ id: -1, nombre: "Todos" }, ...todosLosMenus]
+                setMenus(menusConTodos)
     }
   }
 
@@ -670,7 +682,11 @@ export default function DashboardPage() {
       }
 
       // Cargar alertas de costo porcentual con el hotel seleccionado
-      const alertasData = await obtenerAlertasCostoPorcentual(Number.parseInt(hotelSeleccionado))
+      const alertasData = await obtenerAlertasCostoPorcentual(
+      Number.parseInt(hotelSeleccionado),
+      Number.parseInt(restauranteSeleccionado),
+      Number.parseInt(menuSeleccionado),
+      )
       if (alertasData.success) {
         setAlertasCostoPorcentual(alertasData.data)
       }
