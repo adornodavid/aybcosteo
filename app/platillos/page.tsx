@@ -931,7 +931,7 @@ export default function PlatillosPage() {
                       </span>
                     </div>
                   )}
-                  <div className="grid grid-cols-2 gap-2 mt-2">
+                  {/*<div className="grid grid-cols-2 gap-2 mt-2">
                     <div className="bg-white p-2 rounded shadow-sm">
                       <span className="text-xs text-gray-500 uppercase tracking-wide">Costo Total</span>
                       <p className="text-sm font-bold text-green-600">
@@ -944,7 +944,7 @@ export default function PlatillosPage() {
                         {formatCurrency(selectedPlatilloDetails[0].PrecioSugerido)}
                       </p>
                     </div>
-                  </div>
+                  </div>*/}
                 </div>
               </div>
 
@@ -981,7 +981,7 @@ export default function PlatillosPage() {
                             <span className="text-gray-900 font-semibold">{formatCurrency(detail.PrecioconIva)}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="font-medium text-gray-700">Costo Total:</span>
+                            <span className="font-medium text-gray-700">Costo Total(5%):</span>
                             <span className="text-gray-900 font-semibold">{formatCurrency(detail.CostoTotal)}</span>
                           </div>
                           <div className="flex justify-between">
