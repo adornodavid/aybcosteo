@@ -37,7 +37,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog" // Importar componentes de Dialog
 import * as DialogPrimitive from "@radix-ui/react-dialog" // Importar DialogPrimitive directamente
-import { Eraser, Search, Eye, Edit, ToggleLeft, ToggleRight, Loader2, PlusCircle, RotateCcw } from "lucide-react"
+import { Search, Eye, Edit, ToggleLeft, ToggleRight, Loader2, PlusCircle, RotateCcw } from "lucide-react"
 import { getPlatilloDetailsForModal } from "@/app/actions/platillos-details-actions" // Importar la nueva acción
 
 // --- Interfaces ---
@@ -85,6 +85,25 @@ interface PlatilloDetail {
   margenutilidad: number | null
   CostoTotal: number
   PrecioSugerido: number // Nuevo campo
+  PrecioconIva: number
+  CostoPorcentual: number
+}
+
+// Nuevas interfaces para ingredientes y subrecetas
+interface IngredientePlatillo {
+  codigo: string
+  nombre: string
+  descripcion: string
+  cantidad: number
+  ingredientecostoparcial: number
+}
+
+interface SubrecetaPlatillo {
+  id: number
+  nombre: string
+  descripcion: string
+  cantidad: number
+  recetacostoparcial: number
 }
 
 // --- Componente Principal ---
@@ -114,6 +133,8 @@ export default function PlatillosPage() {
   const [showPlatilloDetailsModal, setShowPlatilloDetailsModal] = useState(false)
   const [selectedPlatilloDetails, setSelectedPlatilloDetails] = useState<PlatilloDetail[] | null>(null)
   const [isDetailsLoading, setIsDetailsLoading] = useState(false)
+  const [selectedIngredientes, setSelectedIngredientes] = useState<IngredientePlatillo[]>([])
+  const [selectedSubrecetas, setSelectedSubrecetas] = useState<SubrecetaPlatillo[]>([])
 
   // Filtros
   const [filtroNombre, setFiltroNombre] = useState("")
@@ -170,7 +191,7 @@ export default function PlatillosPage() {
           PlatilloDescripcion: p.descripcion,
           PlatilloTiempo: p.tiempopreparacion,
           PlatilloCosto: p.costototal,
-          PlatilloCostoAdministrativo : p.costoadministrativo,
+          PlatilloCostoAdministrativo: p.costoadministrativo,
           PlatilloActivo: p.activo,
           PlatilloImagenUrl: p.imgurl, // Mapear la URL de la imagen
           HotelId: x.menus.restaurantes.hoteles.id,
@@ -470,24 +491,24 @@ export default function PlatillosPage() {
     setIsDetailsLoading(true)
     setShowPlatilloDetailsModal(true) // Abrir modal inmediatamente con estado de carga
     setSelectedPlatilloDetails(null) // Limpiar detalles anteriores
+    setSelectedIngredientes([])
+    setSelectedSubrecetas([])
 
-    const { success, data, error } = await getPlatilloDetailsForModal(platilloId)
+    const { success, data, ingredientes, subrecetas, error } = await getPlatilloDetailsForModal(platilloId)
 
-    // INICIO DE LA MODIFICACIÓN
-    
     console.log(`getPlatilloDetailsForModal - Success: ${success}, Error: ${error ? error : "No error"}`)
-    // FIN DE LA MODIFICACIÓN
 
     if (success && data) {
       setSelectedPlatilloDetails(data)
+      setSelectedIngredientes(ingredientes || [])
+      setSelectedSubrecetas(subrecetas || [])
     } else {
       toast.error(`Error al cargar detalles de la receta: ${error}`)
-      setSelectedPlatilloDetails([]) // Indicar que no se encontraron datos
+      setSelectedPlatilloDetails([])
     }
     setIsDetailsLoading(false)
-    
   }
-  
+
   // --- Paginación ---
   const platillosPaginados = useMemo(() => {
     const indiceInicio = (paginaActual - 1) * resultadosPorPagina
@@ -716,7 +737,11 @@ export default function PlatillosPage() {
                   </TableRow>
                 ) : filteredPlatillos.length > 0 ? (
                   filteredPlatillos.map((p, index) => (
-                    <TableRow key={`${p.PlatilloId}-${p.MenuId}-${index}`}>
+                    <TableRow
+                      key={`${p.PlatilloId}-${p.MenuId}-${index}`}
+                      className="cursor-pointer hover:bg-gray-50"
+                      onClick={() => handleViewPlatilloDetails(p.PlatilloId)}
+                    >
                       <TableCell>
                         <div className="flex items-center gap-3">
                           <img
@@ -862,10 +887,12 @@ export default function PlatillosPage() {
 
       {/* Modal de Detalles del Platillo */}
       <Dialog open={showPlatilloDetailsModal} onOpenChange={setShowPlatilloDetailsModal}>
-        <DialogContent className="max-w-4xl overflow-y-auto max-h-[90vh]">
+        <DialogContent className="max-w-6xl overflow-y-auto max-h-[90vh]">
           <DialogHeader>
-            <DialogTitle className="text-2xl font-bold">Detalles de la Receta</DialogTitle>
-            <DialogDescription>Información detallada de la receta seleccionada.</DialogDescription>
+            <DialogTitle className="text-2xl font-bold text-center">Detalles de la Receta</DialogTitle>
+            <DialogDescription className="text-center">
+              Información detallada de la receta seleccionada.
+            </DialogDescription>
           </DialogHeader>
           {isDetailsLoading ? (
             <div className="flex items-center justify-center h-48">
@@ -873,76 +900,181 @@ export default function PlatillosPage() {
               <span className="ml-2">Cargando detalles...</span>
             </div>
           ) : selectedPlatilloDetails && selectedPlatilloDetails.length > 0 ? (
-            <div className="grid gap-4 py-4">
-              {/* Mostrar información principal del platillo una vez */}
-              <div className="flex flex-col md:flex-row items-center gap-4">
+            <div className="space-y-6 py-4">
+              {/* Información principal del platillo */}
+              <div className="flex flex-col lg:flex-row gap-4 p-4 bg-gray-50 rounded-lg">
                 {selectedPlatilloDetails[0].imgurl && (
-                  <img
-                    src={selectedPlatilloDetails[0].imgurl || "/placeholder.svg"}
-                    alt={selectedPlatilloDetails[0].Platillo}
-                    className="w-64 h-64 object-cover rounded-md"
-                  />
+                  <div className="flex-shrink-0">
+                    <img
+                      src={selectedPlatilloDetails[0].imgurl || "/placeholder.svg"}
+                      alt={selectedPlatilloDetails[0].Platillo}
+                      className="w-32 h-32 object-cover rounded-lg shadow-md"
+                    />
+                  </div>
                 )}
-                <div className="grid gap-1">
-                  <h3 className="text-xl font-semibold">{selectedPlatilloDetails[0].Platillo}</h3>
-                  <p className="text-muted-foreground">{selectedPlatilloDetails[0].descripcion}</p>
+                <div className="flex-1 space-y-2">
+                  <h3 className="text-xl font-bold text-gray-800">{selectedPlatilloDetails[0].Platillo}</h3>
+                  <p className="text-gray-600 text-xs leading-relaxed">{selectedPlatilloDetails[0].descripcion}</p>
                   {selectedPlatilloDetails[0].instruccionespreparacion && (
-                    <p className="mt-2 text-sm text-gray-600">
-                      <span className="text-base text-black-600 font-medium">Instrucciones:</span>{" "}
-                      {selectedPlatilloDetails[0].instruccionespreparacion}
-                    </p>
+                    <div className="bg-white p-2 rounded border-l-4 border-blue-500">
+                      <span className="font-semibold text-gray-700 text-sm">Instrucciones:</span>
+                      <p className="text-xs text-gray-600 mt-1">
+                        {selectedPlatilloDetails[0].instruccionespreparacion}
+                      </p>
+                    </div>
                   )}
                   {selectedPlatilloDetails[0].tiempopreparacion && (
-                    <p className="mt-2 text-sm text-gray-600">
-                      <span className="text-base font-medium">Tiempo de Preparación:</span>{" "}
-                      {selectedPlatilloDetails[0].tiempopreparacion}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-gray-700 text-sm">Tiempo de Preparación:</span>
+                      <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                        {selectedPlatilloDetails[0].tiempopreparacion}
+                      </span>
+                    </div>
                   )}
-                  {/*
-                  <p className="mt-3 text-sm text-gray-600">
-                    <span className="text-base font-medium">Costo de Elaboración:</span>{" "}
-                    {formatCurrency(selectedPlatilloDetails[0].CostoElaboracion)}
-                  </p>
-                  */}
-                  <p className="text-sm text-gray-600">
-                    <span className="text-base font-medium">Costo Total:</span>{" "}
-                    {formatCurrency(selectedPlatilloDetails[0].CostoTotal)}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    <span className="text-base font-medium">Precio Mínimo:</span>{" "}
-                    {formatCurrency(selectedPlatilloDetails[0].PrecioSugerido)}
-                  </p>
+                  <div className="grid grid-cols-2 gap-2 mt-2">
+                    <div className="bg-white p-2 rounded shadow-sm">
+                      <span className="text-xs text-gray-500 uppercase tracking-wide">Costo Total</span>
+                      <p className="text-sm font-bold text-green-600">
+                        {formatCurrency(selectedPlatilloDetails[0].CostoTotal)}
+                      </p>
+                    </div>
+                    <div className="bg-white p-2 rounded shadow-sm">
+                      <span className="text-xs text-gray-500 uppercase tracking-wide">Precio Mínimo</span>
+                      <p className="text-sm font-bold text-blue-600">
+                        {formatCurrency(selectedPlatilloDetails[0].PrecioSugerido)}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Mostrar detalles específicos de cada asociación con menú */}
+              {/* Asociaciones con Menús */}
               {selectedPlatilloDetails.length > 0 && (
-                <div className="mt-4">
-                  <h4 className="text-lg font-semibold mb-2">Asociaciones con Menús:</h4>
-                  <div className="grid gap-3">
+                <div className="space-y-4">
+                  <h4 className="text-xl font-bold text-gray-800 border-b-2 border-gray-200 pb-2">
+                    Asociaciones con Menús
+                  </h4>
+                  <div className="grid gap-4">
                     {selectedPlatilloDetails.map((detail, idx) => (
-                      <Card key={idx} className="p-3">
-                        <p className="text-sm">
-                          <span className="font-medium">Hotel:</span> {detail.Hotel}
-                        </p>
-                        <p className="text-sm">
-                          <span className="font-medium">Restaurante:</span> {detail.Restaurante}
-                        </p>
-                        <p className="text-sm">
-                          <span className="font-medium">Menú:</span> {detail.Menu}
-                        </p>
-                        <p className="text-sm">
-                          <span className="font-medium">Precio de Venta:</span> {formatCurrency(detail.precioventa)}
-                        </p>
-                        <p className="text-sm">
-                          <span className="font-medium">Margen de Utilidad:</span>{" "}
-                          {detail.margenutilidad !== null ? `${detail.margenutilidad}` : "N/A"}
-                        </p>
+                      <Card key={idx} className="rounded-xl border bg-card w-96 text-card-foreground p-4 shadow-sm hover:shadow-md transition-shadow">
+                        <div className="space-y-2">
+                          <div className="flex justify-between">
+                            <span className="font-medium text-gray-700">Hotel:</span>
+                            <span className="text-gray-900">{detail.Hotel}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="font-medium text-gray-700">Restaurante:</span>
+                            <span className="text-gray-900">{detail.Restaurante}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="font-medium text-gray-700">Menú:</span>
+                            <span className="text-gray-900">{detail.Menu}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="font-medium text-gray-700">Costo Elaboración:</span>
+                            <span className="text-gray-900 font-semibold">
+                              {formatCurrency(detail.CostoElaboracion)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="font-medium text-gray-700">Precio Venta (IVA):</span>
+                            <span className="text-gray-900 font-semibold">{formatCurrency(detail.PrecioconIva)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="font-medium text-gray-700">Costo Total:</span>
+                            <span className="text-gray-900 font-semibold">{formatCurrency(detail.CostoTotal)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="font-medium text-gray-700">Precio (Sin IVA):</span>
+                            <span className="text-gray-900 font-semibold">{formatCurrency(detail.precioventa)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="font-medium text-gray-700">Costo %:</span>
+                            <span className="text-gray-900 font-semibold">
+                              {detail.CostoPorcentual ? `${detail.CostoPorcentual.toFixed(2)}%` : "N/A"}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="font-medium text-gray-700">Margen Utilidad:</span>
+                            <span className="text-gray-900 font-semibold">
+                              {detail.margenutilidad !== null ? `${detail.margenutilidad}%` : "N/A"}
+                            </span>
+                          </div>
+                        </div>
                       </Card>
                     ))}
                   </div>
                 </div>
               )}
+
+              {/* Ingredientes y Subrecetas */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Ingredientes */}
+                <div className="space-y-3">
+                  <h4 className="text-lg font-bold text-gray-800 border-b border-gray-200 pb-2">Ingredientes</h4>
+                  {selectedIngredientes.length > 0 ? (
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {selectedIngredientes.map((ingrediente, idx) => (
+                        <div key={idx} className="bg-white border rounded-lg p-3 shadow-sm">
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
+                                  {ingrediente.codigo}
+                                </span>
+                                <span className="font-medium text-sm">{ingrediente.nombre}</span>
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                {ingrediente.cantidad} {ingrediente.descripcion}
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <span className="text-sm font-bold text-green-600">
+                                {formatCurrency(ingrediente.ingredientecostoparcial)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-gray-500 text-sm italic">No hay ingredientes registrados</p>
+                  )}
+                </div>
+
+                {/* Subrecetas */}
+                <div className="space-y-3">
+                  <h4 className="text-lg font-bold text-gray-800 border-b border-gray-200 pb-2">Subrecetas</h4>
+                  {selectedSubrecetas.length > 0 ? (
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {selectedSubrecetas.map((subreceta, idx) => (
+                        <div key={idx} className="bg-white border rounded-lg p-3 shadow-sm">
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded">
+                                  #{subreceta.id}
+                                </span>
+                                <span className="font-medium text-sm">{subreceta.nombre}</span>
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                {subreceta.cantidad} {subreceta.descripcion}
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <span className="text-sm font-bold text-blue-600">
+                                {formatCurrency(subreceta.recetacostoparcial)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-gray-500 text-sm italic">No hay subrecetas registradas</p>
+                  )}
+                </div>
+              </div>
             </div>
           ) : (
             <div className="text-center py-8 text-muted-foreground">No se encontraron detalles para esta receta.</div>
