@@ -237,106 +237,71 @@ export async function obtenerCambiosCostosRecetas(mes: number, año: number, hot
   }
 }
 
-// Nueva función para obtener mejores márgenes de utilidad
-export async function obtenerMejoresMargenesUtilidad() {
+// Nueva función para obtener mejores márgenes de utilidad usando función de Supabase
+export async function obtenerMejoresMargenesUtilidad(
+  mes: number,
+  año: number,
+  hotelId: number,
+  restauranteId: number,
+  menuId: number,
+) {
   try {
     const supabase = createSupabaseServerClient()
 
-    const { data, error } = await supabase
-      .from("platillosxmenu")
-      .select(`
-        platilloid,
-        precioventa,
-        platillos!inner(nombre, costototal),
-        menus!inner(
-          nombre,
-          restauranteid,
-          restaurantes!inner(
-          hotelid,
-          hoteles!inner(nombre)
-          )
-        )
-      `)
-      .not("precioventa", "is", null)
-      .not("platillos.costototal", "is", null)
-      .eq("activo", true)
-      .eq("platillos.activo", true)
+    // Llamar a la función de Supabase con RPC
+    const { data: mejoresMargenesData, error } = await supabase.rpc("selmejoresmargenesutilidad", {
+      mes: mes,
+      year: año,
+      hotelesid: hotelId,
+      restaurantesid: restauranteId,
+      menusid: menuId,
+    })
 
     if (error) {
       console.error("Error obteniendo mejores márgenes:", error)
       return { success: false, data: [] }
     }
+    console.log("mejoresMargenesData",mejoresMargenesData)
+    // Tomar solo los primeros 10 registros
+    const resultado = (mejoresMargenesData || []).slice(0, 10)
 
-    // Calcular márgenes y ordenar
-    const margenesCalculados = (data || [])
-      .map((item) => {
-        const margenUtilidad = ((item.precioventa - item.platillos.costototal) / item.platillos.costototal) * 100
-        return {
-          platilloid: item.platilloid,
-          nombrePlatillo: item.platillos.nombre,
-          nombreHotel: item.menus.restaurantes.hoteles.nombre,
-          nombreMenu: item.menus.nombre,
-          nombreRestaurante: item.menus.restaurantes.nombre,
-          costoTotal: item.platillos.costototal,
-          precioVenta: item.precioventa,
-          margenUtilidad: margenUtilidad,
-        }
-      })
-      .sort((a, b) => b.margenUtilidad - a.margenUtilidad)
-      .slice(0, 5)
-
-    return { success: true, data: margenesCalculados }
+    console.log("resul",resultado)
+    return { success: true, data: resultado }
   } catch (error) {
     console.error("Error en obtenerMejoresMargenesUtilidad:", error)
     return { success: false, data: [] }
   }
 }
 
-// Nueva función para obtener peores márgenes de utilidad
-export async function obtenerPeoresMargenesUtilidad() {
+// Nueva función para obtener peores márgenes de utilidad usando función de Supabase
+export async function obtenerPeoresMargenesUtilidad(
+  mes: number,
+  año: number,
+  hotelId: number,
+  restauranteId: number,
+  menuId: number,
+) {
   try {
     const supabase = createSupabaseServerClient()
 
-    const { data, error } = await supabase
-      .from("platillosxmenu")
-      .select(`
-        platilloid,
-        precioventa,
-        platillos!inner(nombre, costototal),
-        menus!inner(
-          nombre,
-          restauranteid,
-          restaurantes!inner(
-          hotelid,
-          hoteles!inner(nombre)
-          )
-        )
-      `)
-      .not("precioventa", "is", null)
-      .not("platillos.costototal", "is", null)
-      .eq("activo", true)
-      .eq("platillos.activo", true)
+    // Llamar a la función de Supabase con RPC
+    const { data: peoresMargenesData, error } = await supabase.rpc("selpeoresmargenesutilidad", {
+      mes: mes,
+      year: año,
+      hotelesid: hotelId,
+      restaurantesid: restauranteId,
+      menusid: menuId,
+    })
 
     if (error) {
       console.error("Error obteniendo peores márgenes:", error)
       return { success: false, data: [] }
     }
 
-    // Calcular márgenes y ordenar (peores primero)
-    const margenesCalculados = (data || [])
-      .map((item) => {
-        const margenUtilidad = ((item.precioventa - item.platillos.costototal) / item.platillos.costototal) * 100
-        return {
-          nombrePlatillo: item.platillos.nombre,
-          nombreHotel: item.menus.restaurantes.hoteles.nombre,
-          nombreMenu: item.menus.nombre,
-          margenUtilidad: margenUtilidad,
-        }
-      })
-      .sort((a, b) => a.margenUtilidad - b.margenUtilidad)
-      .slice(0, 5)
+    // Tomar solo los primeros 10 registros
+    const resultado = (peoresMargenesData || []).slice(0, 10)
 
-    return { success: true, data: margenesCalculados }
+    return { success: true, data: resultado }
   } catch (error) {
     console.error("Error en obtenerPeoresMargenesUtilidad:", error)
     return { success: false, data: [] }
@@ -580,10 +545,7 @@ export async function obtenerPlatillosPorMenu(menuId: number) {
 }
 
 // Nueva función para obtener histórico de costeo usando función de Supabase
-export async function obtenerHistoricoCosteo(
-  hotelId: number,
-  platilloId: number,
-) {
+export async function obtenerHistoricoCosteo(hotelId: number, platilloId: number) {
   try {
     const supabase = createSupabaseServerClient()
 

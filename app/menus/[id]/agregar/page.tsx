@@ -56,6 +56,8 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showValidationAlert, setShowValidationAlert] = useState(false) // Nuevo estado para la alerta de validación
   const [costoPorcentual, setCostoPorcentual] = useState<string>("") // Nuevo estado para Costo%
+  const [searchFilter, setSearchFilter] = useState<string>("") // Nuevo estado para el filtro de búsqueda
+  const [sortOrder, setSortOrder] = useState<string>("") // Nuevo estado para el ordenamiento
 
   // Estados para el modal de detalles del platillo
   const [showDetailsDialog, setShowDetailsDialog] = useState(false)
@@ -219,13 +221,13 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
         if (detailsRes.data.costoadministrativo !== null) {
           setCostoAdministrativo(detailsRes.data.costoadministrativo.toString())
         } else {
-          setCostoAdministrativo("")
+          setCostoAdministrativo("") // Limpiar si no hay costo administrativo
         }
         // Actualizar el precio sugerido si está disponible
         if (detailsRes.data.precioSugerido !== null && detailsRes.data.precioSugerido !== undefined) {
           setPrecioSugerido(detailsRes.data.precioSugerido.toFixed(2).toString())
         } else {
-          setPrecioSugerido("")
+          setPrecioSugerido("") // Limpiar si no hay precio sugerido
         }
 
         // Calcular costo porcentual si hay precio de venta
@@ -348,6 +350,23 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
     setIsSubmitting(false)
   }
 
+  const filteredAndSortedAssignedPlatillos = assignedPlatillos
+    .filter((platillo) => platillo.platillos?.nombre?.toLowerCase().includes(searchFilter.toLowerCase()) || false)
+    .sort((a, b) => {
+      switch (sortOrder) {
+        case "precio-mayor":
+          return (b.precioventa ?? 0) - (a.precioventa ?? 0)
+        case "precio-menor":
+          return (a.precioventa ?? 0) - (b.precioventa ?? 0)
+        case "alfabetico-az":
+          return (a.platillos?.nombre ?? "").localeCompare(b.platillos?.nombre ?? "")
+        case "alfabetico-za":
+          return (b.platillos?.nombre ?? "").localeCompare(a.platillos?.nombre ?? "")
+        default:
+          return 0
+      }
+    })
+
   return (
     <div className="flex flex-col min-h-screen p-4 md:p-6">
       <div className="flex items-center justify-between mb-6">
@@ -362,7 +381,7 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
             <ArrowLeft className="h-4 w-4" />
             <span className="sr-only">Regresar</span>
           </Button>
-          <h1 className="text-3xl font-bold">Platillos de Menú</h1>
+          <h1 className="text-3xl font-bold">Recetas de Menú</h1>
         </div>
         <Button
           id="btnAgregarPlatillo"
@@ -373,22 +392,62 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
           }}
         >
           <Plus className="mr-2 h-4 w-4" />
-          Agregar Platillo
+          Agregar Recetas
         </Button>
       </div>
 
       <section className="mb-8">
-        <h2 className="text-2xl font-semibold mb-4">Platillos Asignados</h2>
+      <div className="flex items-center gap-4 mb-4">
+            <div className="flex items-center gap-2">
+              <Label htmlFor="searchReceta" className="text-sm font-medium">
+                Receta:
+              </Label>
+              <Input
+                id="searchReceta"
+                name="searchReceta"
+                type="text"
+                value={searchFilter}
+                onChange={(e) => setSearchFilter(e.target.value)}
+                placeholder="Buscar platillo..."
+                className="w-64"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Label htmlFor="sortOrder" className="text-sm font-medium">
+                Ordenar:
+              </Label>
+              <Select value={sortOrder} onValueChange={setSortOrder} name="sortOrder">
+                <SelectTrigger id="sortOrder" className="w-48">
+                  <SelectValue placeholder="Seleccionar orden" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Sin ordenar</SelectItem>
+                  <SelectItem value="precio-mayor">Precio Venta mayor</SelectItem>
+                  <SelectItem value="precio-menor">Precio Venta menor</SelectItem>
+                  <SelectItem value="alfabetico-az">Alfabéticamente (A-Z)</SelectItem>
+                  <SelectItem value="alfabetico-za">Alfabéticamente (Z-A)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-2xl font-semibold">Recetas Asignadas</h2>
+          
+        </div>
         {loading ? (
           <div className="flex justify-center items-center h-40">
             <Loader2 className="h-8 w-8 animate-spin" />
-            <span className="ml-2">Cargando platillos...</span>
+            <span className="ml-2">Cargando Recetas...</span>
           </div>
-        ) : assignedPlatillos.length === 0 ? (
-          <p className="text-gray-500">No hay platillos asignados a este menú.</p>
+        ) : filteredAndSortedAssignedPlatillos.length === 0 ? (
+          <p className="text-gray-500">
+            {searchFilter
+              ? "No se encontraron platillos que coincidan con la búsqueda."
+              : "No hay platillos asignados a este menú."}
+          </p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {assignedPlatillos.map((platillo) => (
+            {filteredAndSortedAssignedPlatillos.map((platillo) => (
               <Card key={platillo.id} className="flex flex-col items-center text-center relative">
                 <Button
                   variant="ghost"
@@ -453,8 +512,8 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
           {" "}
           {/* Aumentado el ancho aquí */}
           <DialogHeader>
-            <DialogTitle>Agregar Platillo al Menú</DialogTitle>
-            <DialogDescription>Selecciona un platillo y define su precio de venta.</DialogDescription>
+            <DialogTitle>Agregar Recetas al Menú</DialogTitle>
+            <DialogDescription>Selecciona una Recetas y define su precio de venta.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-4 items-center gap-4">

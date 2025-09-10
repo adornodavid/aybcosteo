@@ -112,13 +112,13 @@ interface CambioCosto {
 
 interface MargenUtilidad {
   platilloid: number
-  nombrePlatillo: string
-  nombreHotel: string
-  nombreMenu: string
-  nombreRestaurante: string
-  costoTotal: number
-  precioVenta: number
-  margenUtilidad: number
+  platillo: string
+  hotel: string
+  menu: string
+  restaurante: string
+  costototal: number
+  precioventa: number
+  margenutilidad: number
 }
 
 interface CambioIngrediente {
@@ -218,9 +218,9 @@ export default function DashboardPage() {
   const [cambiosPlatillos, setCambiosPlatillos] = useState<CambioCosto[]>([])
   const [cambiosRecetas, setCambiosRecetas] = useState<CambioCosto[]>([])
 
-  const [mejoresMargenesUtilidad, setMejoresMargenesUtilidad] = useState<MargenUtilidad[]>([])
+  const [mejoresMargenesUtilidad, setMejoresMargenesUtilidad] = useState<any[]>([])
   const [peoresMargenesUtilidad, setPeoresMargenesUtilidad] = useState<MargenUtilidad[]>([])
-  const [alertasCostoPorcentual, setAlertasCostoPorcentual] = useState<any[]>([])
+  const [alertasCostoPorcentual, setAlertasCostoPorcentual] =   useState<any[]>([])
   const [ingredientesAumento, setIngredientesAumento] = useState<CambioIngrediente[]>([])
   const [ingredientesDisminucion, setIngredientesDisminucion] = useState<CambioIngrediente[]>([])
 
@@ -402,14 +402,7 @@ export default function DashboardPage() {
           setResumenes(data.data)
         }
 
-        // Cargar datos para las nuevas secciones
-        const [mejoresMargenesData, peoresMargenesData] = await Promise.all([
-          obtenerMejoresMargenesUtilidad(),
-          obtenerPeoresMargenesUtilidad(),
-        ])
-
-        if (mejoresMargenesData.success) setMejoresMargenesUtilidad(mejoresMargenesData.data)
-        if (peoresMargenesData.success) setPeoresMargenesUtilidad(peoresMargenesData.data)
+        
 
         console.log("loging", ingredientesAumento.nombre)
 
@@ -472,8 +465,7 @@ export default function DashboardPage() {
         setTopIngredientesCosto(topIngredientesData.data)
       }
 
-      console.log("res", restauranteSeleccionado)
-      console.log("men", menuSeleccionado)
+      
       // Cargar alertas de costo porcentual con el hotel seleccionado
       const alertasData = await obtenerAlertasCostoPorcentual(
         Number.parseInt(hotelSeleccionado),
@@ -483,6 +475,23 @@ export default function DashboardPage() {
       if (alertasData.success) {
         setAlertasCostoPorcentual(alertasData.data)
       }
+
+      console.log("res", restauranteSeleccionado)
+      console.log("men1", menuSeleccionado)
+      console.log("men2", mesSeleccionado)
+      console.log("men3", añoSeleccionado)
+      console.log("men4", hotelSeleccionado)
+      // Cargar datos para las nuevas secciones
+        const mejoresMargenesData = await obtenerMejoresMargenesUtilidad(
+        Number.parseInt(mesSeleccionado),
+        Number.parseInt(añoSeleccionado),
+        Number.parseInt(hotelSeleccionado), 
+        Number.parseInt(restauranteSeleccionado),
+        Number.parseInt(menuSeleccionado),
+        )
+    
+        if (mejoresMargenesData.success) setMejoresMargenesUtilidad(mejoresMargenesData.data)
+        //if (peoresMargenesData.success) setPeoresMargenesUtilidad(peoresMargenesData.data)
 
       // Activar loading para variación de costos
       setLoadingVariacionCostos(true)
@@ -574,6 +583,8 @@ export default function DashboardPage() {
         }
         setLoadingGrafico(false)
       }
+
+      
     }
   }
 
@@ -709,6 +720,8 @@ export default function DashboardPage() {
     const restauranteIdNum = restauranteSeleccionado !== "-1" ? Number.parseInt(restauranteSeleccionado) : -1
     const hotelIdNum = Number.parseInt(hotelSeleccionado)
 
+
+
     const history = await getPlatilloCostHistory(
       platilloIdNum,
       format(fechaInicial, "yyyy-MM-dd"),
@@ -741,10 +754,10 @@ export default function DashboardPage() {
       setLoadingGrafico(false)
     }
 
-    // También actualizar el gráfico de análisis de costos si hay fechas seleccionadas
+    /*// También actualizar el gráfico de análisis de costos si hay fechas seleccionadas
     if (fechaInicial && fechaFinal) {
       await handleSearchAnalisisCostos()
-    }
+    }*/
   }
 
   // Manejar búsqueda de recetas
@@ -803,6 +816,18 @@ export default function DashboardPage() {
       if (alertasData.success) {
         setAlertasCostoPorcentual(alertasData.data)
       }
+
+      // Cargar datos para las nuevas secciones
+        const mejoresMargenesData = await obtenerMejoresMargenesUtilidad(
+        Number.parseInt(mesSeleccionado),
+        Number.parseInt(añoSeleccionado),
+        Number.parseInt(hotelSeleccionado), 
+        Number.parseInt(restauranteSeleccionado),
+        Number.parseInt(menuSeleccionado),
+        )
+    
+        if (mejoresMargenesData.success) setMejoresMargenesUtilidad(mejoresMargenesData.data)
+        //if (peoresMargenesData.success) setPeoresMargenesUtilidad(peoresMargenesData.data)
 
       // Activar loading para variación de costos
       setLoadingVariacionCostos(true)
@@ -1718,7 +1743,7 @@ export default function DashboardPage() {
 
                   <div className="h-[190px] w-full">
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={combinedChartData()} accessibilityLayer width={700} height={300}>
+                      <LineChart data={combinedChartData()} accessibilityLayer width={700} height={300} >
                         <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.3)" strokeWidth={1} />
                         <XAxis
                           dataKey="fechacreacion"
@@ -2807,7 +2832,7 @@ export default function DashboardPage() {
                 </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="h-96 w-full overflow-y-auto">
+              <div className="h-52 w-full overflow-y-auto">
                 {mejoresMargenesUtilidad.length > 0 ? (
                   <div className="space-y-1">
                     {/* Encabezados de tabla */}
@@ -2823,18 +2848,18 @@ export default function DashboardPage() {
                           <TooltipTrigger asChild>
                             <div className="grid grid-cols-2 gap-4 py-2 hover:bg-green-100 rounded-lg px-2 transition-colors cursor-pointer group">
                               {/* Columna 1: Nombre de la receta */}
-                              <div className="text-sm text-gray-800 truncate">{margen.nombrePlatillo}</div>
+                              <div className="text-sm text-gray-800 truncate">{margen.platillo}</div>
 
                               {/* Columna 2: Barra horizontal del margen */}
                               <div className="flex items-center space-x-2">
                                 <div className="flex-1 bg-gray-200 rounded-full h-4 relative overflow-hidden">
                                   <div
                                     className="h-full bg-gradient-to-r from-green-500 to-emerald-400 rounded-full transition-all duration-300 group-hover:from-green-600 group-hover:to-emerald-500"
-                                    style={{ width: `${Math.min(margen.margenUtilidad, 100)}%` }}
+                                    style={{ width: `${Math.min(margen.margenutilidad, 100)}%` }}
                                   />
                                 </div>
                                 <span className="text-xs font-medium text-green-700 min-w-[40px] text-right">
-                                  {margen.margenUtilidad.toFixed(1)}%
+                                  ${margen.margenutilidad.toFixed(2)}
                                 </span>
                               </div>
                             </div>
@@ -2842,33 +2867,33 @@ export default function DashboardPage() {
                           <TooltipContent className="max-w-sm p-0 bg-white/95 backdrop-blur-sm border border-green-200 shadow-2xl rounded-xl overflow-hidden">
                             <div className="bg-gradient-to-br from-green-50/90 to-emerald-50/90">
                               <div className="p-4 border-b border-green-200/50 bg-gradient-to-r from-green-100/80 to-emerald-100/80">
-                                <h4 className="font-bold text-green-800 text-sm">{margen.nombrePlatillo}</h4>
-                                <p className="text-xs text-green-600">{margen.nombreHotel}</p>
+                                <h4 className="font-bold text-green-800 text-sm">{margen.platillo}</h4>
+                                <p className="text-xs text-green-600">{margen.hotel}</p>
                               </div>
                               <div className="p-4 space-y-3">
                                 <div className="grid grid-cols-2 gap-3 text-xs">
                                   <div className="bg-white/60 rounded-lg p-2 border border-green-200/50">
                                     <span className="text-gray-600">Restaurante:</span>
-                                    <p className="font-semibold text-gray-800">{margen.nombreRestaurante}</p>
+                                    <p className="font-semibold text-gray-800">{margen.restaurante}</p>
                                   </div>
                                   <div className="bg-white/60 rounded-lg p-2 border border-green-200/50">
                                     <span className="text-gray-600">Menú:</span>
-                                    <p className="font-semibold text-gray-800">{margen.nombreMenu}</p>
+                                    <p className="font-semibold text-gray-800">{margen.menu}</p>
                                   </div>
                                 </div>
                                 <div className="grid grid-cols-2 gap-3 text-xs">
                                   <div className="bg-white/60 rounded-lg p-2 border border-green-200/50">
                                     <span className="text-gray-600">Costo Total:</span>
-                                    <p className="font-bold text-green-600">${margen.costoTotal.toFixed(2)}</p>
+                                    <p className="font-bold text-green-600">${margen.costototal.toFixed(2)}</p>
                                   </div>
                                   <div className="bg-white/60 rounded-lg p-2 border border-green-200/50">
                                     <span className="text-gray-600">Precio Venta:</span>
-                                    <p className="font-bold text-blue-600">${margen.precioVenta.toFixed(2)}</p>
+                                    <p className="font-bold text-blue-600">${margen.precioventa.toFixed(2)}</p>
                                   </div>
                                 </div>
                                 <div className="bg-white/60 rounded-lg p-2 border border-green-200/50">
                                   <span className="text-gray-600">Margen Utilidad:</span>
-                                  <p className="font-bold text-green-600">{margen.margenUtilidad.toFixed(2)}%</p>
+                                  <p className="font-bold text-green-600">{margen.margenutilidad.toFixed(2)}%</p>
                                 </div>
                               </div>
                             </div>
