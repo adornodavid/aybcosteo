@@ -279,7 +279,8 @@ export default function RecetasPage() {
     }
   }, [sesion, currentPage, ddlEstatusReceta])
 
-  const btnRecetaBuscar = async () => {
+  // Función de búsqueda CON página específica
+  const ejecutarBusqueda = async (nombre: string, hotelFilterId: number, estatus: string, pagina = 1) => {
     try {
       setSearching(true)
 
@@ -296,7 +297,7 @@ export default function RecetasPage() {
       }
 
       // Determinar el ID de hotel a filtrar para la búsqueda
-      const hotelFilterId = ddlHotelReceta !== "-1" ? Number.parseInt(ddlHotelReceta, 10) : auxHotelid
+      const finalHotelFilterId = hotelFilterId !== -1 ? hotelFilterId : auxHotelid
 
       let query = supabase
         .from("recetas")
@@ -312,21 +313,21 @@ export default function RecetasPage() {
             nombre
           )
         `)
-        .eq("activo", ddlEstatusReceta === "true")
+        .eq("activo", estatus === "true")
 
       // Filtro por nombre
-      if (txtRecetaNombre.trim()) {
-        query = query.ilike("nombre", `%${txtRecetaNombre.trim()}%`)
+      if (nombre.trim()) {
+        query = query.ilike("nombre", `%${nombre.trim()}%`)
       }
 
       // Filtro por hotel
-      if (hotelFilterId !== -1) {
-        query = query.eq("hotelid", hotelFilterId)
+      if (finalHotelFilterId !== -1) {
+        query = query.eq("hotelid", finalHotelFilterId)
       }
 
       const { data, error } = await query
         .order("nombre", { ascending: true })
-        .range((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage - 1)
+        .range((pagina - 1) * itemsPerPage, pagina * itemsPerPage - 1)
 
       if (error) throw error
 
@@ -341,22 +342,28 @@ export default function RecetasPage() {
 
       setRecetas(recetasFormateadas)
 
-      // Calcular total de páginas para la búsqueda
-      let countQuery = supabase
-        .from("recetas")
-        .select("*", { count: "exact", head: true })
-        .eq("activo", ddlEstatusReceta === "true")
+      // Calcular total de páginas solo si es la primera página o una nueva búsqueda
+      if (pagina === 1) {
+        let countQuery = supabase
+          .from("recetas")
+          .select("*", { count: "exact", head: true })
+          .eq("activo", estatus === "true")
 
-      if (txtRecetaNombre.trim()) {
-        countQuery = countQuery.ilike("nombre", `%${txtRecetaNombre.trim()}%`)
+        if (nombre.trim()) {
+          countQuery = countQuery.ilike("nombre", `%${nombre.trim()}%`)
+        }
+
+        if (finalHotelFilterId !== -1) {
+          countQuery = countQuery.eq("hotelid", finalHotelFilterId)
+        }
+
+        const { count: totalCount } = await countQuery
+        setTotalPages(Math.ceil((totalCount || 0) / itemsPerPage))
       }
 
-      if (hotelFilterId !== -1) {
-        countQuery = countQuery.eq("hotelid", hotelFilterId)
-      }
-
-      const { count: totalCount } = await countQuery
-      setTotalPages(Math.ceil((totalCount || 0) / itemsPerPage))
+      toast.success(
+        `Búsqueda completada. Se encontraron ${recetasFormateadas.length} resultados en la página ${pagina}.`,
+      )
 
       // Simular animación de 0.5 segundos
       setTimeout(() => {
@@ -366,6 +373,31 @@ export default function RecetasPage() {
       console.error("Error en búsqueda:", error)
       setError("Error al realizar la búsqueda. Por favor, intente de nuevo.")
       setSearching(false)
+    }
+  }
+
+  const btnRecetaBuscar = async () => {
+    setCurrentPage(1) // Resetear a la primera página al buscar
+    const hotelFilterId = ddlHotelReceta !== "-1" ? Number.parseInt(ddlHotelReceta, 10) : -1
+    await ejecutarBusqueda(txtRecetaNombre, hotelFilterId, ddlEstatusReceta, 1)
+  }
+
+  // Funciones específicas para navegación de páginas
+  const irAPaginaAnterior = async () => {
+    if (currentPage > 1) {
+      const nuevaPagina = currentPage - 1
+      setCurrentPage(nuevaPagina)
+      const hotelFilterId = ddlHotelReceta !== "-1" ? Number.parseInt(ddlHotelReceta, 10) : -1
+      await ejecutarBusqueda(txtRecetaNombre, hotelFilterId, ddlEstatusReceta, nuevaPagina)
+    }
+  }
+
+  const irAPaginaSiguiente = async () => {
+    if (currentPage < totalPages) {
+      const nuevaPagina = currentPage + 1
+      setCurrentPage(nuevaPagina)
+      const hotelFilterId = ddlHotelReceta !== "-1" ? Number.parseInt(ddlHotelReceta, 10) : -1
+      await ejecutarBusqueda(txtRecetaNombre, hotelFilterId, ddlEstatusReceta, nuevaPagina)
     }
   }
 
@@ -389,7 +421,9 @@ export default function RecetasPage() {
       if (error) throw error
 
       toast.success(`Receta ${estadoActual ? "inactivada" : "activada"} correctamente`)
-      btnRecetaBuscar() // Recargar la lista con los filtros actuales
+      // Recargar la página actual con los filtros actuales
+      const hotelFilterId = ddlHotelReceta !== "-1" ? Number.parseInt(ddlHotelReceta, 10) : -1
+      await ejecutarBusqueda(txtRecetaNombre, hotelFilterId, ddlEstatusReceta, currentPage)
     } catch (error) {
       console.error("Error cambiando estado:", error)
       toast.error("Error al cambiar el estado de la receta")
@@ -575,7 +609,7 @@ export default function RecetasPage() {
         <CardHeader>
           <CardTitle>Listado de Sub-Recetas</CardTitle>
           <CardDescription>
-            Mostrando {recetas.length} de {totalRecetas} sub-recetas
+            Mostrando página {currentPage} de {totalPages} ({recetas.length} sub-recetas en esta página)
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -647,16 +681,16 @@ export default function RecetasPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                  disabled={currentPage === 1}
+                  onClick={irAPaginaAnterior}
+                  disabled={currentPage === 1 || searching}
                 >
                   Anterior
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                  disabled={currentPage === totalPages}
+                  onClick={irAPaginaSiguiente}
+                  disabled={currentPage === totalPages || searching}
                 >
                   Siguiente
                 </Button>

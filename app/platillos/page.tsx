@@ -128,6 +128,7 @@ export default function PlatillosPage() {
   const [platilloToToggle, setPlatilloToToggle] = useState<{ id: number; activo: boolean } | null>(null)
   const [searchTerm, setSearchTerm] = useState("") // Mantener searchTerm para el filtro de nombre
   const [platilloToDelete, setPlatilloToDelete] = useState<number | null>(null)
+  const [totalPaginas, setTotalPaginas] = useState(1) // Estado para totalPaginas
 
   // Estados para el modal de detalles
   const [showPlatilloDetailsModal, setShowPlatilloDetailsModal] = useState(false)
@@ -148,11 +149,16 @@ export default function PlatillosPage() {
 
   const esAdmin = useMemo(() => user && [1, 2, 3, 4].includes(user.RolId), [user])
 
-  // --- Función de búsqueda SIN dependencias automáticas ---
-  const ejecutarBusqueda = async (nombre: string, hotelId: number, restauranteId: number, menuId: number) => {
+  // --- Función de búsqueda CON página específica ---
+  const ejecutarBusqueda = async (
+    nombre: string,
+    hotelId: number,
+    restauranteId: number,
+    menuId: number,
+    pagina = 1,
+  ) => {
     if (!user) return
     setIsSearching(true)
-    setPaginaActual(1)
 
     try {
       // Usar consulta directa con JOINs
@@ -174,7 +180,11 @@ export default function PlatillosPage() {
       if (restauranteId !== -1) query = query.eq("platillosxmenu.menus.restaurantes.id", restauranteId)
       if (menuId !== -1) query = query.eq("platillosxmenu.menus.id", menuId)
 
-      const { data: queryData, error: queryError } = await query.order("nombre", { ascending: true })
+      query = query
+        .order("nombre", { ascending: true })
+        .range((pagina - 1) * resultadosPorPagina, pagina * resultadosPorPagina - 1)
+
+      const { data: queryData, error: queryError } = await query
 
       if (queryError) {
         console.error("Error en búsqueda:", queryError)
@@ -203,7 +213,35 @@ export default function PlatillosPage() {
         })),
       )
       setPlatillos(flattenedData)
-      toast.success(`Búsqueda completada. Se encontraron ${flattenedData.length} resultados.`)
+      toast.success(`Búsqueda completada. Se encontraron ${flattenedData.length} resultados en la página ${pagina}.`)
+
+      // Calcular total de páginas solo si es la primera página o una nueva búsqueda
+      if (pagina === 1) {
+        let countQuery = supabase.from("platillos").select(
+          `
+          id,
+          platillosxmenu!inner(
+            menus!inner(
+              id,
+              restaurantes!inner(
+                id,
+                hoteles!inner(id)
+              )
+            )
+          )
+        `,
+          { count: "exact", head: true },
+        )
+
+        if (nombre) countQuery = countQuery.like("nombre", `%${nombre}%`)
+        if (hotelId !== -1) countQuery = countQuery.eq("platillosxmenu.menus.restaurantes.hoteles.id", hotelId)
+        if (restauranteId !== -1) countQuery = countQuery.eq("platillosxmenu.menus.restaurantes.id", restauranteId)
+        if (menuId !== -1) countQuery = countQuery.eq("platillosxmenu.menus.id", menuId)
+
+        const { count: totalCount } = await countQuery
+        const totalPaginasCalculado = Math.ceil((totalCount || 0) / resultadosPorPagina)
+        setTotalPaginas(totalPaginasCalculado)
+      }
     } catch (error) {
       console.error("Error inesperado al buscar recetas:", error)
       toast.error("Error inesperado al buscar recetas")
@@ -314,8 +352,11 @@ export default function PlatillosPage() {
         setFiltroMenu("-1")
       }
 
+      // Resetear paginación
+      setPaginaActual(1)
+
       // Ejecutar búsqueda inicial
-      await ejecutarBusqueda("", initialHotelId, -1, -1)
+      await ejecutarBusqueda("", initialHotelId, -1, -1, 1)
     } catch (error) {
       console.error("Error al cargar datos iniciales:", error)
       toast.error("Error al cargar datos iniciales")
@@ -423,10 +464,34 @@ export default function PlatillosPage() {
   // ESTE ES EL ÚNICO LUGAR DONDE SE EJECUTA LA BÚSQUEDA
   const handleFormSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+    setPaginaActual(1) // Resetear a página 1 al hacer nueva búsqueda
     const hotelId = Number.parseInt(filtroHotel, 10)
     const restauranteId = Number.parseInt(filtroRestaurante, 10)
     const menuId = Number.parseInt(filtroMenu, 10)
-    ejecutarBusqueda(filtroNombre, hotelId, restauranteId, menuId)
+    ejecutarBusqueda(filtroNombre, hotelId, restauranteId, menuId, 1)
+  }
+
+  // Funciones específicas para navegación de páginas
+  const irAPaginaAnterior = () => {
+    if (paginaActual > 1) {
+      const nuevaPagina = paginaActual - 1
+      setPaginaActual(nuevaPagina)
+      const hotelId = Number.parseInt(filtroHotel, 10)
+      const restauranteId = Number.parseInt(filtroRestaurante, 10)
+      const menuId = Number.parseInt(filtroMenu, 10)
+      ejecutarBusqueda(filtroNombre, hotelId, restauranteId, menuId, nuevaPagina)
+    }
+  }
+
+  const irAPaginaSiguiente = () => {
+    if (paginaActual < totalPaginas) {
+      const nuevaPagina = paginaActual + 1
+      setPaginaActual(nuevaPagina)
+      const hotelId = Number.parseInt(filtroHotel, 10)
+      const restauranteId = Number.parseInt(filtroRestaurante, 10)
+      const menuId = Number.parseInt(filtroMenu, 10)
+      ejecutarBusqueda(filtroNombre, hotelId, restauranteId, menuId, nuevaPagina)
+    }
   }
 
   const clearPlatillosBusqueda = () => {
@@ -481,7 +546,7 @@ export default function PlatillosPage() {
       const hotelId = Number.parseInt(filtroHotel, 10)
       const restauranteId = Number.parseInt(filtroRestaurante, 10)
       const menuId = Number.parseInt(filtroMenu, 10)
-      await ejecutarBusqueda(filtroNombre, hotelId, restauranteId, menuId)
+      await ejecutarBusqueda(filtroNombre, hotelId, restauranteId, menuId, paginaActual)
     }
     setPageLoading(false)
   }
@@ -514,13 +579,6 @@ export default function PlatillosPage() {
     const indiceInicio = (paginaActual - 1) * resultadosPorPagina
     return platillos.slice(indiceInicio, indiceInicio + resultadosPorPagina)
   }, [platillos, paginaActual])
-
-  const totalPaginas = Math.ceil(platillos.length / resultadosPorPagina)
-
-  // Corrección aquí: usar PlatilloNombre para el filtro
-  const filteredPlatillos = platillos.filter((platillo) =>
-    platillo.PlatilloNombre.toLowerCase().includes(searchTerm.toLowerCase()),
-  )
 
   const formatCurrency = (amount: number | null) =>
     new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(amount || 0)
@@ -710,7 +768,7 @@ export default function PlatillosPage() {
         <CardHeader>
           <CardTitle>Resultados</CardTitle>
           <CardDescription>
-            Mostrando {platillosPaginados.length} de {platillos.length} recetas encontradas.
+            Mostrando página {paginaActual} de {totalPaginas} ({platillos.length} recetas en esta página)
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -735,8 +793,8 @@ export default function PlatillosPage() {
                       <Loader2 className="mx-auto h-6 w-6 animate-spin" />
                     </TableCell>
                   </TableRow>
-                ) : filteredPlatillos.length > 0 ? (
-                  filteredPlatillos.map((p, index) => (
+                ) : platillos.length > 0 ? (
+                  platillos.map((p, index) => (
                     <TableRow
                       key={`${p.PlatilloId}-${p.MenuId}-${index}`}
                       className="cursor-pointer hover:bg-gray-50"
@@ -847,8 +905,8 @@ export default function PlatillosPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setPaginaActual((p) => Math.max(1, p - 1))}
-                disabled={paginaActual === 1}
+                onClick={irAPaginaAnterior}
+                disabled={paginaActual === 1 || isSearching}
               >
                 Anterior
               </Button>
@@ -858,8 +916,8 @@ export default function PlatillosPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setPaginaActual((p) => Math.min(totalPaginas, p + 1))}
-                disabled={paginaActual === totalPaginas}
+                onClick={irAPaginaSiguiente}
+                disabled={paginaActual === totalPaginas || isSearching}
               >
                 Siguiente
               </Button>
@@ -956,7 +1014,10 @@ export default function PlatillosPage() {
                   </h4>
                   <div className="grid gap-4">
                     {selectedPlatilloDetails.map((detail, idx) => (
-                      <Card key={idx} className="rounded-xl border bg-card w-96 text-card-foreground p-4 shadow-sm hover:shadow-md transition-shadow">
+                      <Card
+                        key={idx}
+                        className="rounded-xl border bg-card w-96 text-card-foreground p-4 shadow-sm hover:shadow-md transition-shadow"
+                      >
                         <div className="space-y-2">
                           <div className="flex justify-between">
                             <span className="font-medium text-gray-700">Hotel:</span>

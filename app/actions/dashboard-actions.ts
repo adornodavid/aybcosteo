@@ -261,11 +261,11 @@ export async function obtenerMejoresMargenesUtilidad(
       console.error("Error obteniendo mejores márgenes:", error)
       return { success: false, data: [] }
     }
-    console.log("mejoresMargenesData",mejoresMargenesData)
+    console.log("mejoresMargenesData", mejoresMargenesData)
     // Tomar solo los primeros 10 registros
     const resultado = (mejoresMargenesData || []).slice(0, 10)
 
-    console.log("resul",resultado)
+    console.log("resul", resultado)
     return { success: true, data: resultado }
   } catch (error) {
     console.error("Error en obtenerMejoresMargenesUtilidad:", error)
@@ -930,5 +930,37 @@ export async function obtenerDetallesRecetaTooltip(recetaId: number) {
   } catch (error) {
     console.error("Error en obtenerDetallesRecetaTooltip:", error)
     return { success: false, data: null }
+  }
+}
+
+// Nueva función para obtener promedio de menú costo porcentual
+export async function obtenerPromedioMenuCostoPorcentual(
+  hotelId: number,
+  restauranteId: number,
+  menuId: number,
+  mes: number,
+  año: number,
+) {
+  try {
+    const supabase = createSupabaseServerClient()
+
+    // Llamar a la función de Supabase con RPC
+    const { data: promedioMenuData, error } = await supabase.rpc("promediomenuporcentual", {
+      hotelesid: hotelId,
+      restaurantesid: restauranteId,
+      menusid: menuId,
+      mes: mes,
+      year: año,
+    })
+
+    if (error) {
+      console.error("Error obteniendo promedio menú costo porcentual:", error)
+      return { success: false, data: [] }
+    }
+
+    return { success: true, data: promedioMenuData || [] }
+  } catch (error) {
+    console.error("Error en obtenerPromedioMenuCostoPorcentual:", error)
+    return { success: false, data: [] }
   }
 }

@@ -36,7 +36,6 @@ import {
   obtenerCambiosCostosPlatillos,
   obtenerCambiosCostosRecetas,
   obtenerMejoresMargenesUtilidad,
-  obtenerPeoresMargenesUtilidad,
   obtenerAlertasCostoPorcentual,
   obtenerIngredientesAumentoPrecio,
   obtenerIngredientesDisminucionPrecio,
@@ -54,6 +53,7 @@ import {
   obtenerDetallesPlatilloRecetasHistorico,
   obtenerDetallesPlatilloTooltip,
   obtenerDetallesRecetaTooltip,
+  obtenerPromedioMenuCostoPorcentual,
 } from "@/app/actions/dashboard-actions"
 import {
   getPlatilloCostHistory,
@@ -220,7 +220,7 @@ export default function DashboardPage() {
 
   const [mejoresMargenesUtilidad, setMejoresMargenesUtilidad] = useState<any[]>([])
   const [peoresMargenesUtilidad, setPeoresMargenesUtilidad] = useState<MargenUtilidad[]>([])
-  const [alertasCostoPorcentual, setAlertasCostoPorcentual] =   useState<any[]>([])
+  const [alertasCostoPorcentual, setAlertasCostoPorcentual] = useState<any[]>([])
   const [ingredientesAumento, setIngredientesAumento] = useState<CambioIngrediente[]>([])
   const [ingredientesDisminucion, setIngredientesDisminucion] = useState<CambioIngrediente[]>([])
 
@@ -261,6 +261,7 @@ export default function DashboardPage() {
   const [mesSeleccionado, setMesSeleccionado] = useState<string>(mesAnterior.toString())
   const [añoSeleccionado, setAñoSeleccionado] = useState<string>(añoActual.toString())
   const [topIngredientesCosto, setTopIngredientesCosto] = useState<any[]>([])
+  const [promedioMenuCosto, setPromedioMenuCosto] = useState<any[]>([])
 
   // Estados para el modal de detalles del platillo
   const [modalAbierto, setModalAbierto] = useState(false)
@@ -402,8 +403,6 @@ export default function DashboardPage() {
           setResumenes(data.data)
         }
 
-        
-
         console.log("loging", ingredientesAumento.nombre)
 
         // Cargar datos para las nuevas secciones
@@ -465,7 +464,18 @@ export default function DashboardPage() {
         setTopIngredientesCosto(topIngredientesData.data)
       }
 
-      
+      const promedioMenuData = await obtenerPromedioMenuCostoPorcentual(
+        Number.parseInt(hotelSeleccionado),
+        Number.parseInt(restauranteSeleccionado),
+        Number.parseInt(menuSeleccionado),
+        Number.parseInt(mesSeleccionado),
+        Number.parseInt(añoSeleccionado),
+      )
+
+      if (promedioMenuData.success) {
+        setPromedioMenuCosto(promedioMenuData.data)
+      }
+
       // Cargar alertas de costo porcentual con el hotel seleccionado
       const alertasData = await obtenerAlertasCostoPorcentual(
         Number.parseInt(hotelSeleccionado),
@@ -482,16 +492,16 @@ export default function DashboardPage() {
       console.log("men3", añoSeleccionado)
       console.log("men4", hotelSeleccionado)
       // Cargar datos para las nuevas secciones
-        const mejoresMargenesData = await obtenerMejoresMargenesUtilidad(
+      const mejoresMargenesData = await obtenerMejoresMargenesUtilidad(
         Number.parseInt(mesSeleccionado),
         Number.parseInt(añoSeleccionado),
-        Number.parseInt(hotelSeleccionado), 
+        Number.parseInt(hotelSeleccionado),
         Number.parseInt(restauranteSeleccionado),
         Number.parseInt(menuSeleccionado),
-        )
-    
-        if (mejoresMargenesData.success) setMejoresMargenesUtilidad(mejoresMargenesData.data)
-        //if (peoresMargenesData.success) setPeoresMargenesUtilidad(peoresMargenesData.data)
+      )
+
+      if (mejoresMargenesData.success) setMejoresMargenesUtilidad(mejoresMargenesData.data)
+      //if (peoresMargenesData.success) setPeoresMargenesUtilidad(peoresMargenesData.data)
 
       // Activar loading para variación de costos
       setLoadingVariacionCostos(true)
@@ -572,7 +582,7 @@ export default function DashboardPage() {
       // Actualizar gráfico histórico si hay platillo seleccionado
       if (platilloSeleccionadoObj) {
         setLoadingGrafico(true)
-        
+
         const historicoData = await obtenerHistoricoCosteo(
           Number.parseInt(hotelSeleccionado),
           platilloSeleccionadoObj.id,
@@ -583,8 +593,6 @@ export default function DashboardPage() {
         }
         setLoadingGrafico(false)
       }
-
-      
     }
   }
 
@@ -720,8 +728,6 @@ export default function DashboardPage() {
     const restauranteIdNum = restauranteSeleccionado !== "-1" ? Number.parseInt(restauranteSeleccionado) : -1
     const hotelIdNum = Number.parseInt(hotelSeleccionado)
 
-
-
     const history = await getPlatilloCostHistory(
       platilloIdNum,
       format(fechaInicial, "yyyy-MM-dd"),
@@ -807,6 +813,18 @@ export default function DashboardPage() {
         setTopIngredientesCosto(topIngredientesData.data)
       }
 
+      const promedioMenuData = await obtenerPromedioMenuCostoPorcentual(
+        Number.parseInt(hotelSeleccionado),
+        Number.parseInt(restauranteSeleccionado),
+        Number.parseInt(menuSeleccionado),
+        Number.parseInt(mesSeleccionado),
+        Number.parseInt(añoSeleccionado),
+      )
+
+      if (promedioMenuData.success) {
+        setPromedioMenuCosto(promedioMenuData.data)
+      }
+
       // Cargar alertas de costo porcentual con el hotel seleccionado
       const alertasData = await obtenerAlertasCostoPorcentual(
         Number.parseInt(hotelSeleccionado),
@@ -818,16 +836,16 @@ export default function DashboardPage() {
       }
 
       // Cargar datos para las nuevas secciones
-        const mejoresMargenesData = await obtenerMejoresMargenesUtilidad(
+      const mejoresMargenesData = await obtenerMejoresMargenesUtilidad(
         Number.parseInt(mesSeleccionado),
         Number.parseInt(añoSeleccionado),
-        Number.parseInt(hotelSeleccionado), 
+        Number.parseInt(hotelSeleccionado),
         Number.parseInt(restauranteSeleccionado),
         Number.parseInt(menuSeleccionado),
-        )
-    
-        if (mejoresMargenesData.success) setMejoresMargenesUtilidad(mejoresMargenesData.data)
-        //if (peoresMargenesData.success) setPeoresMargenesUtilidad(peoresMargenesData.data)
+      )
+
+      if (mejoresMargenesData.success) setMejoresMargenesUtilidad(mejoresMargenesData.data)
+      //if (peoresMargenesData.success) setPeoresMargenesUtilidad(peoresMargenesData.data)
 
       // Activar loading para variación de costos
       setLoadingVariacionCostos(true)
@@ -908,7 +926,7 @@ export default function DashboardPage() {
       // Actualizar gráfico histórico si hay platillo seleccionado
       if (platilloSeleccionadoObj) {
         setLoadingGrafico(true)
-        
+
         const historicoData = await obtenerHistoricoCosteo(
           Number.parseInt(hotelSeleccionado),
           platilloSeleccionadoObj.id,
@@ -921,9 +939,6 @@ export default function DashboardPage() {
       }
     }
   }
-
-
-  
 
   // Efecto para cargar datos cuando cambien los filtros
   useEffect(() => {
@@ -1637,8 +1652,7 @@ export default function DashboardPage() {
                     </TooltipContent>
                   </UITooltip>
                 </TooltipProvider>
-
-                </CardTitle>
+              </CardTitle>
             </CardHeader>
 
             <CardContent className="p-1 pt-0 space-y-2">
@@ -1743,7 +1757,7 @@ export default function DashboardPage() {
 
                   <div className="h-[190px] w-full">
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={combinedChartData()} accessibilityLayer width={700} height={300} >
+                      <LineChart data={combinedChartData()} accessibilityLayer width={700} height={300}>
                         <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.3)" strokeWidth={1} />
                         <XAxis
                           dataKey="fechacreacion"
@@ -2638,9 +2652,8 @@ export default function DashboardPage() {
                       </div>
                     </TooltipContent>
                   </UITooltip>
-              </TooltipProvider>
-
-                </CardTitle>
+                </TooltipProvider>
+              </CardTitle>
             </CardHeader>
 
             <CardContent className="space-y-4">
@@ -2827,9 +2840,8 @@ export default function DashboardPage() {
                       </div>
                     </TooltipContent>
                   </UITooltip>
-                 </TooltipProvider>
-
-                </CardTitle>
+                </TooltipProvider>
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="h-52 w-full overflow-y-auto">
@@ -2956,8 +2968,7 @@ export default function DashboardPage() {
                     </TooltipContent>
                   </UITooltip>
                 </TooltipProvider>
-
-                </CardTitle>
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="h-52 w-full overflow-y-auto">
@@ -3082,14 +3093,14 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* Tercera sección - Top Ingredientes por Costo */}
+        {/* Tercera sección - Promedio Menu Costo Porcentual */}
         <div className="lg:col-span-1 h-[360px]">
           <Card className="rounded-xs h-80 border bg-card text-card-foreground shadow bg-gradient-to-r from-orange-50 to-red-50 border-orange-200 h-full">
             <CardHeader>
               <CardTitle className="flex items-center justify-between text-orange-800">
                 <div className="flex items-center gap-2">
                   <Package className="h-6 w-6" />
-                  Ingredientes mayor Costo/Gasto
+                  Promedio Menu Costo Porcentual
                 </div>
                 <TooltipProvider>
                   <UITooltip>
@@ -3098,63 +3109,62 @@ export default function DashboardPage() {
                     </TooltipTrigger>
                     <TooltipContent className="max-w-md p-4 bg-white border border-orange-200 shadow-lg">
                       <div className="space-y-3">
-                        <h4 className="font-semibold text-orange-800 text-sm">Top Ingredientes por Costo</h4>
+                        <h4 className="font-semibold text-orange-800 text-sm">Promedio Menu Costo Porcentual</h4>
                         <p className="text-sm text-gray-700 leading-relaxed">
-                          Este panel muestra el gasto total en materias primas utilizadas específicamente para la
-                          elaboración de recetas para el mes y el año seleccionado. Ayuda a entender el costo directo de
-                          la operación.
+                          Este panel muestra el promedio de costo porcentual por menú para el mes y año seleccionado.
+                          Ayuda a entender el rendimiento promedio de cada menú en términos de rentabilidad.
                         </p>
                         <div className="bg-orange-50 p-2 rounded-md">
                           <p className="text-xs font-medium text-orange-700 mb-1">Objetivo:</p>
                           <p className="text-xs text-gray-600">
-                            Controlar y optimizar el gasto en insumos para mantener la rentabilidad.
+                            Controlar y optimizar el costo porcentual promedio de cada menú para mantener la
+                            rentabilidad.
                           </p>
                         </div>
                         <div className="border-t border-orange-100 pt-2">
                           <p className="text-xs font-medium text-orange-700 mb-1">Modo de Consultar:</p>
                           <p className="text-xs text-gray-600 leading-relaxed">
-                            Seleccionar un Hotel, Mes y Año de las opciones del listado para poder consultar la
-                            información en esta sección.
+                            Seleccionar un Hotel, Restaurante, Menú, Mes y Año de las opciones del listado para poder
+                            consultar la información en esta sección.
                           </p>
                         </div>
                       </div>
                     </TooltipContent>
                   </UITooltip>
                 </TooltipProvider>
-
-                </CardTitle>
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="h-52 w-full overflow-y-auto">
-                {topIngredientesCosto.length > 0 ? (
+                {promedioMenuCosto.length > 0 ? (
                   <div className="space-y-1">
                     {/* Encabezados de tabla */}
                     <div className="grid grid-cols-2 gap-4 pb-2 border-b border-orange-200 mb-3">
-                      <div className="text-sm font-semibold text-orange-800">Nombre Ingrediente</div>
-                      <div className="text-sm font-semibold text-orange-800">Costo Total</div>
+                      <div className="text-sm font-semibold text-orange-800">Nombre Menú</div>
+                      <div className="text-sm font-semibold text-orange-800">Costo Porcentual</div>
                     </div>
 
                     {/* Filas de datos */}
-                    {topIngredientesCosto.map((ingrediente, index) => (
+                    {promedioMenuCosto.map((menu, index) => (
                       <TooltipProvider key={index}>
                         <UITooltip>
                           <TooltipTrigger asChild>
                             <div className="grid grid-cols-2 gap-4 py-2 hover:bg-orange-100 rounded-lg px-2 transition-colors cursor-pointer group">
-                              {/* Columna 1: Nombre del ingrediente */}
-                              <div className="text-sm text-gray-800 truncate">{ingrediente.nombre}</div>
+                              {/* Columna 1: Nombre del menú */}
+                              <div className="text-sm text-gray-800 truncate">{menu.menu}</div>
 
-                              {/* Columna 2: Barra horizontal del costo */}
+                              {/* Columna 2: Barra horizontal del costo porcentual */}
                               <div className="flex items-center space-x-2">
                                 <div className="flex-1 bg-gray-200 rounded-full h-4 relative overflow-hidden">
                                   <div
                                     className="h-full bg-gradient-to-r from-orange-500 to-red-400 rounded-full transition-all duration-300 group-hover:from-orange-600 group-hover:to-red-500"
                                     style={{
-                                      width: `${Math.min((ingrediente.costo / Math.max(...topIngredientesCosto.map((i) => i.costo))) * 100, 100)}%`,
+                                      width: `${Math.min(menu.costoporcentual, 100)}%`,
                                     }}
                                   />
                                 </div>
                                 <span className="text-xs font-medium text-orange-700 min-w-[60px] text-right">
-                                  ${ingrediente.costo.toFixed(2)}
+                                  {menu.costoporcentual.toFixed(2)}%
                                 </span>
                               </div>
                             </div>
@@ -3162,30 +3172,24 @@ export default function DashboardPage() {
                           <TooltipContent className="max-w-sm p-0 bg-white/95 backdrop-blur-sm border border-orange-200 shadow-2xl rounded-xl overflow-hidden">
                             <div className="bg-gradient-to-br from-orange-50/90 to-red-50/90">
                               <div className="p-4 border-b border-orange-200/50 bg-gradient-to-r from-orange-100/80 to-red-100/80">
-                                <h4 className="font-bold text-orange-800 text-sm">{ingrediente.nombre}</h4>
-                                <p className="text-xs text-orange-600">{ingrediente.codigo}</p>
+                                <h4 className="font-bold text-orange-800 text-sm">{menu.menu}</h4>
+                                <p className="text-xs text-orange-600">{menu.hotel}</p>
                               </div>
                               <div className="p-4 space-y-3">
                                 <div className="grid grid-cols-2 gap-3 text-xs">
                                   <div className="bg-white/60 rounded-lg p-2 border border-orange-200/50">
-                                    <span className="text-gray-600">Categoría:</span>
-                                    <p className="font-semibold text-gray-800">{ingrediente.categoria || "N/A"}</p>
+                                    <span className="text-gray-600">Restaurante:</span>
+                                    <p className="font-semibold text-gray-800">{menu.restaurante || "N/A"}</p>
                                   </div>
                                   <div className="bg-white/60 rounded-lg p-2 border border-orange-200/50">
-                                    <span className="text-gray-600">Unidad:</span>
-                                    <p className="font-semibold text-gray-800">{ingrediente.unidadmedida || "N/A"}</p>
+                                    <span className="text-gray-600">Hotel:</span>
+                                    <p className="font-semibold text-gray-800">{menu.hotel || "N/A"}</p>
                                   </div>
                                 </div>
                                 <div className="bg-white/60 rounded-lg p-2 border border-orange-200/50">
-                                  <span className="text-gray-600">Costo Total:</span>
-                                  <p className="font-bold text-orange-600">${ingrediente.costo.toFixed(2)}</p>
+                                  <span className="text-gray-600">Costo Porcentual Promedio:</span>
+                                  <p className="font-bold text-orange-600">{menu.costoporcentual.toFixed(2)}%</p>
                                 </div>
-                                {ingrediente.descripcion && (
-                                  <div className="bg-white/60 rounded-lg p-2 border border-orange-200/50">
-                                    <span className="text-gray-600">Descripción:</span>
-                                    <p className="font-semibold text-gray-800 text-xs">{ingrediente.descripcion}</p>
-                                  </div>
-                                )}
                               </div>
                             </div>
                           </TooltipContent>
@@ -3199,7 +3203,7 @@ export default function DashboardPage() {
                       <Package className="h-12 w-12 mx-auto mb-2 opacity-50" />
                       <p className="text-sm">
                         {mesSeleccionado && añoSeleccionado && hotelSeleccionado
-                          ? "No hay datos de ingredientes disponibles"
+                          ? "No hay datos de menús disponibles"
                           : "Selecciona mes, año y hotel para ver los datos"}
                       </p>
                     </div>
@@ -3262,7 +3266,7 @@ export default function DashboardPage() {
                             </tr>
                           </thead>
                           <tbody>
-                                                      {ingredientesHistoricos.map((ingrediente, index) => {
+                            {ingredientesHistoricos.map((ingrediente, index) => {
                               const tieneVariacion = elementosDiferentes[ingrediente.codigoelemento]
                               return (
                                 <tr
@@ -3428,5 +3432,5 @@ export default function DashboardPage() {
         }
       `}</style>
     </div>
-  )                     
+  )
 }
