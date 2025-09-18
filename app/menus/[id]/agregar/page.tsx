@@ -397,42 +397,41 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
       </div>
 
       <section className="mb-8">
-      <div className="flex items-center gap-4 mb-4">
-            <div className="flex items-center gap-2">
-              <Label htmlFor="searchReceta" className="text-sm font-medium">
-                Receta:
-              </Label>
-              <Input
-                id="searchReceta"
-                name="searchReceta"
-                type="text"
-                value={searchFilter}
-                onChange={(e) => setSearchFilter(e.target.value)}
-                placeholder="Buscar platillo..."
-                className="w-64"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <Label htmlFor="sortOrder" className="text-sm font-medium">
-                Ordenar:
-              </Label>
-              <Select value={sortOrder} onValueChange={setSortOrder} name="sortOrder">
-                <SelectTrigger id="sortOrder" className="w-48">
-                  <SelectValue placeholder="Seleccionar orden" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Sin ordenar</SelectItem>
-                  <SelectItem value="precio-mayor">Precio Venta mayor</SelectItem>
-                  <SelectItem value="precio-menor">Precio Venta menor</SelectItem>
-                  <SelectItem value="alfabetico-az">Alfabéticamente (A-Z)</SelectItem>
-                  <SelectItem value="alfabetico-za">Alfabéticamente (Z-A)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+        <div className="flex items-center gap-4 mb-4">
+          <div className="flex items-center gap-2">
+            <Label htmlFor="searchReceta" className="text-sm font-medium">
+              Receta:
+            </Label>
+            <Input
+              id="searchReceta"
+              name="searchReceta"
+              type="text"
+              value={searchFilter}
+              onChange={(e) => setSearchFilter(e.target.value)}
+              placeholder="Buscar platillo..."
+              className="w-64"
+            />
           </div>
+          <div className="flex items-center gap-2">
+            <Label htmlFor="sortOrder" className="text-sm font-medium">
+              Ordenar:
+            </Label>
+            <Select value={sortOrder} onValueChange={setSortOrder} name="sortOrder">
+              <SelectTrigger id="sortOrder" className="w-48">
+                <SelectValue placeholder="Seleccionar orden" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Sin ordenar</SelectItem>
+                <SelectItem value="precio-mayor">Precio Venta mayor</SelectItem>
+                <SelectItem value="precio-menor">Precio Venta menor</SelectItem>
+                <SelectItem value="alfabetico-az">Alfabéticamente (A-Z)</SelectItem>
+                <SelectItem value="alfabetico-za">Alfabéticamente (Z-A)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-2xl font-semibold">Recetas Asignadas</h2>
-          
         </div>
         {loading ? (
           <div className="flex justify-center items-center h-40">
@@ -474,20 +473,25 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
                   <CardContent className="p-4 w-full">
                     <CardTitle className="text-lg font-bold mb-2">{platillo.platillos?.nombre}</CardTitle>
 
-                    <div className="flex items-center justify-center gap-2">
-                      <p className="text-gray-700 text-sm">Precio Venta: ${(platillo.precioventa ?? 0).toFixed(2)}</p>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 text-gray-500 hover:text-gray-700"
-                        onClick={(e) => {
-                          e.stopPropagation() // Evitar que se dispare handleViewDetails
-                          handleEditPrice(platillo)
-                        }}
-                      >
-                        <Pencil className="h-4 w-4" />
-                        <span className="sr-only">Editar Precio</span>
-                      </Button>
+                    <div className="flex flex-col items-center justify-center gap-1">
+                      <div className="flex items-center justify-center gap-2">
+                        <p className="text-gray-700 text-sm">Precio Venta: ${(platillo.precioventa ?? 0).toFixed(2)}</p>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-gray-500 hover:text-gray-700"
+                          onClick={(e) => {
+                            e.stopPropagation() // Evitar que se dispare handleViewDetails
+                            handleEditPrice(platillo)
+                          }}
+                        >
+                          <Pencil className="h-4 w-4" />
+                          <span className="sr-only">Editar Precio</span>
+                        </Button>
+                      </div>
+                      <p className="text-gray-600 text-xs">
+                        Con IVA: ${((platillo.precioventa ?? 0) * 1.16).toFixed(2)}
+                      </p>
                     </div>
                   </CardContent>
                 </div>
@@ -509,7 +513,6 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
         }}
       >
         <DialogContent className="sm:max-w-lg">
-          {" "}
           {/* Aumentado el ancho aquí */}
           <DialogHeader>
             <DialogTitle>Agregar Recetas al Menú</DialogTitle>
@@ -868,6 +871,21 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
                       : ""
                 }`}
                 placeholder="Costo porcentual calculado"
+                disabled
+                readOnly
+              />
+            </div>
+            {/* Precio Venta (Con IVA) */}
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="txtPrecioConIva" className="text-right">
+                Precio Venta (Con IVA)
+              </Label>
+              <Input
+                id="txtPrecioConIva"
+                name="txtPrecioConIva"
+                type="number"
+                value={editPrecioVenta ? (Number.parseFloat(editPrecioVenta) * 1.16).toFixed(2) : ""}
+                className="col-span-3"
                 disabled
                 readOnly
               />
