@@ -1,9 +1,11 @@
 "use client"
 
+import type React from "react"
+
 /* ==================================================
 	Imports
 ================================================== */
-import { useState, useEffect, useMemo, useCallback } from "react"
+import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
@@ -40,7 +42,7 @@ import {
 import { format } from "date-fns"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
-import { CalendarIcon, SearchIcon, TrendingUp, TrendingDown, Minus } from "lucide-react"
+import { CalendarIcon, SearchIcon, TrendingUp, TrendingDown, Minus, ZoomIn, ZoomOut, RotateCcw } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 /* ==================================================
@@ -93,6 +95,14 @@ export default function AnalisisCostosPage() {
   const [platilloHistorico, setPlatilloHistorico] = useState<PlatilloHistoricoInfo | null>(null)
   const [showValidationDialog, setShowValidationDialog] = useState<boolean>(false)
   const [validationMessage, setValidationMessage] = useState<string>("")
+
+  // Estados para zoom y pan
+  const [zoomLevel, setZoomLevel] = useState<number>(1)
+  const [panX, setPanX] = useState<number>(0)
+  const [panY, setPanY] = useState<number>(0)
+  const [isDragging, setIsDragging] = useState<boolean>(false)
+  const [dragStart, setDragStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
+  const chartContainerRef = useRef<HTMLDivElement>(null)
 
   // Colores para las líneas de los platillos
   const colors = [
@@ -268,22 +278,21 @@ export default function AnalisisCostosPage() {
 
   // Función para manejar el clic en los puntos
   const handlePointClick = useCallback(
-    async (data: any, platilloId: number, index ) => {
+    async (data: any, platilloId: number, index) => {
       try {
         console.log("Point clicked with data:", data, "platilloId:", platilloId)
-       
+
         const originalItem = index.payload
 
         if (!originalItem) {
           console.error("No original item found for platillo:", platilloId)
           return
         }
-        
+
         const fechaOriginal = originalItem.fechacreacion
-        
 
         console.log("orig", fechaOriginal)
-         console.log("pla", platilloId)
+        console.log("pla", platilloId)
 
         if (!fechaOriginal || !/^\d{4}-\d{2}-\d{2}$/.test(fechaOriginal)) {
           console.error("Invalid fechaOriginal:", fechaOriginal)
@@ -326,6 +335,48 @@ export default function AnalisisCostosPage() {
     },
     [selectedMenu],
   )
+
+  // Funciones para zoom y pan
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault()
+    const delta = e.deltaY > 0 ? -0.1 : 0.1
+    setZoomLevel((prev) => Math.max(0.5, Math.min(3, prev + delta)))
+  }, [])
+
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      setIsDragging(true)
+      setDragStart({ x: e.clientX - panX, y: e.clientY - panY })
+    },
+    [panX, panY],
+  )
+
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent) => {
+      if (!isDragging) return
+      setPanX(e.clientX - dragStart.x)
+      setPanY(e.clientY - dragStart.y)
+    },
+    [isDragging, dragStart],
+  )
+
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false)
+  }, [])
+
+  const zoomIn = useCallback(() => {
+    setZoomLevel((prev) => Math.min(3, prev + 0.2))
+  }, [])
+
+  const zoomOut = useCallback(() => {
+    setZoomLevel((prev) => Math.max(0.5, prev - 0.2))
+  }, [])
+
+  const resetZoom = useCallback(() => {
+    setZoomLevel(1)
+    setPanX(0)
+    setPanY(0)
+  }, [])
 
   // Función para calcular la diferencia y mostrar el indicador
   const renderComparison = (actual: number, historico: number, isPercentage = false) => {
@@ -562,35 +613,65 @@ export default function AnalisisCostosPage() {
 
           <Card className="relative w-full border-0 bg-white/70 backdrop-blur-md shadow-2xl shadow-blue-500/10 rounded-3xl overflow-hidden">
             <CardHeader className="relative z-10 bg-gradient-to-r from-slate-50/80 to-blue-50/60 backdrop-blur-sm border-b border-white/20">
-              <CardTitle className="text-2xl font-bold bg-gradient-to-r from-slate-700 via-blue-600 to-purple-600 bg-clip-text text-transparent">
-                Variación de Costos y Precios de Venta
-              </CardTitle>
+              <div className="flex justify-between items-center">
+                <CardTitle className="text-2xl font-bold bg-gradient-to-r from-slate-700 via-blue-600 to-purple-600 bg-clip-text text-transparent">
+                  Variación de Costos y Precios de Venta
+                </CardTitle>
+
+                {/* Controles de zoom */}
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={zoomOut}
+                    className="h-8 w-8 p-0 bg-transparent"
+                    title="Zoom Out"
+                  >
+                    <ZoomOut className="h-4 w-4" />
+                  </Button>
+                  <span className="text-sm font-medium min-w-[60px] text-center">{Math.round(zoomLevel * 100)}%</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={zoomIn}
+                    className="h-8 w-8 p-0 bg-transparent"
+                    title="Zoom In"
+                  >
+                    <ZoomIn className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={resetZoom}
+                    className="h-8 w-8 p-0 bg-transparent"
+                    title="Reset Zoom"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
             </CardHeader>
             <CardContent className="relative z-10 p-8">
-              {/* Leyenda de platillos */}
-              {platillosDatasets.length > 1 && (
-                <div className="mb-6 p-4 bg-white/50 backdrop-blur-sm rounded-xl border border-white/20">
-                  <h4 className="text-lg font-semibold mb-3 text-slate-700">Platillos en el gráfico:</h4>
-                  <div className="flex flex-wrap gap-4">
-                    {platillosDatasets.map((dataset) => (
-                      <div key={dataset.id} className="flex items-center gap-2">
-                        <div
-                          className="w-4 h-4 rounded-full border-2 border-white"
-                          style={{ backgroundColor: dataset.color }}
-                        ></div>
-                        <span className="text-sm font-medium text-slate-700">{dataset.nombre}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="relative h-[400px] w-full">
+              <div
+                ref={chartContainerRef}
+                className="relative h-[400px] w-full overflow-hidden cursor-grab active:cursor-grabbing"
+                onWheel={handleWheel}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+              >
                 {/* Contenedor del gráfico con efecto glass */}
                 <div className="absolute inset-0 bg-gradient-to-br from-white/60 via-blue-50/40 to-purple-50/30 backdrop-blur-sm rounded-2xl border border-white/30 shadow-inner"></div>
                 <div className="absolute inset-2 bg-white/40 backdrop-blur-sm rounded-xl border border-white/20"></div>
 
-                <div className="relative z-10 h-full w-full p-4">
+                <div
+                  className="relative z-10 h-full w-full p-4"
+                  style={{
+                    transform: `scale(${zoomLevel}) translate(${panX / zoomLevel}px, ${panY / zoomLevel}px)`,
+                    transformOrigin: "center center",
+                  }}
+                >
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={combinedChartData} accessibilityLayer width={700} height={300}>
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.3)" strokeWidth={1} />
@@ -602,6 +683,7 @@ export default function AnalisisCostosPage() {
                       />
                       <YAxis
                         domain={[0, 60]}
+                        ticks={[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60]}
                         tickMargin={8}
                         label={{
                           value: "Costo %",
@@ -686,10 +768,6 @@ export default function AnalisisCostosPage() {
                                           </span>
                                         </div>
                                       </div>
-
-                                      {/*<div className="text-xs text-slate-500 mt-2 pt-2 border-t border-slate-200 text-center">
-                                        Haz clic para comparación detallada
-                                      </div>*/}
                                     </div>
                                   )
                                 })}
@@ -775,13 +853,13 @@ export default function AnalisisCostosPage() {
                           <p className="text-sm text-slate-600">Datos más recientes del platillo</p>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                            <div className="h-[95px] flex justify-center mb-4">
-                              <img
-                                src= {platilloActual.imgurl ||"/placeholder.svg"}
-                                //alt={platilloActual.nombre}
-                                className="w-24 h-24 object-cover rounded-full border-4 border-blue-200/50"
-                              />
-                            </div>
+                          <div className="h-[95px] flex justify-center mb-4">
+                            <img
+                              src={platilloActual.imgurl || "/placeholder.svg"}
+                              //alt={platilloActual.nombre}
+                              className="w-24 h-24 object-cover rounded-full border-4 border-blue-200/50"
+                            />
+                          </div>
 
                           <div className="space-y-2">
                             <div className="backdrop-blur-sm rounded-xs p-1">

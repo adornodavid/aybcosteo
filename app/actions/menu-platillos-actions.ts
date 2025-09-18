@@ -54,15 +54,18 @@ export async function agregarPlatilloAMenu(data: AgregarPlatilloData) {
     revalidatePath("/platillos")
 
     // --- INICIO: Lógica de Histórico para agregarPlatilloAMenu ---
-    const today = new Date().toISOString().split("T")[0] // Obtener fecha en formato YYYY-MM-DD
+    const today = new Date()
+    const year = today.getFullYear()
+    const month = today.getMonth() + 1 // getMonth() devuelve 0-11, necesitamos 1-12
 
-    // 1. Verificar si ya existe un registro para este platillo y la fecha de hoy en 'historico'
+    // 1. Verificar si ya existe un registro para este platillo y el mes actual en 'historico'
     const { data: existingHistorico, error: checkError } = await supabase
       .from("historico")
       .select("idrec") // Solo necesitamos saber si existe
       .eq("platilloid", data.platilloid)
       .eq("menuid", data.menuid)
-      .eq("fechacreacion", today)
+      .gte("fechacreacion", `${year}-${month.toString().padStart(2, "0")}-01`)
+      .lt("fechacreacion", `${year}-${(month + 1).toString().padStart(2, "0")}-01`)
 
     if (checkError) {
       console.error("Error al verificar registro histórico existente (agregar):", checkError)
@@ -71,7 +74,9 @@ export async function agregarPlatilloAMenu(data: AgregarPlatilloData) {
 
     if (existingHistorico && existingHistorico.length > 0) {
       // Si existe, realizar UPDATE
-      console.log(`Actualizando registro histórico para platillo ${data.platilloid} en la fecha ${today} (agregar)`)
+      console.log(
+        `Actualizando registro histórico para platillo ${data.platilloid} en el mes ${month}/${year} (agregar)`,
+      )
       const { error: updateHistoricoError } = await supabase
         .from("historico")
         .update({
@@ -79,7 +84,9 @@ export async function agregarPlatilloAMenu(data: AgregarPlatilloData) {
           costoporcentual: data.costoporcentual,
         })
         .eq("platilloid", data.platilloid)
-        .eq("fechacreacion", today)
+        .eq("menuid", data.menuid)
+        .gte("fechacreacion", `${year}-${month.toString().padStart(2, "0")}-01`)
+        .lt("fechacreacion", `${year}-${(month + 1).toString().padStart(2, "0")}-01`)
 
       if (updateHistoricoError) {
         console.error("Error al actualizar histórico (agregar):", updateHistoricoError)
@@ -88,8 +95,10 @@ export async function agregarPlatilloAMenu(data: AgregarPlatilloData) {
     } else {
       // Si no existe, realizar INSERTs
       console.log(
-        `Insertando nuevos registros históricos para platillo ${data.platilloid} en la fecha ${today} (agregar)`,
+        `Insertando nuevos registros históricos para platillo ${data.platilloid} en el mes ${month}/${year} (agregar)`,
       )
+
+      const todayString = new Date().toISOString().split("T")[0] // Para la fecha de inserción
 
       // Primero, obtener hotelid y restauranteid
       const { data: menuDetails, error: menuDetailsError } = await supabase
@@ -128,7 +137,7 @@ export async function agregarPlatilloAMenu(data: AgregarPlatilloData) {
             cantidad: null, // Según la consulta SQL, es null para recetas
             costo: r.recetacostoparcial,
             activo: true,
-            fechacreacion: today,
+            fechacreacion: todayString,
             precioventa: data.precioventa,
             costoporcentual: data.costoporcentual,
           }))
@@ -161,7 +170,7 @@ export async function agregarPlatilloAMenu(data: AgregarPlatilloData) {
             cantidad: i.cantidad,
             costo: i.ingredientecostoparcial,
             activo: true,
-            fechacreacion: today,
+            fechacreacion: todayString,
             precioventa: data.precioventa,
             costoporcentual: data.costoporcentual,
           }))
@@ -255,6 +264,7 @@ export async function actualizarPrecioVenta(data: ActualizarPrecioVentaData) {
       .update({
         precioventa: data.precioventa, // Usar 'precioventa'
         margenutilidad: margenUtilidad, // Actualizar margen de utilidad
+        precioconiva: (data.precioventa * .16) + data.precioventa, // Usar 'precioventa'
         // No hay 'updated_at' en tu SQL, así que lo omito
       })
       .eq("menuid", data.menuid) // Usar 'menuid'
@@ -272,16 +282,20 @@ export async function actualizarPrecioVenta(data: ActualizarPrecioVentaData) {
     revalidatePath("/platillos")
 
     // --- INICIO: Lógica de Histórico ---
-    const today = new Date().toISOString().split("T")[0] // Obtener fecha en formato YYYY-MM-DD
-    console.log("today: ", today)
+    const today = new Date()
+    const year = today.getFullYear()
+    const month = today.getMonth() + 1 // getMonth() devuelve 0-11, necesitamos 1-12
 
-    // 1. Verificar si ya existe un registro para este platillo y la fecha de hoy en 'historico'
+    console.log("year: ", year, "month: ", month)
+
+    // 1. Verificar si ya existe un registro para este platillo y el mes actual en 'historico'
     const { data: existingHistorico, error: checkError } = await supabase
       .from("historico")
       .select("idrec") // Solo necesitamos saber si existe
       .eq("platilloid", data.platilloid)
       .eq("menuid", data.menuid)
-      .eq("fechacreacion", today)
+      .gte("fechacreacion", `${year}-${month.toString().padStart(2, "0")}-01`)
+      .lt("fechacreacion", `${year}-${(month + 1).toString().padStart(2, "0")}-01`)
 
     if (checkError) {
       console.error("Error al verificar registro histórico existente:", checkError)
@@ -290,7 +304,7 @@ export async function actualizarPrecioVenta(data: ActualizarPrecioVentaData) {
 
     if (existingHistorico && existingHistorico.length > 0) {
       // Si existe, realizar UPDATE
-      console.log(`Actualizando registro histórico para platillo ${data.platilloid} en la fecha ${today}`)
+      console.log(`Actualizando registro histórico para platillo ${data.platilloid} en el mes ${month}/${year}`)
       const { error: updateHistoricoError } = await supabase
         .from("historico")
         .update({
@@ -298,7 +312,9 @@ export async function actualizarPrecioVenta(data: ActualizarPrecioVentaData) {
           costoporcentual: data.costoporcentual,
         })
         .eq("platilloid", data.platilloid)
-        .eq("fechacreacion", today)
+        .eq("menuid", data.menuid)
+        .gte("fechacreacion", `${year}-${month.toString().padStart(2, "0")}-01`)
+        .lt("fechacreacion", `${year}-${(month + 1).toString().padStart(2, "0")}-01`)
 
       if (updateHistoricoError) {
         console.error("Error al actualizar histórico:", updateHistoricoError)
@@ -306,7 +322,9 @@ export async function actualizarPrecioVenta(data: ActualizarPrecioVentaData) {
       }
     } else {
       // Si no existe, realizar INSERTs
-      console.log(`Insertando nuevos registros históricos para platillo ${data.platilloid} en la fecha ${today}`)
+      console.log(`Insertando nuevos registros históricos para platillo ${data.platilloid} en el mes ${month}/${year}`)
+
+      const todayString = new Date().toISOString().split("T")[0] // Para la fecha de inserción
 
       // Primero, obtener hotelid y restauranteid
       const { data: menuDetails, error: menuDetailsError } = await supabase
@@ -326,7 +344,7 @@ export async function actualizarPrecioVenta(data: ActualizarPrecioVentaData) {
         // Insertar para recetasxplatillo
         const { data: recetasData, error: recetasError } = await supabase
           .from("recetasxplatillo")
-          .select("recetaid, recetacostoparcial")
+          .select("recetaid, recetacostoparcial, cantidad")
           .eq("platilloid", data.platilloid)
 
         if (recetasError) {
@@ -342,10 +360,10 @@ export async function actualizarPrecioVenta(data: ActualizarPrecioVentaData) {
             platilloid: data.platilloid,
             ingredienteid: null,
             recetaid: r.recetaid,
-            cantidad: null, // Según la consulta SQL, es null para recetas
+            cantidad: r.cantidad,
             costo: r.recetacostoparcial,
             activo: true,
-            fechacreacion: today,
+            fechacreacion: todayString,
             precioventa: data.precioventa,
             costoporcentual: data.costoporcentual,
           }))
@@ -378,7 +396,7 @@ export async function actualizarPrecioVenta(data: ActualizarPrecioVentaData) {
             cantidad: i.cantidad,
             costo: i.ingredientecostoparcial,
             activo: true,
-            fechacreacion: today,
+            fechacreacion: todayString,
             precioventa: data.precioventa,
             costoporcentual: data.costoporcentual,
           }))
