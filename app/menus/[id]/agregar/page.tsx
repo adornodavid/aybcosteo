@@ -381,7 +381,7 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
             <ArrowLeft className="h-4 w-4" />
             <span className="sr-only">Regresar</span>
           </Button>
-          <h1 className="text-3xl font-bold">Recetas de Menú</h1>
+          <h1 className="text-3xl font-bold">Recetas de Menú:</h1>
         </div>
         <Button
           id="btnAgregarPlatillo"
@@ -831,7 +831,7 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
             {/* Línea 743: Continúa el código original */}
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="txtPreVen" className="text-right">
-                Precio Venta
+                Precio Venta(SinIva)
               </Label>
               <Input
                 id="txtPreVen"

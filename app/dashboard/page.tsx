@@ -197,6 +197,7 @@ const mesesDelAño = [
   { id: 6, nombre: "Junio" },
   { id: 7, nombre: "Julio" },
   { id: 8, nombre: "Agosto" },
+  //{ id: 9, nombre: "Septiembre" },
 ]
 
 const añosDisponibles = [{ id: 2025, nombre: "2025" }]
@@ -1290,7 +1291,7 @@ export default function DashboardPage() {
         <div className="flex flex-col items-center justify-center p-8">
           <div className="relative w-24 h-24 mb-4">
             <Image
-              src="https://nxtrsibnomdqmzcrwedc.supabase.co/storage/v1/object/public/imagenes/AnimationGif/CargarPage.gif"
+              src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/design-mode-images/CargarPage%281%29-6bvG6BHndw08mni60eRft1shnM5Egb.gif"
               alt="Procesando..."
               width={300}
               height={300}

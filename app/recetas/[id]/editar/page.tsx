@@ -154,7 +154,7 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
   }, [recetaData])
 
   const canFinalizeReceta = useMemo(() => {
-    return ingredientesReceta.length >= 2
+    return ingredientesReceta.length >= 1
   }, [ingredientesReceta])
 
   useEffect(() => {
@@ -1413,7 +1413,7 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
           <div className="flex flex-col items-center justify-center p-8 bg-white rounded-lg shadow-xl">
             <div className="relative w-24 h-24 mb-4">
               <Image
-                src="https://nxtrsibnomdqmzcrwedc.supabase.co/storage/v1/object/public/imagenes/AnimationGif/EditarReceta.gif"
+                src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/design-mode-images/EditarReceta%281%29-Qj3yTK4HJ3EqPlzngPksoOZFw77rjw.gif"
                 alt="Procesando..."
                 width={300}
                 height={300}
