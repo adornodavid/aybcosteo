@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Line, LineChart, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip, ReferenceLine } from "recharts"
+import { Line, LineChart, XAxis, YAxis, CartesianGrid, ResponsiveContainer, ReferenceLine } from "recharts"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,6 +21,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import {
   getHotelesForAnalisis,
   getRestaurantesForAnalisis,
@@ -103,6 +104,21 @@ export default function AnalisisCostosPage() {
   const [isDragging, setIsDragging] = useState<boolean>(false)
   const [dragStart, setDragStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
   const chartContainerRef = useRef<HTMLDivElement>(null)
+
+  const [showComparisonModal, setShowComparisonModal] = useState<boolean>(false)
+  const [hoveredPoint, setHoveredPoint] = useState<{
+    data: any
+    dataset: PlatilloDataset
+    position: { x: number; y: number }
+  } | null>(null)
+
+  // Estados para el tooltip mejorado
+  const [tooltipVisible, setTooltipVisible] = useState<boolean>(false)
+  const [tooltipData, setTooltipData] = useState<{
+    data: any
+    dataset: PlatilloDataset
+    position: { x: number; y: number }
+  } | null>(null)
 
   // Colores para las líneas de los platillos
   const colors = [
@@ -274,73 +290,102 @@ export default function AnalisisCostosPage() {
     setSelectedPointDetails(null)
     setPlatilloActual(null)
     setPlatilloHistorico(null)
+    setShowComparisonModal(false) // Cerrar modal si se hace una nueva búsqueda
   }, [selectedPlatillo, fechaInicial, fechaFinal, selectedMenu, selectedRestaurante, selectedHotel])
 
-  // Función para manejar el clic en los puntos
-  const handlePointClick = useCallback(
-    async (data: any, platilloId: number, index) => {
-      try {
-        console.log("Point clicked with data:", data, "platilloId:", platilloId)
+  // Función para manejar el clic en "Comparar Costo" desde el tooltip
+  const handleCompareFromTooltip = useCallback(async () => {
+    if (!tooltipData) return
 
-        const originalItem = index.payload
+    try {
+      const originalItem = tooltipData.data
+      const platilloId = tooltipData.dataset.id
+      const fechaOriginal = originalItem.fechacreacion
 
-        if (!originalItem) {
-          console.error("No original item found for platillo:", platilloId)
-          return
-        }
-
-        const fechaOriginal = originalItem.fechacreacion
-
-        console.log("orig", fechaOriginal)
-        console.log("pla", platilloId)
-
-        if (!fechaOriginal || !/^\d{4}-\d{2}-\d{2}$/.test(fechaOriginal)) {
-          console.error("Invalid fechaOriginal:", fechaOriginal)
-          setValidationMessage("Error: No se pudo obtener la fecha del punto seleccionado en formato válido.")
-          setShowValidationDialog(true)
-          return
-        }
-        console.log("fecha", fechaOriginal)
-        const menuIdNum = Number.parseInt(selectedMenu)
-
-        // Crear los detalles específicos del punto seleccionado
-        const pointDetails: SelectedPointDetails = {
-          fecha: format(new Date(fechaOriginal), "dd/MM/yyyy"),
-          fechaOriginal: fechaOriginal,
-          costo: originalItem.costo || 0,
-          precioventa: originalItem.precioventa || 0,
-          margenutilidad: originalItem.margenutilidad || 0,
-          costoporcentual: originalItem.costoporcentual || 0,
-          platilloNombre: originalItem.nombreplatillo,
-          restaurante: "N/A", // Se obtendrá de platilloDetails
-          menu: originalItem.nombremenu,
-          menuId: menuIdNum,
-        }
-
-        setSelectedPointDetails(pointDetails)
-
-        // Obtener información actual y histórica del platillo
-        const [actualInfo, historicoInfo] = await Promise.all([
-          getPlatilloActualInfo(platilloId, menuIdNum),
-          getPlatilloHistoricoInfo(platilloId, fechaOriginal),
-        ])
-
-        setPlatilloActual(actualInfo)
-        setPlatilloHistorico(historicoInfo)
-      } catch (error) {
-        console.error("Error in handlePointClick:", error)
-        setValidationMessage("Error al obtener la información del platillo.")
+      if (!fechaOriginal || !/^\d{4}-\d{2}-\d{2}$/.test(fechaOriginal)) {
+        setValidationMessage("Error: No se pudo obtener la fecha del punto seleccionado en formato válido.")
         setShowValidationDialog(true)
+        return
       }
-    },
-    [selectedMenu],
-  )
+
+      const menuIdNum = Number.parseInt(selectedMenu)
+
+      // Crear los detalles específicos del punto seleccionado
+      const pointDetails: SelectedPointDetails = {
+        fecha: format(new Date(fechaOriginal), "dd/MM/yyyy"),
+        fechaOriginal: fechaOriginal,
+        costo: originalItem.costo || 0,
+        precioventa: originalItem.precioventa || 0,
+        margenutilidad: originalItem.margenutilidad || 0,
+        costoporcentual: originalItem.costoporcentual || 0,
+        platilloNombre: originalItem.nombreplatillo,
+        restaurante: "N/A",
+        menu: originalItem.nombremenu,
+        menuId: menuIdNum,
+      }
+
+      setSelectedPointDetails(pointDetails)
+
+      // Obtener información actual y histórica del platillo
+      const [actualInfo, historicoInfo] = await Promise.all([
+        getPlatilloActualInfo(platilloId, menuIdNum),
+        getPlatilloHistoricoInfo(platilloId, fechaOriginal),
+      ])
+
+      setPlatilloActual(actualInfo)
+      setPlatilloHistorico(historicoInfo)
+
+      // Ocultar tooltip y mostrar modal
+      setTooltipVisible(false)
+      setTooltipData(null)
+      setShowComparisonModal(true)
+    } catch (error) {
+      console.error("Error in handleCompareFromTooltip:", error)
+      setValidationMessage("Error al obtener la información del platillo.")
+      setShowValidationDialog(true)
+    }
+  }, [tooltipData, selectedMenu])
+
+  // Función para manejar el hover sobre los puntos
+  const handlePointHover = useCallback((data: any, dataset: PlatilloDataset, position: { x: number; y: number }) => {
+    const originalItem = data.payload[`item_${dataset.id}`]
+    if (originalItem) {
+      setTooltipData({
+        data: originalItem,
+        dataset: dataset,
+        position: position,
+      })
+      setTooltipVisible(true)
+    }
+  }, [])
+
+  // Función para manejar cuando el mouse sale del punto
+  const handlePointLeave = useCallback(() => {
+    // No ocultar inmediatamente, dar tiempo para que el usuario mueva el cursor al tooltip
+    setTimeout(() => {
+      if (!tooltipVisible) {
+        setTooltipData(null)
+      }
+    }, 100)
+  }, [tooltipVisible])
+
+  // Función para manejar cuando el mouse entra al tooltip
+  const handleTooltipEnter = useCallback(() => {
+    setTooltipVisible(true)
+  }, [])
+
+  // Función para manejar cuando el mouse sale del tooltip
+  const handleTooltipLeave = useCallback(() => {
+    setTooltipVisible(false)
+    setTooltipData(null)
+  }, [])
 
   // Funciones para zoom y pan
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault()
+    e.stopPropagation()
     const delta = e.deltaY > 0 ? -0.1 : 0.1
-    setZoomLevel((prev) => Math.max(0.5, Math.min(3, prev + delta)))
+    setZoomLevel((prev) => Math.max(1, Math.min(3, prev + delta)))
   }, [])
 
   const handleMouseDown = useCallback(
@@ -353,11 +398,24 @@ export default function AnalisisCostosPage() {
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
-      if (!isDragging) return
-      setPanX(e.clientX - dragStart.x)
-      setPanY(e.clientY - dragStart.y)
+      if (!isDragging || !chartContainerRef.current) return
+
+      const containerRect = chartContainerRef.current.getBoundingClientRect()
+      const containerWidth = containerRect.width
+      const containerHeight = containerRect.height
+
+      // Calcular los límites basados en el zoom y el tamaño del contenedor
+      const maxPanX = (containerWidth * (zoomLevel - 1)) / 2
+      const maxPanY = (containerHeight * (zoomLevel - 1)) / 2
+
+      const newPanX = e.clientX - dragStart.x
+      const newPanY = e.clientY - dragStart.y
+
+      // Aplicar límites
+      setPanX(Math.max(-maxPanX, Math.min(maxPanX, newPanX)))
+      setPanY(Math.max(-maxPanY, Math.min(maxPanY, newPanY)))
     },
-    [isDragging, dragStart],
+    [isDragging, dragStart, zoomLevel],
   )
 
   const handleMouseUp = useCallback(() => {
@@ -369,7 +427,7 @@ export default function AnalisisCostosPage() {
   }, [])
 
   const zoomOut = useCallback(() => {
-    setZoomLevel((prev) => Math.max(0.5, prev - 0.2))
+    setZoomLevel((prev) => Math.max(1, prev - 0.2))
   }, [])
 
   const resetZoom = useCallback(() => {
@@ -413,6 +471,43 @@ export default function AnalisisCostosPage() {
       )
     }
   }
+
+  // Función para prevenir el scroll de la página cuando se hace scroll en el contenedor
+  const handleContainerScroll = useCallback(
+    (e: React.WheelEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      // Llamar a la función de zoom
+      handleWheel(e)
+    },
+    [handleWheel],
+  )
+
+  // Efecto para prevenir el scroll de la página en el contenedor del gráfico
+  useEffect(() => {
+    const chartContainer = chartContainerRef.current
+    if (!chartContainer) return
+
+    const preventScroll = (e: WheelEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+
+      // Crear un evento sintético para el zoom
+      const syntheticEvent = {
+        preventDefault: () => {},
+        stopPropagation: () => {},
+        deltaY: e.deltaY,
+      } as React.WheelEvent
+
+      handleWheel(syntheticEvent)
+    }
+
+    chartContainer.addEventListener("wheel", preventScroll, { passive: false })
+
+    return () => {
+      chartContainer.removeEventListener("wheel", preventScroll)
+    }
+  }, [handleWheel])
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -655,11 +750,19 @@ export default function AnalisisCostosPage() {
               <div
                 ref={chartContainerRef}
                 className="relative h-[700px] w-full overflow-hidden cursor-grab active:cursor-grabbing"
-                onWheel={handleWheel}
+                onWheel={handleContainerScroll}
+                onScroll={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                }}
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
                 onMouseLeave={handleMouseUp}
+                style={{
+                  overscrollBehavior: "contain",
+                  touchAction: "none",
+                }}
               >
                 {/* Contenedor del gráfico con efecto glass */}
                 <div className="absolute inset-0 bg-gradient-to-br from-white/60 via-blue-50/40 to-purple-50/30 backdrop-blur-sm rounded-2xl border border-white/30 shadow-inner"></div>
@@ -673,7 +776,13 @@ export default function AnalisisCostosPage() {
                   }}
                 >
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={combinedChartData} accessibilityLayer width={700} height={300}>
+                    <LineChart
+                      data={combinedChartData}
+                      accessibilityLayer
+                      width={700}
+                      height={300}
+                      isAnimationActive={false}
+                    >
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.3)" strokeWidth={1} />
                       <XAxis
                         dataKey="fechacreacion"
@@ -694,87 +803,7 @@ export default function AnalisisCostosPage() {
                         tick={{ fill: "#64748b", fontSize: 12 }}
                         axisLine={{ stroke: "rgba(148, 163, 184, 0.4)" }}
                       />
-                      <Tooltip
-                        cursor={false}
-                        content={({ active, payload, label }) => {
-                          if (!active || !payload || payload.length === 0) return null
-
-                          // Encontrar el payload más cercano al cursor que tenga datos
-                          const validPayload = payload.find((p) => p.value !== null && p.value !== undefined)
-
-                          if (!validPayload) return null
-
-                          const platilloId = validPayload.dataKey?.toString().replace("platillo_", "") || ""
-                          const originalItem = validPayload.payload[`item_${platilloId}`]
-
-                          if (!originalItem) return null
-
-                          const dataset = platillosDatasets.find((d) => d.id.toString() === platilloId)
-
-                          return (
-                            <div className="bg-white/95 backdrop-blur-md border border-white/30 rounded-xl shadow-2xl p-4 max-w-sm">
-                              <div className="text-sm font-semibold text-slate-700 mb-3 border-b border-slate-200 pb-2">
-                                Fecha: {label}
-                              </div>
-                              <div className="space-y-2 p-3 bg-slate-50/50 rounded-lg border border-slate-200/30">
-                                <div className="flex items-center gap-2 mb-2">
-                                  <div
-                                    className="w-3 h-3 rounded-full"
-                                    style={{ backgroundColor: dataset?.color || "#8884d8" }}
-                                  ></div>
-                                  <span className="font-semibold text-slate-800">{dataset?.nombre || "N/A"}</span>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-2 text-xs">
-                                  <div className="flex justify-between">
-                                    <span className="text-slate-600">Menú:</span>
-                                    <span className="font-medium text-slate-800">
-                                      {originalItem.nombremenu || "N/A"}
-                                    </span>
-                                  </div>
-                                  <div className="flex justify-between">
-                                    <span className="text-slate-600">Fecha:</span>
-                                    <span className="font-medium text-slate-800">
-                                      {originalItem.fechacreacion || "N/A"}
-                                    </span>
-                                  </div>
-                                  <div className="flex justify-between">
-                                    <span className="text-slate-600">Costo:</span>
-                                    <span className="font-medium text-green-600">
-                                      ${(originalItem.costo || 0).toFixed(2)}
-                                    </span>
-                                  </div>
-                                  <div className="flex justify-between">
-                                    <span className="text-slate-600">Precio Venta:</span>
-                                    <span className="font-medium text-blue-600">
-                                      ${(originalItem.precioventa || 0).toFixed(2)}
-                                    </span>
-                                  </div>
-                                  <div className="flex justify-between">
-                                    <span className="text-slate-600">Margen:</span>
-                                    <span className="font-medium text-purple-600">
-                                      ${(originalItem.margenutilidad || 0).toFixed(2)}
-                                    </span>
-                                  </div>
-                                  <div className="flex justify-between">
-                                    <span className="text-slate-600">Costo %:</span>
-                                    <span className="font-medium text-orange-600">
-                                      {(originalItem.costoporcentual || 0).toFixed(2)}%
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          )
-                        }}
-                        allowEscapeViewBox={{ x: true, y: true }}
-                        position={{ x: undefined, y: undefined }}
-                        isAnimationActive={false}
-                        filterNull={true}
-                        active={true}
-                      />
-
-                      {/* Generar una línea por cada platillo - CORREGIDO CON connectNulls={true} */}
+                      {/* Líneas del gráfico con eventos de hover mejorados */}
                       {platillosDatasets.map((dataset) => (
                         <Line
                           key={dataset.id}
@@ -786,25 +815,17 @@ export default function AnalisisCostosPage() {
                           dot={{
                             fill: dataset.color,
                             strokeWidth: 2,
-                            r: 6,
-                            filter: `drop-shadow(0 2px 4px ${dataset.color}30)`,
+                            r: 4,
                             cursor: "pointer",
-                          }}
-                          activeDot={{
-                            r: 8,
-                            fill: dataset.color,
-                            stroke: "#ffffff",
-                            strokeWidth: 3,
-                            filter: `drop-shadow(0 4px 8px ${dataset.color}40)`,
-                            cursor: "pointer",
-                            onClick: (data: any, index) => {
-                              handlePointClick(data, dataset.id, index)
+                            onMouseEnter: (data: any, index: number) => {
+                              handlePointHover(data, dataset, { x: data.cx, y: data.cy })
                             },
+                            onMouseLeave: handlePointLeave,
                           }}
+                          activeDot={false}
                           name={`platillo_${dataset.id}`}
                         />
                       ))}
-
                       <ReferenceLine
                         y={30}
                         stroke="#ef4444"
@@ -823,172 +844,256 @@ export default function AnalisisCostosPage() {
                       />
                     </LineChart>
                   </ResponsiveContainer>
+
+                  {/* Tooltip personalizado mejorado */}
+                  {tooltipVisible && tooltipData && (
+                    <div
+                      className="absolute bg-white/95 backdrop-blur-md border border-white/30 rounded-xl shadow-2xl p-4 max-w-sm z-50"
+                      style={{
+                        left: (() => {
+                          const tooltipWidth = 350 // Ancho aproximado del tooltip
+                          const containerRect = chartContainerRef.current?.getBoundingClientRect()
+                          if (!containerRect) return tooltipData.position.x + 10
+
+                          const containerLeft = 0
+                          const containerRight = containerRect.width
+                          const pointX = tooltipData.position.x
+
+                          // Si el tooltip se sale por la derecha, mostrarlo a la izquierda del punto
+                          if (pointX + tooltipWidth > containerRight) {
+                            return Math.max(containerLeft, pointX - tooltipWidth - 10)
+                          }
+
+                          // Si se sale por la izquierda, mostrarlo a la derecha
+                          if (pointX + 10 < containerLeft) {
+                            return containerLeft + 10
+                          }
+
+                          // Posición normal a la derecha del punto
+                          return pointX + 10
+                        })(),
+                        top: (() => {
+                          const tooltipHeight = 200 // Altura aproximada del tooltip
+                          const containerRect = chartContainerRef.current?.getBoundingClientRect()
+                          if (!containerRect) return Math.max(tooltipData.position.y - 150, 10)
+
+                          const containerTop = 0
+                          const containerBottom = containerRect.height
+                          const pointY = tooltipData.position.y
+
+                          // Si el tooltip se sale por abajo, mostrarlo arriba del punto
+                          if (pointY + tooltipHeight > containerBottom) {
+                            return Math.max(containerTop, pointY - tooltipHeight - 10)
+                          }
+
+                          // Si se sale por arriba, mostrarlo abajo del punto
+                          if (pointY - 150 < containerTop) {
+                            return containerTop + 10
+                          }
+
+                          // Posición normal arriba del punto
+                          return pointY - 150
+                        })(),
+                      }}
+                      onMouseEnter={handleTooltipEnter}
+                      onMouseLeave={handleTooltipLeave}
+                    >
+                      <div className="text-sm font-semibold text-slate-700 mb-3 border-b border-slate-200 pb-2">
+                        Fecha: {tooltipData.data.fechacreacion}
+                      </div>
+                      <div className="space-y-2 p-3 bg-slate-50/50 rounded-lg border border-slate-200/30">
+                        <div className="flex items-center gap-2 mb-2">
+                          <div
+                            className="w-3 h-3 rounded-full"
+                            style={{ backgroundColor: tooltipData.dataset.color }}
+                          ></div>
+                          <span className="font-semibold text-slate-800">{tooltipData.dataset.nombre}</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div className="flex justify-between">
+                            <span className="text-slate-600">Costo:</span>
+                            <span className="font-medium text-green-600">
+                              ${(tooltipData.data.costo || 0).toFixed(2)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-600">Precio Venta:</span>
+                            <span className="font-medium text-blue-600">
+                              ${(tooltipData.data.precioventa || 0).toFixed(2)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-600">Margen:</span>
+                            <span className="font-medium text-purple-600">
+                              ${(tooltipData.data.margenutilidad || 0).toFixed(2)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-600">Costo %:</span>
+                            <span className="font-medium text-orange-600">
+                              {(tooltipData.data.costoporcentual || 0).toFixed(2)}%
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Botón Comparar Costo */}
+                      <div className="mt-3 pt-2 border-t border-slate-200">
+                        <Button
+                          onClick={handleCompareFromTooltip}
+                          size="sm"
+                          className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-xs"
+                        >
+                          Comparar Costo
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* Mostrar tarjetas comparativas cuando se selecciona un punto */}
-              {selectedPointDetails && platilloActual && platilloHistorico ? (
-                <div className="mt-8 space-y-6">
-                  <div className="text-center">
-                    <h3 className="text-2xl font-bold bg-gradient-to-r from-emerald-700 to-teal-600 bg-clip-text text-transparent mb-2">
-                      Comparación de Costos: {selectedPointDetails.platilloNombre}
-                    </h3>
-                    <p className="text-slate-600">
-                      Comparando datos actuales vs. fecha seleccionada ({selectedPointDetails.fecha})
-                    </p>
-                  </div>
+              {/* Modal de comparación */}
+              <Dialog open={showComparisonModal} onOpenChange={setShowComparisonModal}>
+                <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-emerald-700 to-teal-600 bg-clip-text text-transparent text-center">
+                      Comparación de Costos: {selectedPointDetails?.platilloNombre}
+                    </DialogTitle>
+                    <DialogDescription className="text-center text-slate-600">
+                      Comparando datos actuales vs. fecha seleccionada ({selectedPointDetails?.fecha})
+                    </DialogDescription>
+                  </DialogHeader>
 
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    {/* Tarjeta de Información Actual */}
-                    <div className="relative h-[705px]">
-                      <div className="absolute inset-0 bg-gradient-to-br from-blue-50/80 via-white/60 to-indigo-50/80 backdrop-blur-sm rounded-xs border border-blue-200/30"></div>
-                      <Card className="rounded-xs text-card-foreground relative border-0 bg-transparent shadow-lg">
-                        <CardHeader className="text-center pb-4">
-                          <CardTitle className="text-xl font-bold text-blue-700 flex items-center justify-center gap-2">
-                            📊 Información Actual
-                          </CardTitle>
-                          <p className="text-sm text-slate-600">Datos más recientes del platillo</p>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                          <div className="h-[95px] flex justify-center mb-4">
-                            <img
-                              src={platilloActual.imgurl || "/placeholder.svg"}
-                              //alt={platilloActual.nombre}
-                              className="w-24 h-24 object-cover rounded-full border-4 border-blue-200/50"
-                            />
-                          </div>
-
-                          <div className="space-y-2">
-                            <div className="backdrop-blur-sm rounded-xs p-1">
-                              <p className="text-sm text-slate-600 font-medium">Platillo</p>
-                              <p className="text-lg font-bold text-slate-800">{platilloActual.nombre}</p>
+                  {selectedPointDetails && platilloActual && platilloHistorico && (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-6">
+                      {/* Tarjeta de Información Actual */}
+                      <div className="relative">
+                        <div className="absolute inset-0 bg-gradient-to-br from-blue-50/80 via-white/60 to-indigo-50/80 backdrop-blur-sm rounded-xl border border-blue-200/30"></div>
+                        <Card className="rounded-xl text-card-foreground relative border-0 bg-transparent shadow-lg">
+                          <CardHeader className="text-center pb-4">
+                            <CardTitle className="text-xl font-bold text-blue-700 flex items-center justify-center gap-2">
+                              📊 Información Actual
+                            </CardTitle>
+                            <p className="text-sm text-slate-600">Datos más recientes del platillo</p>
+                          </CardHeader>
+                          <CardContent className="space-y-4">
+                            <div className="h-[95px] flex justify-center mb-4">
+                              <img
+                                src={platilloActual.imgurl || "/placeholder.svg"}
+                                className="w-24 h-24 object-cover rounded-full border-4 border-blue-200/50"
+                              />
                             </div>
 
-                            <div className="backdrop-blur-sm rounded-xs p-1">
-                              <p className="text-sm text-slate-600 font-medium">Menú</p>
-                              <p className="text-lg font-semibold text-slate-800">{platilloActual.menu}</p>
+                            <div className="space-y-2">
+                              <div className="backdrop-blur-sm rounded-lg p-3">
+                                <p className="text-sm text-slate-600 font-medium">Platillo</p>
+                                <p className="text-lg font-bold text-slate-800">{platilloActual.nombre}</p>
+                              </div>
+
+                              <div className="backdrop-blur-sm rounded-lg p-3">
+                                <p className="text-sm text-slate-600 font-medium">Menú</p>
+                                <p className="text-lg font-semibold text-slate-800">{platilloActual.menu}</p>
+                              </div>
+
+                              <div className="backdrop-blur-sm rounded-lg p-3">
+                                <p className="text-sm text-slate-600 font-medium">Costo Total</p>
+                                <p className="text-2xl font-bold text-green-400">
+                                  ${platilloActual.costototal.toFixed(2)}
+                                </p>
+                                {renderComparison(platilloActual.costototal, platilloHistorico.costototal)}
+                              </div>
+
+                              <div className="backdrop-blur-sm rounded-lg p-3">
+                                <p className="text-sm text-slate-600 font-medium">Precio de Venta</p>
+                                <p className="text-2xl font-bold text-blue-400">
+                                  ${platilloActual.precioventa.toFixed(2)}
+                                </p>
+                                {renderComparison(platilloActual.precioventa, platilloHistorico.precioventa)}
+                              </div>
+
+                              <div className="backdrop-blur-sm rounded-lg p-3">
+                                <p className="text-sm text-slate-600 font-medium">Margen de Utilidad</p>
+                                <p className="text-2xl font-bold text-purple-400">
+                                  ${platilloActual.margenutilidad.toFixed(2)}
+                                </p>
+                                {renderComparison(platilloActual.margenutilidad, platilloHistorico.margenutilidad)}
+                              </div>
+
+                              <div className="backdrop-blur-sm rounded-lg p-3">
+                                <p className="text-sm text-slate-600 font-medium">Costo Porcentual</p>
+                                <p className="text-2xl font-bold text-orange-400">
+                                  {platilloActual.costoporcentual.toFixed(2)}%
+                                </p>
+                                {renderComparison(platilloActual.costoporcentual, platilloHistorico.costoporcentual)}
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </div>
+
+                      {/* Tarjeta de Información Histórica */}
+                      <div className="relative">
+                        <div className="absolute inset-0 bg-gradient-to-br from-amber-50/80 via-white/60 to-orange-50/80 backdrop-blur-sm rounded-xl border border-amber-200/30"></div>
+                        <Card className="relative border-0 bg-transparent shadow-lg">
+                          <CardHeader className="text-center pb-4">
+                            <CardTitle className="text-xl font-bold text-amber-700 flex items-center justify-center gap-2">
+                              📅 Información Histórica
+                            </CardTitle>
+                            <p className="text-sm text-slate-600">Datos del {selectedPointDetails.fecha}</p>
+                          </CardHeader>
+                          <CardContent className="space-y-4">
+                            <div className="flex justify-center mb-4">
+                              <div className="w-24 h-24 bg-gradient-to-br from-amber-200 to-orange-200 rounded-full flex items-center justify-center border-4 border-amber-200/50">
+                                <span className="text-2xl">📊</span>
+                              </div>
                             </div>
 
-                            <div className="backdrop-blur-sm rounded-xs p-1">
-                              <p className="text-sm text-slate-600 font-medium">Costo Total</p>
-                              <p className="text-2xl font-bold text-green-400">
-                                ${platilloActual.costototal.toFixed(2)}
-                              </p>
-                              {renderComparison(platilloActual.costototal, platilloHistorico.costototal)}
-                            </div>
+                            <div className="space-y-2">
+                              <div className="backdrop-blur-sm rounded-lg p-3">
+                                <p className="text-sm text-slate-600 font-medium">Platillo</p>
+                                <p className="text-lg font-semibold text-slate-800">{platilloHistorico.platillo}</p>
+                              </div>
 
-                            <div className="backdrop-blur-sm rounded-xs p-1">
-                              <p className="text-sm text-slate-600 font-medium">Precio de Venta</p>
-                              <p className="text-2xl font-bold text-blue-400">
-                                ${platilloActual.precioventa.toFixed(2)}
-                              </p>
-                              {renderComparison(platilloActual.precioventa, platilloHistorico.precioventa)}
-                            </div>
+                              <div className="backdrop-blur-sm rounded-lg p-3">
+                                <p className="text-sm text-slate-600 font-medium">Fecha</p>
+                                <p className="text-lg font-semibold text-slate-800">{selectedPointDetails.fecha}</p>
+                              </div>
 
-                            <div className="backdrop-blur-sm rounded-xs p-1">
-                              <p className="text-sm text-slate-600 font-medium">Margen de Utilidad</p>
-                              <p className="text-2xl font-bold text-purple-400">
-                                ${platilloActual.margenutilidad.toFixed(2)}
-                              </p>
-                              {renderComparison(platilloActual.margenutilidad, platilloHistorico.margenutilidad)}
-                            </div>
+                              <div className="backdrop-blur-sm rounded-lg p-3">
+                                <p className="text-sm text-slate-600 font-medium">Costo Total</p>
+                                <p className="text-2xl font-bold text-green-400">
+                                  ${platilloHistorico.costototal.toFixed(2)}
+                                </p>
+                              </div>
 
-                            <div className="backdrop-blur-sm rounded-xs p-1">
-                              <p className="text-sm text-slate-600 font-medium">Costo Porcentual</p>
-                              <p className="text-2xl font-bold text-orange-400">
-                                ${platilloActual.costoporcentual.toFixed(2)}
-                              </p>
-                              {renderComparison(platilloActual.costoporcentual, platilloHistorico.costoporcentual)}
-                            </div>
+                              <div className="backdrop-blur-sm rounded-lg p-3">
+                                <p className="text-sm text-slate-600 font-medium">Precio de Venta</p>
+                                <p className="text-2xl font-bold text-blue-400">
+                                  ${platilloHistorico.precioventa.toFixed(2)}
+                                </p>
+                              </div>
 
-                            {/*<div className="backdrop-blur-sm rounded-xs p-1">
-                              <p className="text-sm text-slate-600 font-medium">Fecha de Creación</p>
-                              <p className="text-lg font-semibold text-slate-800">
-                                {format(new Date(platilloActual.fechacreacion), "dd/MM/yyyy")}
-                              </p>
-                            </div>*/}
-                          </div>
-                        </CardContent>
-                      </Card>
+                              <div className="backdrop-blur-sm rounded-lg p-3">
+                                <p className="text-sm text-slate-600 font-medium">Margen de Utilidad</p>
+                                <p className="text-2xl font-bold text-purple-400">
+                                  ${platilloHistorico.margenutilidad.toFixed(2)}
+                                </p>
+                              </div>
+
+                              <div className="backdrop-blur-sm rounded-lg p-3">
+                                <p className="text-sm text-slate-600 font-medium">Costo Porcentual</p>
+                                <p className="text-2xl font-bold text-orange-400">
+                                  {platilloHistorico.costoporcentual.toFixed(2)}%
+                                </p>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </div>
                     </div>
-
-                    {/* Tarjeta de Información Histórica */}
-                    <div className="relative h-[715px]">
-                      <div className="absolute inset-0 bg-gradient-to-br from-amber-50/80 via-white/60 to-orange-50/80 backdrop-blur-sm rounded-2xl border border-amber-200/30"></div>
-                      <Card className="relative border-0 bg-transparent shadow-lg">
-                        <CardHeader className="text-center pb-4">
-                          <CardTitle className="text-xl font-bold text-amber-700 flex items-center justify-center gap-2">
-                            📅 Información Histórica
-                          </CardTitle>
-                          <p className="text-sm text-slate-600">Datos del {selectedPointDetails.fecha}</p>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                          <div className="flex justify-center mb-4">
-                            <div className="w-24 h-24 bg-gradient-to-br from-amber-200 to-orange-200 rounded-full flex items-center justify-center border-4 border-amber-200/50">
-                              <span className="text-2xl">📊</span>
-                            </div>
-                          </div>
-
-                          <div className="space-y-2">
-                            <div className="backdrop-blur-sm rounded-xl p-2">
-                              <p className="text-sm text-slate-600 font-medium">Platillo</p>
-                              <p className="text-lg font-semibold text-slate-800">{platilloHistorico.platillo}</p>
-                            </div>
-
-                            <div className="backdrop-blur-sm rounded-xl p-2">
-                              <p className="text-sm text-slate-600 font-medium">Fecha</p>
-                              <p className="text-lg font-semibold text-slate-800">{selectedPointDetails.fecha}</p>
-                            </div>
-
-                            <div className="backdrop-blur-sm rounded-xl p-3">
-                              <p className="text-sm text-slate-600 font-medium">Costo Total</p>
-                              <p className="text-2xl font-bold text-green-400">
-                                ${platilloHistorico.costototal.toFixed(2)}
-                              </p>
-                            </div>
-
-                            <div className="backdrop-blur-sm rounded-xl p-3">
-                              <p className="text-sm text-slate-600 font-medium">Precio de Venta</p>
-                              <p className="text-2xl font-bold text-blue-400">
-                                ${platilloHistorico.precioventa.toFixed(2)}
-                              </p>
-                            </div>
-
-                            <div className="backdrop-blur-sm rounded-xl p-3">
-                              <p className="text-sm text-slate-600 font-medium">Margen de Utilidad</p>
-                              <p className="text-2xl font-bold text-purple-400">
-                                ${platilloHistorico.margenutilidad.toFixed(2)}
-                              </p>
-                            </div>
-
-                            <div className="backdrop-blur-sm rounded-xl p-3">
-                              <p className="text-sm text-slate-600 font-medium">Costo Porcentual</p>
-                              <p className="text-2xl font-bold text-orange-400">
-                                {platilloHistorico.costoporcentual.toFixed(2)}%
-                              </p>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </div>
-                  </div>
-
-                  <div className="text-center">
-                    <Button
-                      onClick={() => {
-                        setSelectedPointDetails(null)
-                        setPlatilloActual(null)
-                        setPlatilloHistorico(null)
-                      }}
-                      variant="outline"
-                      size="sm"
-                      className="text-slate-600 hover:text-slate-800"
-                    >
-                      Cerrar comparación
-                    </Button>
-                  </div>
-                </div>
-              ) : null}
+                  )}
+                </DialogContent>
+              </Dialog>
             </CardContent>
           </Card>
         </div>
