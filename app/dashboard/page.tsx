@@ -1291,7 +1291,7 @@ export default function DashboardPage() {
         <div className="flex flex-col items-center justify-center p-8">
           <div className="relative w-24 h-24 mb-4">
             <Image
-              src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/design-mode-images/CargarPage%281%29-6bvG6BHndw08mni60eRft1shnM5Egb.gif"
+              src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/design-mode-images/CargarPage%281%29-eqtLX9AzyIvXuPKJKQz0BWJW7GdBI1.gif"
               alt="Procesando..."
               width={300}
               height={300}

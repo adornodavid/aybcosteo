@@ -966,7 +966,7 @@ export default function NuevaRecetaPage() {
           <div className="flex flex-col items-center justify-center p-8 bg-white rounded-lg shadow-xl">
             <div className="relative w-24 h-24 mb-4">
               <Image
-                src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/design-mode-images/RegistrarSubReceta%281%29-KntDX8GyLD0HZO8iJgz8fv46ADpnBu.gif"
+                src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/design-mode-images/RegistrarSubReceta%281%29-ysheBY1V1ErXIvb3t88EjuIDMl53RH.gif"
                 alt="Procesando..."
                 width={400}
                 height={400}

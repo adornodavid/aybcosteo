@@ -654,7 +654,7 @@ export default function AnalisisCostosPage() {
             <CardContent className="relative z-10 p-8">
               <div
                 ref={chartContainerRef}
-                className="relative h-[400px] w-full overflow-hidden cursor-grab active:cursor-grabbing"
+                className="relative h-[700px] w-full overflow-hidden cursor-grab active:cursor-grabbing"
                 onWheel={handleWheel}
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}

@@ -102,7 +102,7 @@ export function TeamSwitcher({ hotels, selectedHotel, onSelectHotel }: TeamSwitc
               <>
                 <Avatar className="mr-2 h-5 w-5">
                   <AvatarImage
-                    src={`https://hebbkx1anhila5yf.public.blob.vercel-storage.com/design-mode-images/%24%7BselectedHotel.id%7D-y4lyIjwxtBmT9DilJXB2eTIqRAc1jt.png`}
+                    src={`https://hebbkx1anhila5yf.public.blob.vercel-storage.com/design-mode-images/%24%7BselectedHotel.id%7D%281%29-ftpFOR5YcyxE6vCNgQX2i7YHYabTgg.png`}
                     alt={selectedHotel.nombre}
                     className="grayscale"
                   />
@@ -133,7 +133,7 @@ export function TeamSwitcher({ hotels, selectedHotel, onSelectHotel }: TeamSwitc
                   >
                     <Avatar className="mr-2 h-5 w-5">
                       <AvatarImage
-                        src={`https://hebbkx1anhila5yf.public.blob.vercel-storage.com/design-mode-images/%24%7Bhotel.id%7D-U4YO6qm9bNzxFjcXsK46uhK3kiW0Ll.png`}
+                        src={`https://hebbkx1anhila5yf.public.blob.vercel-storage.com/design-mode-images/%24%7Bhotel.id%7D%281%29-2xf6JyCX2yrJsIrr3A279cgrHY3vPK.png`}
                         alt={hotel.nombre}
                         className="grayscale"
                       />

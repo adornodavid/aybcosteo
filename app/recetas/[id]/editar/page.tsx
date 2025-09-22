@@ -1413,7 +1413,7 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
           <div className="flex flex-col items-center justify-center p-8 bg-white rounded-lg shadow-xl">
             <div className="relative w-24 h-24 mb-4">
               <Image
-                src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/design-mode-images/EditarReceta%281%29-Qj3yTK4HJ3EqPlzngPksoOZFw77rjw.gif"
+                src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/design-mode-images/EditarReceta%281%29-oylagKIC0YzK5mRePtKc1mbAPedLrD.gif"
                 alt="Procesando..."
                 width={300}
                 height={300}
