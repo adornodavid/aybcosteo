@@ -13,6 +13,7 @@ import {
   eliminarPlatilloDeMenu,
   obtenerDetallePlatillo,
   actualizarPrecioVenta, // Importar la acción de actualizar precio
+  obtenerNombreMenu, // Importar la nueva función
 } from "@/app/actions/menu-platillos-actions"
 import type { MenuPlatillo, Platillo } from "@/lib/types-sistema-costeo"
 import { Button } from "@/components/ui/button"
@@ -46,6 +47,7 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
 
   const [assignedPlatillos, setAssignedPlatillos] = useState<MenuPlatillo[]>([])
   const [availablePlatillos, setAvailablePlatillos] = useState<Platillo[]>([])
+  const [nombreMenu, setNombreMenu] = useState<string>("") // Nuevo estado para el nombre del menú
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false) // Para agregar platillo
   const [selectedPlatilloId, setSelectedPlatilloId] = useState<string>("")
@@ -70,6 +72,20 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
   const [showEditPriceDialog, setShowEditPriceDialog] = useState(false)
   const [platilloToEdit, setPlatilloToEdit] = useState<MenuPlatillo | null>(null)
   const [editPrecioVenta, setEditPrecioVenta] = useState<string>("")
+
+  // Función para obtener el nombre del menú
+  const fetchNombreMenu = useCallback(async () => {
+    const res = await obtenerNombreMenu(menuId)
+    if (res.data) {
+      setNombreMenu(res.data)
+    } else {
+      toast({
+        title: "Error",
+        description: res.error || "Error al cargar el nombre del menú.",
+        variant: "destructive",
+      })
+    }
+  }, [menuId, toast])
 
   const fetchPlatillos = useCallback(async () => {
     setLoading(true)
@@ -103,8 +119,9 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
   }, [menuId, toast])
 
   useEffect(() => {
+    fetchNombreMenu() // Cargar el nombre del menú
     fetchPlatillos()
-  }, [fetchPlatillos])
+  }, [fetchNombreMenu, fetchPlatillos])
 
   // Función para limpiar los inputs del diálogo
   const resetDialogInputs = useCallback(() => {
@@ -384,7 +401,7 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
             <ArrowLeft className="h-4 w-4" />
             <span className="sr-only">Regresar</span>
           </Button>
-          <h1 className="text-3xl font-bold">Recetas de Menú:</h1>
+          <h1 className="text-3xl font-bold">Recetas de Menú: {nombreMenu || "Cargando..."}</h1>
         </div>
         <Button
           id="btnAgregarPlatillo"

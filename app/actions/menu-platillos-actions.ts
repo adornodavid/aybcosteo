@@ -581,3 +581,20 @@ export async function obtenerDetallePlatillo(platilloId: number): Promise<ApiRes
     return { data: null, error: error.message }
   }
 }
+
+// Nueva función para obtener el nombre del menú
+export async function obtenerNombreMenu(menuId: number): Promise<ApiResponse<string | null>> {
+  try {
+    const { data, error } = await supabase.from("menus").select("nombre").eq("id", menuId).single()
+
+    if (error) {
+      console.error("Error al obtener nombre del menú:", error)
+      return { data: null, error: error.message }
+    }
+
+    return { data: data.nombre, error: null }
+  } catch (error: any) {
+    console.error("Error en obtenerNombreMenu:", error)
+    return { data: null, error: error.message }
+  }
+}

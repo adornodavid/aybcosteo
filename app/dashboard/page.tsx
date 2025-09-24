@@ -197,6 +197,7 @@ const mesesDelAño = [
   { id: 6, nombre: "Junio" },
   { id: 7, nombre: "Julio" },
   { id: 8, nombre: "Agosto" },
+  { id: 9, nombre: "Septiembre" },
   //{ id: 9, nombre: "Septiembre" },
 ]
 
@@ -256,7 +257,7 @@ export default function DashboardPage() {
   // Estados de filtros de fecha con valores por defecto
   const fechaActual = new Date()
   const fechaanterior = new Date(fechaActual.getFullYear(), fechaActual.getMonth() - 1, 1)
-  const mesAnterior = fechaActual.getMonth()
+  const mesAnterior = fechaActual.getMonth()+1
   const añoActual = fechaActual.getFullYear()
 
   const [mesSeleccionado, setMesSeleccionado] = useState<string>(mesAnterior.toString())
@@ -1291,7 +1292,7 @@ export default function DashboardPage() {
         <div className="flex flex-col items-center justify-center p-8">
           <div className="relative w-24 h-24 mb-4">
             <Image
-              src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/design-mode-images/CargarPage%281%29%281%29%281%29%281%29-wXL5XtJPxelesrfXlYK81sjjBssUWD.gif"
+              src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/design-mode-images/CargarPage%281%29%281%29%281%29%281%29%281%29-M3rPyDqeRHtqPXLFX3IEKInHZAfD5R.gif"
               alt="Procesando..."
               width={300}
               height={300}
