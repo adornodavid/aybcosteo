@@ -73,7 +73,10 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
 
   const fetchPlatillos = useCallback(async () => {
     setLoading(true)
-    const [assignedRes, availableRes] = await Promise.all([obtenerPlatillosDeMenu(menuId), obtenerTodosLosPlatillos()])
+    const [assignedRes, availableRes] = await Promise.all([
+      obtenerPlatillosDeMenu(menuId),
+      obtenerTodosLosPlatillos(menuId),
+    ])
 
     if (assignedRes.data) {
       setAssignedPlatillos(assignedRes.data)

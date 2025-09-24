@@ -237,7 +237,7 @@ export default function IngredientesPage() {
       <div className="flex flex-col items-center justify-center">
          <div className="relative w-24 h-24 mb-4">
             <Image
-              src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/design-mode-images/CargarPage%281%29-eqtLX9AzyIvXuPKJKQz0BWJW7GdBI1.gif"
+              src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/design-mode-images/CargarPage%281%29%281%29%281%29%281%29-wXL5XtJPxelesrfXlYK81sjjBssUWD.gif"
               alt="Procesando..."
               width={300} // Ajusta el tamaño según sea necesario
               height={300} // Ajusta el tamaño según sea necesario

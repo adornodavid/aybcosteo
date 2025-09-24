@@ -236,8 +236,7 @@ export async function getPlatilloTotalCost(
 
     const valorFloatConfig = configError || !configData ? 0 : configData.valorfloat || 0
     const costoAdministrativo = totalCost * valorFloatConfig + totalCost
-    
-    
+
     return { totalCost, costoAdministrativo, precioSugerido: 0 }
   }
   const totalRecetasCost = recetasSum.reduce((sum, item) => sum + (item.recetacostoparcial || 0), 0)
@@ -515,6 +514,7 @@ export async function finalizarRegistro(
   costoAdministrativo: number,
   precioConIVA: number,
   costoPorcentual: number,
+  hotelId: number, // Agregar el nuevo parámetro
 ) {
   const supabase = createServerComponentClient({ cookies })
   try {
@@ -537,7 +537,10 @@ export async function finalizarRegistro(
 
     const { error: updateCostoError } = await supabase
       .from("platillos")
-      .update({ costototal: totalCost })
+      .update({
+        costototal: totalCost,
+        hotelid: hotelId, // Agregar la actualización del hotelid
+      })
       .eq("id", platilloId)
 
     if (updateCostoError) throw updateCostoError
@@ -597,9 +600,10 @@ export async function finalizarRegistro(
     if (menuDataError || !menuData) throw new Error("No se pudo obtener la información del menú.")
 
     const restauranteId = menuData.restauranteid
-    const hotelId = menuData.restaurantes?.hotelid
+    const hotelIdFromMenu = menuData.restaurantes?.hotelid
 
-    if (!restauranteId || !hotelId) throw new Error("Información de restaurante o hotel no encontrada para el menú.")
+    if (!restauranteId || !hotelIdFromMenu)
+      throw new Error("Información de restaurante o hotel no encontrada para el menú.")
 
     // 4. Insertar en historico (recetas)
     const { data: recetasData, error: recetasDataError } = await supabase
@@ -610,7 +614,7 @@ export async function finalizarRegistro(
 
     if (recetasData && recetasData.length > 0) {
       const historicoRecetasInserts = recetasData.map((r: any) => ({
-        hotelid: hotelId,
+        hotelid: hotelIdFromMenu,
         restauranteid: restauranteId,
         menuid: menuId,
         platilloid: platilloId,
@@ -636,7 +640,7 @@ export async function finalizarRegistro(
 
     if (ingredientesData && ingredientesData.length > 0) {
       const historicoIngredientesInserts = ingredientesData.map((i: any) => ({
-        hotelid: hotelId,
+        hotelid: hotelIdFromMenu,
         restauranteid: restauranteId,
         menuid: menuId,
         platilloid: platilloId,

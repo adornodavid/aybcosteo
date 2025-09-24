@@ -1900,7 +1900,7 @@ export default function EditarPlatilloPage() {
           <div className="flex flex-col items-center justify-center p-8 bg-white rounded-lg shadow-xl">
             <div className="relative w-24 h-24 mb-4">
               <Image
-                src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/design-mode-images/EditarReceta%281%29-oylagKIC0YzK5mRePtKc1mbAPedLrD.gif"
+                src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/design-mode-images/EditarReceta%281%29%281%29%281%29%281%29-P6nVNCVhbAevqtFe78e212sQHVmdZF.gif"
                 alt="Procesando..."
                 width={300}
                 height={300}

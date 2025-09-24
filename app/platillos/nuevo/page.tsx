@@ -608,6 +608,7 @@ export default function NuevoPlatilloPage() {
           costoAdmin,
           precioConIVANum,
           costoPorcentualNum,
+          Number(hotelId), // Agregar el hotelId como parámetro
         ),
         new Promise((resolve) => setTimeout(resolve, 6000)), // Mínimo 6 segundos de animación
       ])
@@ -649,7 +650,7 @@ export default function NuevoPlatilloPage() {
     [platilloId],
   )
 
-  // Esta es la función que se registra en el NavigationGuardContext
+  // Esta es la función que se registra en el NavigationGuardProvider
   const checkLeaveAndConfirm = useCallback(
     async (targetPath: string): Promise<boolean> => {
       if (platilloId && validaRegistroId === 0) {
@@ -766,7 +767,7 @@ export default function NuevoPlatilloPage() {
             <div className="flex flex-col items-center justify-center p-8 bg-white rounded-lg shadow-xl">
               <div className="relative w-24 h-24 mb-4">
                 <Image
-                  src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/design-mode-images/RegistroReceta%281%29-aJ8h6b2fmtUocIJBK4b5W3RTQ3nMS2.gif"
+                  src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/design-mode-images/RegistroReceta%281%29%281%29%281%29%281%29-cDgCLqpKrSA5YwTBHo7Mufq2QjoBgP.gif"
                   alt="Cocinando"
                   width={200}
                   height={200}

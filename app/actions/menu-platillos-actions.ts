@@ -264,7 +264,7 @@ export async function actualizarPrecioVenta(data: ActualizarPrecioVentaData) {
       .update({
         precioventa: data.precioventa, // Usar 'precioventa'
         margenutilidad: margenUtilidad, // Actualizar margen de utilidad
-        precioconiva: (data.precioventa * .16) + data.precioventa, // Usar 'precioventa'
+        precioconiva: data.precioventa * 0.16 + data.precioventa, // Usar 'precioventa'
         // No hay 'updated_at' en tu SQL, así que lo omito
       })
       .eq("menuid", data.menuid) // Usar 'menuid'
@@ -499,12 +499,33 @@ export async function obtenerPlatillosDeMenu(menuid: number): Promise<ApiRespons
   }
 }
 
-export async function obtenerTodosLosPlatillos(): Promise<ApiResponse<Platillo[]>> {
+export async function obtenerTodosLosPlatillos(menuId: number): Promise<ApiResponse<Platillo[]>> {
   try {
+    // Primero obtener el hotelid del menú seleccionado
+    const { data: menuData, error: menuError } = await supabase
+      .from("menus")
+      .select(`
+        restauranteid,
+        restaurantes (
+          hotelid
+        )
+      `)
+      .eq("id", menuId)
+      .single()
+
+    if (menuError || !menuData || !menuData.restaurantes) {
+      console.error("Error al obtener hotelid del menú:", menuError)
+      return { data: null, error: menuError?.message || "Error al obtener información del menú" }
+    }
+
+    const hotelId = menuData.restaurantes.hotelid
+
+    // Ahora obtener los platillos filtrados por hotelid
     const { data, error } = await supabase
       .from("platillos")
-      .select("id, nombre, costototal, costoadministrativo, imgurl") // Usar 'costototal', 'costoadministrativo' y 'imgurl'
+      .select("id, nombre, costototal, costoadministrativo, imgurl")
       .eq("activo", true)
+      .eq("hotelid", hotelId) // Filtrar por hotelid
       .order("nombre", { ascending: true })
 
     if (error) {

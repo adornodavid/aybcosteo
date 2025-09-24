@@ -120,6 +120,9 @@ export default function AnalisisCostosPage() {
     position: { x: number; y: number }
   } | null>(null)
 
+  // Estado para el rango de costo porcentual
+  const [rangoCosto, setRangoCosto] = useState<[number, number]>([1, 60])
+
   // Colores para las líneas de los platillos
   const colors = [
     "#8884d8",
@@ -139,12 +142,20 @@ export default function AnalisisCostosPage() {
   const processDataByPlatillo = useMemo(() => {
     if (chartData.length === 0) return []
 
+    // Filtrar datos por rango de costo porcentual
+    const filteredData = chartData.filter((item) => {
+      const costoPorcentual = item.costoporcentual || 0
+      return costoPorcentual >= rangoCosto[0] && costoPorcentual <= rangoCosto[1]
+    })
+
+    if (filteredData.length === 0) return []
+
     // Obtener platillos únicos
-    const uniquePlatillos = Array.from(new Set(chartData.map((item) => item.platilloid)))
+    const uniquePlatillos = Array.from(new Set(filteredData.map((item) => item.platilloid)))
 
     // Crear dataset para cada platillo
     const datasets: PlatilloDataset[] = uniquePlatillos.map((platilloId, index) => {
-      const platilloData = chartData.filter((item) => item.platilloid === platilloId)
+      const platilloData = filteredData.filter((item) => item.platilloid === platilloId)
       const platilloNombre = platilloData[0]?.nombreplatillo || `Platillo ${platilloId}`
 
       return {
@@ -156,14 +167,22 @@ export default function AnalisisCostosPage() {
     })
 
     return datasets
-  }, [chartData])
+  }, [chartData, rangoCosto])
 
-  // Crear datos combinados para el gráfico - NUEVA LÓGICA CORREGIDA
+  // Crear datos combinados para el gráfico - NUEVA LÓGICA CORREGIDA CON FILTRO DE RANGO
   const combinedChartData = useMemo(() => {
     if (chartData.length === 0) return []
 
+    // Filtrar datos por rango de costo porcentual
+    const filteredData = chartData.filter((item) => {
+      const costoPorcentual = item.costoporcentual || 0
+      return costoPorcentual >= rangoCosto[0] && costoPorcentual <= rangoCosto[1]
+    })
+
+    if (filteredData.length === 0) return []
+
     // Obtener todas las fechas únicas y ordenarlas
-    const allDates = Array.from(new Set(chartData.map((item) => item.fechacreacion))).sort()
+    const allDates = Array.from(new Set(filteredData.map((item) => item.fechacreacion))).sort()
 
     // Crear el array de datos combinados
     return allDates.map((fecha) => {
@@ -171,7 +190,10 @@ export default function AnalisisCostosPage() {
 
       // Para cada platillo, buscar si tiene datos en esta fecha
       platillosDatasets.forEach((dataset) => {
-        const itemForDate = dataset.data.find((item) => item.fechacreacion === fecha)
+        const itemForDate = dataset.data.find((item) => {
+          const costoPorcentual = item.costoporcentual || 0
+          return item.fechacreacion === fecha && costoPorcentual >= rangoCosto[0] && costoPorcentual <= rangoCosto[1]
+        })
         if (itemForDate) {
           dataPoint[`platillo_${dataset.id}`] = itemForDate.costoporcentual
           // Guardar referencia al item completo para el tooltip
@@ -182,7 +204,7 @@ export default function AnalisisCostosPage() {
 
       return dataPoint
     })
-  }, [chartData, platillosDatasets])
+  }, [chartData, platillosDatasets, rangoCosto])
 
   // --- Cargas ---
   // Cargar hoteles al inicio y seleccionar el primero
@@ -689,6 +711,73 @@ export default function AnalisisCostosPage() {
               Buscar
             </Button>
           </form>
+        </CardContent>
+      </Card>
+
+      {/* Nuevo input de rango de costo */}
+      <Card className="w-96">
+        <CardHeader>
+          <CardTitle>Filtro por Rango de Costo %</CardTitle>
+        </CardHeader>
+        <CardContent className="p-1 pt-0">
+          <div className="space-y-4">
+            {/*<div className="flex items-center space-x-4">
+              <Label htmlFor="rangoCosto" className="text-sm font-medium">
+                Rango de Costo: {rangoCosto[0]}% - {rangoCosto[1]}%
+              </Label>
+            </div>*/}
+            <div className="px-2">
+              <input
+                type="range"
+                id="rangoCostoMin"
+                min="1"
+                max="60"
+                value={rangoCosto[0]}
+                onChange={(e) => {
+                  const newMin = Number(e.target.value)
+                  if (newMin <= rangoCosto[1]) {
+                    setRangoCosto([newMin, rangoCosto[1]])
+                  }
+                }}
+                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
+                style={{
+                  background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${((rangoCosto[0] - 1) / 59) * 100}%, #e5e7eb ${((rangoCosto[0] - 1) / 59) * 100}%, #e5e7eb 100%)`,
+                }}
+              />
+              <div className="flex justify-between text-xs text-gray-500 mt-1">
+                <span>Mínimo: {rangoCosto[0]}%</span>
+                <span>1% - 60%</span>
+              </div>
+            </div>
+            {/*<div className="px-2">
+              <input
+                type="range"
+                id="rangoCostoMax"
+                min="1"
+                max="60"
+                value={rangoCosto[1]}
+                onChange={(e) => {
+                  const newMax = Number(e.target.value)
+                  if (newMax >= rangoCosto[0]) {
+                    setRangoCosto([rangoCosto[0], newMax])
+                  }
+                }}
+                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
+                style={{
+                  background: `linear-gradient(to right, #e5e7eb 0%, #e5e7eb ${((rangoCosto[1] - 1) / 59) * 100}%, #3b82f6 ${((rangoCosto[1] - 1) / 59) * 100}%, #3b82f6 100%)`,
+                }}
+              />
+              <div className="flex justify-between text-xs text-gray-500 mt-1">
+                <span>Máximo: {rangoCosto[1]}%</span>
+                <span>1% - 60%</span>
+              </div>
+            </div>
+            <div className="flex justify-center">
+              <Button variant="outline" size="sm" onClick={() => setRangoCosto([1, 60])} className="text-xs">
+                Restablecer Rango
+              </Button>
+            </div>*/}
+          </div>
         </CardContent>
       </Card>
 
