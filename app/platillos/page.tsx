@@ -175,7 +175,7 @@ export default function PlatillosPage() {
           )
         `)
 
-      if (nombre) query = query.like("nombre", `%${nombre}%`)
+      if (nombre) query = query.ilike("nombre", `%${nombre}%`)
       if (hotelId !== -1) query = query.eq("platillosxmenu.menus.restaurantes.hoteles.id", hotelId)
       if (restauranteId !== -1) query = query.eq("platillosxmenu.menus.restaurantes.id", restauranteId)
       if (menuId !== -1) query = query.eq("platillosxmenu.menus.id", menuId)
@@ -233,7 +233,7 @@ export default function PlatillosPage() {
           { count: "exact", head: true },
         )
 
-        if (nombre) countQuery = countQuery.like("nombre", `%${nombre}%`)
+        if (nombre) countQuery = countQuery.ilike("nombre", `%${nombre}%`)
         if (hotelId !== -1) countQuery = countQuery.eq("platillosxmenu.menus.restaurantes.hoteles.id", hotelId)
         if (restauranteId !== -1) countQuery = countQuery.eq("platillosxmenu.menus.restaurantes.id", restauranteId)
         if (menuId !== -1) countQuery = countQuery.eq("platillosxmenu.menus.id", menuId)
@@ -591,7 +591,7 @@ export default function PlatillosPage() {
           <div className="flex flex-col items-center justify-center p-8">
             <div className="relative w-24 h-24 mb-4">
               <Image
-                src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/design-mode-images/CargarPage%281%29%281%29%281%29%281%29%281%29-M3rPyDqeRHtqPXLFX3IEKInHZAfD5R.gif"
+                src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/design-mode-images/CargarPage%281%29%281%29%281%29%281%29%281%29%281%29%281%29%281%29%281%29%281%29%281%29-gizJKKg9b0KEafLqXqsorTrqMiiel0.gif"
                 alt="Procesando..."
                 width={300} // Ajusta el tamaño según sea necesario
                 height={300} // Ajusta el tamaño según sea necesario
@@ -841,7 +841,10 @@ export default function PlatillosPage() {
                               <Eye className="h-4 w-4" />
                             )}
                           </Button>
-                          <Link href={`/platillos/editar?getPlatilloId=${p.PlatilloId}`} passHref>
+                          <Link
+                            href={`/platillos/editar?getPlatilloId=${p.PlatilloId}&getMenuNombre=${p.MenuNombre}`}
+                            passHref
+                          >
                             <Button variant="ghost" size="icon" title="Editar">
                               <Edit className="h-4 w-4" />
                             </Button>

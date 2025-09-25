@@ -37,7 +37,6 @@ import {
   getRecetas as getRecetasForDropdown,
   getUnidadesMedidaByIngrediente,
 } from "@/app/actions/platillos-wizard-actions"
-import { calcularCostoPorcentual, calcularPrecioConIVA } from "@/app/actions/platillos-actions"
 import { Label } from "@/components/ui/label"
 
 interface PlatilloData {
@@ -95,9 +94,12 @@ export default function EditarPlatilloPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const platilloId = searchParams.get("getPlatilloId")
+  //const menuId = searchParams.get("getMenuId") // Obtener menuId de los parámetros
+  const menuNombre = searchParams.get("getMenuNombre")
 
   const [currentStep, setCurrentStep] = useState(1)
   const [platilloData, setPlatilloData] = useState<PlatilloData | null>(null)
+  const [menuId, setMenuId] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showAnimation, setShowAnimation] = useState(false)
@@ -186,6 +188,43 @@ export default function EditarPlatilloPage() {
           setImageUrl(data.imgurl) // Establecer la URL de la imagen guardada
           setImagenPreview(data.imgurl) // También establecer la previsualización inicial
         }
+		
+    console.log("nombre", menuNombre)
+		// Obtener el menuId basándose en el nombre del menú si se proporciona
+        if (menuNombre) {
+          const { data: menuData, error: menuError } = await supabase
+            .from("menus")
+            .select("id")
+            .eq("nombre", menuNombre)
+            .single()
+
+          if (menuError) {
+            console.error("Error al obtener menuId por nombre:", menuError)
+            toast.error("Error al obtener información del menú.")
+          } else if (menuData) {
+            setMenuId(menuData.id)
+            console.log("MenuId obtenido:", menuData.id)
+          }
+        } else {
+          // Si no se proporciona menuNombre, intentar obtener el primer menú asociado al platillo
+          const { data: platilloMenuData, error: platilloMenuError } = await supabase
+            .from("platillosxmenu")
+            .select(`
+              menuid,
+              menus!inner(id, nombre)
+            `)
+            .eq("platilloid", platilloId)
+            .limit(1)
+            .single()
+
+          if (platilloMenuError) {
+            console.error("Error al obtener menú asociado al platillo:", platilloMenuError)
+          } else if (platilloMenuData) {
+            setMenuId(platilloMenuData.menuid)
+            console.log("MenuId obtenido desde platillosxmenu:", platilloMenuData.menuid)
+          }
+        }
+		
       } catch (error) {
         console.error("Error inesperado al cargar receta:", error)
         toast.error("Error inesperado al cargar receta.")
@@ -196,7 +235,7 @@ export default function EditarPlatilloPage() {
     }
 
     fetchPlatilloData()
-  }, [platilloId, router])
+  }, [platilloId, menuNombre, router])
 
   useEffect(() => {
     const loadStep2Data = async () => {
@@ -321,6 +360,7 @@ export default function EditarPlatilloPage() {
           .from("platillosxmenu")
           .select("precioventa, precioconiva")
           .eq("platilloid", platilloId)
+          .eq("menuid", menuId)
           .limit(1)
           .single()
 
@@ -330,12 +370,14 @@ export default function EditarPlatilloPage() {
             setCostoPorcentual(Costoporcentual.toFixed(2))
             setPrecioVenta(platilloMenuData.precioventa.toString())
             // Calcular automáticamente los otros valores
-           
+
             /*const costoPorcentualCalculado = calcularCostoPorcentual(
               costoAdministrativo || 0,
               platilloMenuData.precioventa,
             )
             */
+            console.log("wwwwa", menuId)
+            console.log("wa", platilloMenuData.precioventa)
 
             const precioConIVACalculado = platilloMenuData.precioventa * 0.16 + platilloMenuData.precioventa
             setPrecioConIVA(precioConIVACalculado.toFixed(2))
@@ -448,7 +490,7 @@ export default function EditarPlatilloPage() {
       //setCostoPorcentual(costoPorcentualCalculado.toFixed(2))
       //setPrecioConIVA(precioConIVACalculado.toFixed(2))
       const precioConIVACalculado = precioVentaNum * 0.16 + precioVentaNum
-            setPrecioConIVA(precioConIVACalculado.toFixed(2))
+      setPrecioConIVA(precioConIVACalculado.toFixed(2))
     } else {
       setCostoPorcentual("")
       setPrecioConIVA("")
@@ -609,7 +651,7 @@ export default function EditarPlatilloPage() {
     const selectedIng =
       ingredientesDropdown.find((i) => i.id.toString() === selectedIngredienteId) ||
       filteredIngredientes.find((i) => i.id.toString() === selectedIngredienteId)
-    if (selectedIngredienteId && selectedIng && term !== `${selectedIng.codigo} - ${selectedIng.nombre}`) {
+    if (selectedIngredienteId && selectedIng && term !== `${selectedIng.codigo} - ${selected.nombre}`) {
       setSelectedIngredienteId("")
       setCostoIngrediente("")
       setSelectedUnidadMedidaId("")
@@ -972,33 +1014,54 @@ export default function EditarPlatilloPage() {
 
           if (updateCostoAdministrativoError) throw updateCostoAdministrativoError
 
-          // Actualizar platillosxmenu con los nuevos valores
-          const { data: platillosxMenuEntries, error: platillosxMenuError } = await supabase
-            .from("platillosxmenu")
-            .select("id")
-            .eq("platilloid", platilloId)
+          // Actualizar platillosxmenu solo para el menuId específico si se proporciona
+          console.log("menu",menuId)
+          if (menuId) {
+            const margenUtilidadCalculado = precioVentaNum - costoAdministrativoCalculado
 
-          if (platillosxMenuError) {
-            console.error("Error al obtener entradas de platillosxmenu:", platillosxMenuError)
-            throw new Error("Error al obtener datos de platillosxmenu.")
-          }
+            const { error: updatePlatillosxMenuError } = await supabase
+              .from("platillosxmenu")
+              .update({
+                precioventa: precioVentaNum,
+                precioconiva: precioConIVANum,
+                margenutilidad: margenUtilidadCalculado,
+              })
+              .eq("platilloid", platilloId)
+              .eq("menuid", menuId)
 
-          if (platillosxMenuEntries && platillosxMenuEntries.length > 0) {
-            for (const entry of platillosxMenuEntries) {
-              const margenUtilidadCalculado = precioVentaNum - costoAdministrativoCalculado
+            if (updatePlatillosxMenuError) {
+              console.error(`Error al actualizar platillosxmenu para menuId ${menuId}:`, updatePlatillosxMenuError)
+              throw updatePlatillosxMenuError
+            }
+          } else {
+            // Si no hay menuId específico, actualizar todos los registros del platillo
+            const { data: platillosxMenuEntries, error: platillosxMenuError } = await supabase
+              .from("platillosxmenu")
+              .select("id")
+              .eq("platilloid", platilloId)
 
-              const { error: updatePlatillosxMenuError } = await supabase
-                .from("platillosxmenu")
-                .update({
-                  precioventa: precioVentaNum,
-                  precioconiva: precioConIVANum,
-                  margenutilidad: margenUtilidadCalculado,
-                })
-                .eq("id", entry.id)
+            if (platillosxMenuError) {
+              console.error("Error al obtener entradas de platillosxmenu:", platillosxMenuError)
+              throw new Error("Error al obtener datos de platillosxmenu.")
+            }
 
-              if (updatePlatillosxMenuError) {
-                console.error(`Error al actualizar platillosxmenu para ID ${entry.id}:`, updatePlatillosxMenuError)
-                throw updatePlatillosxMenuError
+            if (platillosxMenuEntries && platillosxMenuEntries.length > 0) {
+              for (const entry of platillosxMenuEntries) {
+                const margenUtilidadCalculado = precioVentaNum - costoAdministrativoCalculado
+
+                const { error: updatePlatillosxMenuError } = await supabase
+                  .from("platillosxmenu")
+                  .update({
+                    precioventa: precioVentaNum,
+                    precioconiva: precioConIVANum,
+                    margenutilidad: margenUtilidadCalculado,
+                  })
+                  .eq("id", entry.id)
+
+                if (updatePlatillosxMenuError) {
+                  console.error(`Error al actualizar platillosxmenu para ID ${entry.id}:`, updatePlatillosxMenuError)
+                  throw updatePlatillosxMenuError
+                }
               }
             }
           }
@@ -1019,91 +1082,160 @@ export default function EditarPlatilloPage() {
 
           if (platilloMenusError) throw platilloMenusError
 
-          const today = new Date().toISOString().split("T")[0]
+          const today = new Date()
+          const currentMonth = today.getMonth() + 1 // getMonth() returns 0-11, so add 1
+          const currentYear = today.getFullYear()
 
           for (const menuAssoc of platilloMenus) {
-            const { data: existingHistorico, error: checkHistoricoError } = await supabase
-              .from("historico")
-              .select("idrec")
-              .eq("platilloid", platilloId)
-              .eq("menuid", menuAssoc.menuid)
-              .eq("fechacreacion", today)
+            const hotelId = menuAssoc.menus.restaurantes.hotelid
+            const restauranteId = menuAssoc.menus.restaurantes.restauranteid
+            const menuIdAssoc = menuAssoc.menuid
+            const PrecioAssoc = menuAssoc.precioventa
 
-            if (checkHistoricoError) {
-              console.error("Error checking existing historico records:", checkHistoricoError)
-              throw new Error("Error al verificar registros históricos existentes.")
+             const CostoAssoc = ((costoAdministrativoCalculado / PrecioAssoc)*100)
+            // Verificar si existe registro del mismo mes para este platilloid y menuid
+            const { data: existingHistoricoMonth, error: checkHistoricoMonthError } = await supabase
+              .from("historico")
+              .select("idrec, ingredienteid, recetaid")
+              .eq("platilloid", platilloId)
+              .eq("menuid", menuIdAssoc)
+              .gte("fechacreacion", `${currentYear}-${currentMonth.toString().padStart(2, "0")}-01`)
+              .lt("fechacreacion", `${currentYear}-${(currentMonth + 1).toString().padStart(2, "0")}-01`)
+
+            if (checkHistoricoMonthError) {
+              console.error("Error checking existing historico records for month:", checkHistoricoMonthError)
+              throw new Error("Error al verificar registros históricos del mes.")
             }
 
-            if (existingHistorico && existingHistorico.length > 0) {
+            if (existingHistoricoMonth && existingHistoricoMonth.length > 0) {
+              // Existe registro del mismo mes - BORRAR y volver a INSERTAR
               console.log(
-                `Deleting existing historico records for platilloId: ${platilloId}, menuId: ${menuAssoc.menuid}, date: ${today}`,
+                `Deleting and re-inserting historico records for platilloId: ${platilloId}, menuId: ${menuIdAssoc}, month: ${currentMonth}/${currentYear}`,
               )
+
+              // Borrar todos los registros del mismo mes para este platilloid y menuid
               const { error: deleteHistoricoError } = await supabase
                 .from("historico")
                 .delete()
                 .eq("platilloid", platilloId)
-                .eq("menuid", menuAssoc.menuid)
-                .eq("fechacreacion", today)
+                .eq("menuid", menuIdAssoc)
+                .gte("fechacreacion", `${currentYear}-${currentMonth.toString().padStart(2, "0")}-01`)
+                .lt("fechacreacion", `${currentYear}-${(currentMonth + 1).toString().padStart(2, "0")}-01`)
 
               if (deleteHistoricoError) {
                 console.error("Error deleting existing historico records:", deleteHistoricoError)
                 throw new Error("Error al eliminar registros históricos existentes.")
               }
-            }
 
-            const historicoIngredientesToInsert = []
-            const hotelId = menuAssoc.menus.restaurantes.hotelid
-            const restauranteId = menuAssoc.menus.restaurantes.restauranteid
-            const menuId = menuAssoc.menuid
+              // Insertar nuevos registros con datos actualizados
+              const historicoIngredientesToInsert = []
 
-            for (const ing of ingredientesPlatillo) {
-              historicoIngredientesToInsert.push({
-                hotelid: hotelId,
-                restauranteid: restauranteId,
-                menuid: menuId,
-                platilloid: platilloId,
-                ingredienteid: ing.ingredienteid,
-                recetaid: null,
-                cantidad: ing.cantidad,
-                costo: ing.ingredientecostoparcial,
-                activo: true,
-                fechacreacion: new Date().toISOString(),
-                precioventa: precioVentaNum,
-                costoporcentual: costoPorcentualNum,
-              })
-            }
+              for (const ing of ingredientesPlatillo) {
+                historicoIngredientesToInsert.push({
+                  hotelid: hotelId,
+                  restauranteid: restauranteId,
+                  menuid: menuIdAssoc,
+                  platilloid: platilloId,
+                  ingredienteid: ing.ingredienteid,
+                  recetaid: null,
+                  cantidad: ing.cantidad,
+                  costo: ing.ingredientecostoparcial,
+                  activo: true,
+                  fechacreacion: new Date().toISOString(),
+                  precioventa: PrecioAssoc,
+                  costoporcentual: CostoAssoc,
+                })
+              }
 
-            if (historicoIngredientesToInsert.length > 0) {
-              const { error: insertIngredientesHistoricoError } = await supabase
-                .from("historico")
-                .insert(historicoIngredientesToInsert)
-              if (insertIngredientesHistoricoError) throw insertIngredientesHistoricoError
-            }
+              if (historicoIngredientesToInsert.length > 0) {
+                const { error: insertIngredientesHistoricoError } = await supabase
+                  .from("historico")
+                  .insert(historicoIngredientesToInsert)
+                if (insertIngredientesHistoricoError) throw insertIngredientesHistoricoError
+              }
 
-            const historicoRecetasToInsert = []
+              const historicoRecetasToInsert = []
 
-            for (const rec of recetasPlatillo) {
-              historicoRecetasToInsert.push({
-                hotelid: hotelId,
-                restauranteid: restauranteId,
-                menuid: menuId,
-                platilloid: platilloId,
-                ingredienteid: null,
-                recetaid: rec.recetaid,
-                cantidad: rec.cantidad,
-                costo: rec.recetacostoparcial,
-                activo: true,
-                fechacreacion: new Date().toISOString(),
-                precioventa: precioVentaNum,
-                costoporcentual: costoPorcentualNum,
-              })
-            }
+              for (const rec of recetasPlatillo) {
+                historicoRecetasToInsert.push({
+                  hotelid: hotelId,
+                  restauranteid: restauranteId,
+                  menuid: menuIdAssoc,
+                  platilloid: platilloId,
+                  ingredienteid: null,
+                  recetaid: rec.recetaid,
+                  cantidad: rec.cantidad,
+                  costo: rec.recetacostoparcial,
+                  activo: true,
+                  fechacreacion: new Date().toISOString(),
+                  precioventa: PrecioAssoc,
+                  costoporcentual: CostoAssoc,
+                })
+              }
 
-            if (historicoRecetasToInsert.length > 0) {
-              const { error: insertRecetasHistoricoError } = await supabase
-                .from("historico")
-                .insert(historicoRecetasToInsert)
-              if (insertRecetasHistoricoError) throw insertRecetasHistoricoError
+              if (historicoRecetasToInsert.length > 0) {
+                const { error: insertRecetasHistoricoError } = await supabase
+                  .from("historico")
+                  .insert(historicoRecetasToInsert)
+                if (insertRecetasHistoricoError) throw insertRecetasHistoricoError
+              }
+            } else {
+              // No existe registro del mismo mes - hacer INSERT
+              console.log(
+                `Inserting new historico records for platilloId: ${platilloId}, menuId: ${menuIdAssoc}, month: ${currentMonth}/${currentYear}`,
+              )
+
+              const historicoIngredientesToInsert = []
+
+              for (const ing of ingredientesPlatillo) {
+                historicoIngredientesToInsert.push({
+                  hotelid: hotelId,
+                  restauranteid: restauranteId,
+                  menuid: menuIdAssoc,
+                  platilloid: platilloId,
+                  ingredienteid: ing.ingredienteid,
+                  recetaid: null,
+                  cantidad: ing.cantidad,
+                  costo: ing.ingredientecostoparcial,
+                  activo: true,
+                  fechacreacion: new Date().toISOString(),
+                  precioventa: precioVentaNum,
+                  costoporcentual: costoPorcentualNum,
+                })
+              }
+
+              if (historicoIngredientesToInsert.length > 0) {
+                const { error: insertIngredientesHistoricoError } = await supabase
+                  .from("historico")
+                  .insert(historicoIngredientesToInsert)
+                if (insertIngredientesHistoricoError) throw insertIngredientesHistoricoError
+              }
+
+              const historicoRecetasToInsert = []
+
+              for (const rec of recetasPlatillo) {
+                historicoRecetasToInsert.push({
+                  hotelid: hotelId,
+                  restauranteid: restauranteId,
+                  menuid: menuIdAssoc,
+                  platilloid: platilloId,
+                  ingredienteid: null,
+                  recetaid: rec.recetaid,
+                  cantidad: rec.cantidad,
+                  costo: rec.recetacostoparcial,
+                  activo: true,
+                  fechacreacion: new Date().toISOString(),
+                  precioventa: precioVentaNum,
+                  costoporcentual: costoPorcentualNum,
+                })
+              }
+
+              if (historicoRecetasToInsert.length > 0) {
+                const { error: insertRecetasHistoricoError } = await supabase
+                  .from("historico")
+                  .insert(historicoRecetasToInsert)
+                if (insertRecetasHistoricoError) throw insertRecetasHistoricoError
+              }
             }
           }
           return { success: true }
@@ -1791,7 +1923,6 @@ export default function EditarPlatilloPage() {
 
               {/* Nuevos inputs agregados */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6 p-4 border rounded-lg bg-gray-50">
-                
                 <div>
                   <Label htmlFor="txtCostoPorcentual">Costo%</Label>
                   <Input
@@ -1822,8 +1953,7 @@ export default function EditarPlatilloPage() {
                     className="text-center"
                   />
                 </div>
-                <div className="col-span-1">
-                </div>
+                <div className="col-span-1"></div>
                 <div className="col-span-1">
                   <Label htmlFor="txtPrecioConIVA">Precio con IVA</Label>
                   <Input
@@ -1900,7 +2030,7 @@ export default function EditarPlatilloPage() {
           <div className="flex flex-col items-center justify-center p-8 bg-white rounded-lg shadow-xl">
             <div className="relative w-24 h-24 mb-4">
               <Image
-                src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/design-mode-images/EditarReceta%281%29%281%29%281%29%281%29%281%29-aGTvxsd68VahUdRSzyd7fkLabL5b11.gif"
+                src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/design-mode-images/EditarReceta%281%29%281%29%281%29%281%29%281%29%281%29%281%29%281%29%281%29%281%29%281%29-VyHCYHBeANVn5p6z3e3Mqkep6XHOIK.gif"
                 alt="Procesando..."
                 width={300}
                 height={300}

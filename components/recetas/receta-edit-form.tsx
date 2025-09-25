@@ -414,7 +414,7 @@ export function RecetaEditForm({ recetaId }: RecetaEditFormProps) {
           <div className="flex flex-col items-center justify-center p-8 bg-white rounded-lg shadow-xl">
             <div className="relative w-24 h-24 mb-4">
               <Image
-                src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/design-mode-images/RegistrarSubReceta%281%29%281%29%281%29%281%29%281%29-tkmzrLz2nOzQwtBniPrJJT8i2ErjUV.gif"
+                src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/design-mode-images/RegistrarSubReceta%281%29%281%29%281%29%281%29%281%29%281%29%281%29%281%29%281%29%281%29%281%29-OZ9zzjKr7NzoqIPQwTNacQ9bdOZg6q.gif"
                 alt="Procesando..."
                 width={400} // Ajusta el tamaño según sea necesario
                 height={400} // Ajusta el tamaño según sea necesario
