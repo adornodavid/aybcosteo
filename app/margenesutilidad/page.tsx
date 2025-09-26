@@ -10,43 +10,27 @@ import {
   getPlatilloCostHistory,
   getPlatillosWithMargins,
   getPlatilloComparisonData, // Importar la nueva acción
+  obtenerReporteRecetas, // Nueva función para el reporte
+  obtenerIngredientesAumentoPrecio, // Nueva función agregada
+  obtenerCambiosCostosPlatillos, // Declaración de la variable
   type PlatilloMargin,
   type PlatilloComparisonData, // Importar la nueva interfaz
 } from "@/app/actions/margenes-actions"
 import {
-  obtenerCambiosCostosPlatillos,
   obtenerCambiosCostosRecetas,
-  obtenerIngredientesAumentoPrecio,
   obtenerIngredientesDisminucionPrecio,
   obtenerHotelesPorRol,
   obtenerDetallesPlatilloTooltip,
   obtenerDetallesRecetaTooltip,
 } from "@/app/actions/dashboard-actions"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Command, CommandList, CommandGroup, CommandInput, CommandItem, CommandEmpty } from "@/components/ui/command"
-import { Calendar } from "@/components/ui/calendar"
-import { format } from "date-fns"
-import { CalendarIcon, SearchIcon, CheckIcon, ChefHat, HelpCircle, ShoppingCart } from "lucide-react"
-import { cn } from "@/lib/utils"
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  Legend,
-} from "recharts"
+import { Button } from "@/components/ui/button"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Loader2 } from "@/components/ui/loader2"
+import { format } from "date-fns"
+import { HelpCircle, FileText, Download, ChevronUp, ChevronDown } from "lucide-react"
 import { Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import {
   getTopMarginPlatillos,
@@ -55,7 +39,6 @@ import {
   type MarginPlatilloSummary,
   type PlatilloDetail,
 } from "@/app/actions/margenes-actions"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 interface MenuOption {
   id: number
@@ -120,9 +103,13 @@ const mesesDelAño = [
   { id: 5, nombre: "Mayo" },
   { id: 6, nombre: "Junio" },
   { id: 7, nombre: "Julio" },
+  { id: 8, nombre: "Agosto" },
+  { id: 9, nombre: "Septiembre" },
 ]
 
 const añosDisponibles = [{ id: 2025, nombre: "2025" }]
+
+const ITEMS_PER_PAGE = 20
 
 export default function MargenesUtilidadPage() {
   const [menuOptions, setMenuOptions] = useState<MenuOption[]>([])
@@ -169,6 +156,29 @@ export default function MargenesUtilidadPage() {
   const [detallesPlatilloTooltip, setDetallesPlatilloTooltip] = useState<DetallesPlatilloTooltip | null>(null)
   const [detallesRecetaTooltip, setDetallesRecetaTooltip] = useState<DetallesRecetaTooltip | null>(null)
   const [loadingTooltip, setLoadingTooltip] = useState(false)
+
+  // Estados para el nuevo reporte de recetas
+  const [reporteRecetas, setReporteRecetas] = useState<any[]>([])
+  const [isLoadingReporte, setIsLoadingReporte] = useState(false)
+
+  // Estados para paginación del reporte de recetas
+  const [currentPage, setCurrentPage] = useState(1)
+  const [isExporting, setIsExporting] = useState(false)
+
+  // Estados para paginación de variación de costos
+  const [currentPageVariacion, setCurrentPageVariacion] = useState(1)
+
+  // Estados para paginación de ingredientes aumento
+  const [currentPageIngredientes, setCurrentPageIngredientes] = useState(1)
+
+  // Estado para la pestaña activa
+  const [activeTab, setActiveTab] = useState("reporte-recetas")
+
+  // Estado para el ordenamiento
+  const [sortConfig, setSortConfig] = useState<{
+    key: string | null
+    direction: "asc" | "desc"
+  }>({ key: null, direction: "asc" })
 
   useEffect(() => {
     async function loadMenus() {
@@ -243,9 +253,37 @@ export default function MargenesUtilidadPage() {
         if (cambiosRecetasData.success) setCambiosRecetas(cambiosRecetasData.data)
         if (ingredientesAumentoData.success) setIngredientesAumento(ingredientesAumentoData.data)
         if (ingredientesDisminucionData.success) setIngredientesDisminucion(ingredientesDisminucionData.data)
+
+        // Reset páginas cuando cambien los filtros
+        setCurrentPageVariacion(1)
+        setCurrentPageIngredientes(1)
       }
     }
     loadVariacionCostos()
+  }, [hotelSeleccionado, mesSeleccionado, añoSeleccionado])
+
+  // Cargar reporte de recetas cuando cambien los filtros
+  useEffect(() => {
+    async function loadReporteRecetas() {
+      if (hotelSeleccionado && mesSeleccionado && añoSeleccionado) {
+        setIsLoadingReporte(true)
+        try {
+          const reporteData = await obtenerReporteRecetas(
+            Number.parseInt(hotelSeleccionado),
+            Number.parseInt(mesSeleccionado),
+            Number.parseInt(añoSeleccionado),
+          )
+          setReporteRecetas(reporteData)
+          setCurrentPage(1) // Reset a la primera página cuando cambian los filtros
+        } catch (error) {
+          console.error("Error cargando reporte de recetas:", error)
+          setReporteRecetas([])
+        } finally {
+          setIsLoadingReporte(false)
+        }
+      }
+    }
+    loadReporteRecetas()
   }, [hotelSeleccionado, mesSeleccionado, añoSeleccionado])
 
   useEffect(() => {
@@ -360,533 +398,698 @@ export default function MargenesUtilidadPage() {
     }))
   }, [costHistoryData])
 
+  // Función para formatear valores float con 3 decimales
+  const formatValue = (value: any) => {
+    if (value === null || value === undefined) return ""
+    if (typeof value === "number" && !Number.isInteger(value)) {
+      return value.toFixed(3)
+    }
+    return String(value)
+  }
+
+  // Función para manejar el ordenamiento
+  const handleSort = (key: string) => {
+    let direction: "asc" | "desc" = "asc"
+    if (sortConfig.key === key && sortConfig.direction === "asc") {
+      direction = "desc"
+    }
+    setSortConfig({ key, direction })
+    setCurrentPage(1) // Regresar a la página 1 cuando se ordene
+  }
+
+  // Función para ordenar los datos
+  const sortedReporteRecetas = useMemo(() => {
+    if (!sortConfig.key) return reporteRecetas
+
+    return [...reporteRecetas].sort((a, b) => {
+      const aValue = a[sortConfig.key!]
+      const bValue = b[sortConfig.key!]
+
+      // Si ambos valores son números
+      if (typeof aValue === "number" && typeof bValue === "number") {
+        return sortConfig.direction === "asc" ? aValue - bValue : bValue - aValue
+      }
+
+      // Si ambos valores son strings
+      if (typeof aValue === "string" && typeof bValue === "string") {
+        return sortConfig.direction === "asc" ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue)
+      }
+
+      // Convertir a string para comparación general
+      const aStr = String(aValue || "")
+      const bStr = String(bValue || "")
+
+      return sortConfig.direction === "asc" ? aStr.localeCompare(bStr) : bStr.localeCompare(aStr)
+    })
+  }, [reporteRecetas, sortConfig])
+
+  // Actualizar paginatedData para usar sortedReporteRecetas
+  const paginatedData = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
+    const endIndex = startIndex + ITEMS_PER_PAGE
+    return sortedReporteRecetas.slice(startIndex, endIndex)
+  }, [sortedReporteRecetas, currentPage])
+
+  // Actualizar totalPages para usar sortedReporteRecetas
+  const totalPages = Math.ceil(sortedReporteRecetas.length / ITEMS_PER_PAGE)
+
+  // Función para renderizar las columnas con ordenamiento
+  const renderTableHeaders = () => {
+    if (reporteRecetas.length === 0) return null
+
+    const firstRow = reporteRecetas[0]
+    return Object.keys(firstRow).map((key) => (
+      <TableHead key={key} className="cursor-pointer hover:bg-gray-100 select-none" onClick={() => handleSort(key)}>
+        <div className="flex items-center justify-between">
+          <span>{key}</span>
+          <div className="flex flex-col ml-1">
+            <ChevronUp
+              className={`h-3 w-3 ${
+                sortConfig.key === key && sortConfig.direction === "asc" ? "text-blue-600" : "text-gray-400"
+              }`}
+            />
+            <ChevronDown
+              className={`h-3 w-3 -mt-1 ${
+                sortConfig.key === key && sortConfig.direction === "desc" ? "text-blue-600" : "text-gray-400"
+              }`}
+            />
+          </div>
+        </div>
+      </TableHead>
+    ))
+  }
+
+  const renderTableRows = () => {
+    return paginatedData.map((receta, index) => (
+      <TableRow key={index}>
+        {Object.entries(receta).map(([key, value], cellIndex) => (
+          <TableCell key={cellIndex}>{formatValue(value)}</TableCell>
+        ))}
+      </TableRow>
+    ))
+  }
+
+  // Función para exportar a Excel según la pestaña activa
+  const handleExportExcel = async () => {
+    let dataToExport: any[] = []
+    let fileName = ""
+
+    // Determinar qué datos exportar según la pestaña activa
+    switch (activeTab) {
+      case "reporte-recetas":
+        if (reporteRecetas.length === 0) {
+          alert("No hay datos para exportar")
+          return
+        }
+        dataToExport = reporteRecetas
+        const hotelNombre = hoteles.find((h) => h.id.toString() === hotelSeleccionado)?.nombre || "Hotel"
+        const mesNombre = mesesDelAño.find((m) => m.id.toString() === mesSeleccionado)?.nombre || "Mes"
+        fileName = `Reporte_Recetas_${hotelNombre}_${mesNombre}_${añoSeleccionado}.xlsx`
+        break
+
+      case "variacion-costos":
+        if (cambiosPlatillos.length === 0) {
+          alert("No hay datos para exportar")
+          return
+        }
+        dataToExport = cambiosPlatillos.map((platillo) => ({
+          "Nombre Platillo": platillo.nombre,
+          "Mes Anterior": platillo.costo_inicial,
+          "Mes Actual": platillo.costo_actual,
+          "Variación de Costo (%)": platillo.variacion_porcentaje,
+        }))
+        const hotelNombreVar = hoteles.find((h) => h.id.toString() === hotelSeleccionado)?.nombre || "Hotel"
+        const mesNombreVar = mesesDelAño.find((m) => m.id.toString() === mesSeleccionado)?.nombre || "Mes"
+        fileName = `Variacion_Costos_${hotelNombreVar}_${mesNombreVar}_${añoSeleccionado}.xlsx`
+        break
+
+      case "ingredientes-aumento":
+        if (ingredientesAumento.length === 0) {
+          alert("No hay datos para exportar")
+          return
+        }
+        dataToExport = ingredientesAumento.map((ingrediente) => ({
+          "Nombre Ingrediente": ingrediente.nombre,
+          "Mes Anterior": ingrediente.costo_inicial,
+          "Mes Actual": ingrediente.costo_actual,
+          "Variación de Costo (%)": ingrediente.aumento_porcentaje,
+        }))
+        const hotelNombreIng = hoteles.find((h) => h.id.toString() === hotelSeleccionado)?.nombre || "Hotel"
+        const mesNombreIng = mesesDelAño.find((m) => m.id.toString() === mesSeleccionado)?.nombre || "Mes"
+        fileName = `Insumos_Var_Costos_${hotelNombreIng}_${mesNombreIng}_${añoSeleccionado}.xlsx`
+        break
+
+      default:
+        alert("No hay datos para exportar")
+        return
+    }
+
+    setIsExporting(true)
+    try {
+      console.log("Iniciando exportación...", { dataToExport: dataToExport.length })
+
+      // Importación dinámica de XLSX
+      const XLSX = await import("xlsx")
+      console.log("XLSX importado correctamente")
+
+      // Formatear los datos para Excel
+      const excelData = dataToExport.map((row) => {
+        const formattedRow: any = {}
+        Object.entries(row).forEach(([key, value]) => {
+          formattedRow[key] = formatValue(value)
+        })
+        return formattedRow
+      })
+      console.log("Datos formateados:", excelData.length, "filas")
+
+      // Crear worksheet
+      const ws = XLSX.utils.json_to_sheet(excelData)
+      console.log("Worksheet creado")
+
+      // Crear un nuevo workbook
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, "Reporte")
+      console.log("Workbook creado")
+
+      console.log("Nombre del archivo:", fileName)
+
+      // Generar el archivo como array buffer
+      const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" })
+      console.log("Archivo generado, tamaño:", wbout.byteLength, "bytes")
+
+      // Crear blob y descargar
+      const blob = new Blob([wbout], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      })
+      console.log("Blob creado")
+
+      // Crear URL y elemento de descarga
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = fileName
+      link.style.display = "none"
+
+      // Agregar al DOM, hacer click y remover
+      document.body.appendChild(link)
+      console.log("Iniciando descarga...")
+      link.click()
+
+      // Cleanup
+      setTimeout(() => {
+        document.body.removeChild(link)
+        window.URL.revokeObjectURL(url)
+        console.log("Cleanup completado")
+      }, 100)
+
+      console.log("Exportación completada exitosamente")
+    } catch (error) {
+      console.error("Error detallado en exportación:", error)
+      alert(`Error al exportar el archivo: ${error.message || error}`)
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
+  // Funciones de paginación para reporte de recetas
+  const goToPage = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page)
+    }
+  }
+
+  const goToPreviousPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1)
+    }
+  }
+
+  const goToNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1)
+    }
+  }
+
+  // Funciones de paginación para variación de costos
+  const totalPagesVariacion = Math.ceil(cambiosPlatillos.length / ITEMS_PER_PAGE)
+  const goToPageVariacion = (page: number) => {
+    if (page >= 1 && page <= totalPagesVariacion) {
+      setCurrentPageVariacion(page)
+    }
+  }
+
+  const goToPreviousPageVariacion = () => {
+    if (currentPageVariacion > 1) {
+      setCurrentPageVariacion(currentPageVariacion - 1)
+    }
+  }
+
+  const goToNextPageVariacion = () => {
+    if (currentPageVariacion < totalPagesVariacion) {
+      setCurrentPageVariacion(currentPageVariacion + 1)
+    }
+  }
+
+  // Funciones de paginación para ingredientes aumento
+  const totalPagesIngredientes = Math.ceil(ingredientesAumento.length / ITEMS_PER_PAGE)
+  const goToPageIngredientes = (page: number) => {
+    if (page >= 1 && page <= totalPagesIngredientes) {
+      setCurrentPageIngredientes(page)
+    }
+  }
+
+  const goToPreviousPageIngredientes = () => {
+    if (currentPageIngredientes > 1) {
+      setCurrentPageIngredientes(currentPageIngredientes - 1)
+    }
+  }
+
+  const goToNextPageIngredientes = () => {
+    if (currentPageIngredientes < totalPagesIngredientes) {
+      setCurrentPageIngredientes(currentPageIngredientes + 1)
+    }
+  }
+
+  // Generar números de página para mostrar
+  const getPageNumbers = () => {
+    const pages = []
+    const maxPagesToShow = 5
+    let startPage = Math.max(1, currentPage - Math.floor(maxPagesToShow / 2))
+    const endPage = Math.min(totalPages, startPage + maxPagesToShow - 1)
+
+    if (endPage - startPage + 1 < maxPagesToShow) {
+      startPage = Math.max(1, endPage - maxPagesToShow + 1)
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(i)
+    }
+
+    return pages
+  }
+
+  // Generar números de página para variación de costos
+  const getPageNumbersVariacion = () => {
+    const pages = []
+    const maxPagesToShow = 5
+    let startPage = Math.max(1, currentPageVariacion - Math.floor(maxPagesToShow / 2))
+    const endPage = Math.min(totalPagesVariacion, startPage + maxPagesToShow - 1)
+
+    if (endPage - startPage + 1 < maxPagesToShow) {
+      startPage = Math.max(1, endPage - maxPagesToShow + 1)
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(i)
+    }
+
+    return pages
+  }
+
+  // Generar números de página para ingredientes aumento
+  const getPageNumbersIngredientes = () => {
+    const pages = []
+    const maxPagesToShow = 5
+    let startPage = Math.max(1, currentPageIngredientes - Math.floor(maxPagesToShow / 2))
+    const endPage = Math.min(totalPagesIngredientes, startPage + maxPagesToShow - 1)
+
+    if (endPage - startPage + 1 < maxPagesToShow) {
+      startPage = Math.max(1, endPage - maxPagesToShow + 1)
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(i)
+    }
+
+    return pages
+  }
+
+  // Datos paginados para variación de costos
+  const paginatedVariacionData = useMemo(() => {
+    const startIndex = (currentPageVariacion - 1) * ITEMS_PER_PAGE
+    const endIndex = startIndex + ITEMS_PER_PAGE
+    return cambiosPlatillos.slice(startIndex, endIndex)
+  }, [cambiosPlatillos, currentPageVariacion])
+
+  // Datos paginados para ingredientes aumento
+  const paginatedIngredientesData = useMemo(() => {
+    const startIndex = (currentPageIngredientes - 1) * ITEMS_PER_PAGE
+    const endIndex = startIndex + ITEMS_PER_PAGE
+    return ingredientesAumento.slice(startIndex, endIndex)
+  }, [ingredientesAumento, currentPageIngredientes])
+
   return (
     <div className="flex flex-col min-h-screen p-6 bg-gray-50">
       <h1 className="text-4xl font-bold mb-8 text-gray-800">Estadísticas Costos</h1>
 
-      {/* Nueva sección de Variación de Costos */}
+      {/* Contenedor principal con pestañas */}
       <Card className="mb-8 shadow-lg">
         <CardHeader>
-          <CardTitle className="flex items-center justify-between text-orange-800">
+          <CardTitle className="flex items-center justify-between text-blue-800">
             <div className="flex items-center gap-2">
-              <ChefHat className="h-6 w-6" />
-              Variacion Costos(Top 5)
+              <FileText className="h-6 w-6" />
+              Reportes y Análisis
             </div>
-            <TooltipProvider>
-              <UITooltip>
-                <TooltipTrigger asChild>
-                  <HelpCircle className="h-5 w-5 text-orange-600 hover:text-orange-800 cursor-help" />
-                </TooltipTrigger>
-                <TooltipContent className="max-w-md p-4 bg-white border border-orange-200 shadow-lg">
-                  <div className="space-y-3">
-                    <h4 className="font-semibold text-orange-800 text-sm">Variacion de Costos(top 5)</h4>
-                    <p className="text-sm text-gray-700 leading-relaxed">
-                      Esta sección compara el costo actual de la receta con el mes anterior seleccionado en las opciones
-                      Mes y Año mostrando la variación porcentual entre estos 2 costos (Costo Mes Actual vs Costo Mes
-                      Anterior). Le ayuda a identificar tendencias de costos rápidamente mostrando las 5 recetas con
-                      mayor porcentaje de variación, de esta manera ayuda a identificar que recetas han subido su costo
-                      drásticamente conforme al mes anterior y así tomar decisiones informadas sobre precios y
-                      proveedores.
-                    </p>
-                    <div className="border-t border-orange-100 pt-2">
-                      <p className="text-xs font-medium text-orange-700 mb-1">Modo de Consultar:</p>
-                      <p className="text-xs text-gray-600 leading-relaxed">
-                        Seleccionar un Hotel, Mes y Año de las opciones del listado para poder consultar mi top 10
-                        recetas con mayor variación de costos.
+            <div className="flex items-center gap-4">
+              <Button
+                onClick={handleExportExcel}
+                disabled={isExporting}
+                className="bg-green-600 hover:bg-green-700 text-white"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                {isExporting ? "Exportando..." : "Exportar"}
+              </Button>
+              <TooltipProvider>
+                <UITooltip>
+                  <TooltipTrigger asChild>
+                    <HelpCircle className="h-5 w-5 text-blue-600 hover:text-blue-800 cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-md p-4 bg-white border border-blue-200 shadow-lg">
+                    <div className="space-y-3">
+                      <h4 className="font-semibold text-blue-800 text-sm">Reportes y Análisis</h4>
+                      <p className="text-sm text-gray-700 leading-relaxed">
+                        Esta sección incluye el reporte completo de recetas y el análisis de variación de costos para
+                        identificar tendencias y cambios en los precios de los platillos.
                       </p>
                     </div>
-                  </div>
-                </TooltipContent>
-              </UITooltip>
-            </TooltipProvider>
+                  </TooltipContent>
+                </UITooltip>
+              </TooltipProvider>
+            </div>
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {/* Filtros para la sección de variación de costos */}
-          <div className="flex items-center gap-4 mb-6">
-            <div className="space-y-2">
-              <Label htmlFor="hotel-variacion">Hotel</Label>
-              <Select value={hotelSeleccionado} onValueChange={setHotelSeleccionado}>
-                <SelectTrigger className="w-48">
-                  <SelectValue placeholder="Seleccionar hotel" />
-                </SelectTrigger>
-                <SelectContent>
-                  {hoteles.map((hotel) => (
-                    <SelectItem key={hotel.id} value={hotel.id.toString()}>
-                      {hotel.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          {/* Filtros compartidos */}
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="hotel-reporte">Hotel</Label>
+                <Select value={hotelSeleccionado} onValueChange={setHotelSeleccionado}>
+                  <SelectTrigger className="w-48">
+                    <SelectValue placeholder="Seleccionar hotel" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {hoteles.map((hotel) => (
+                      <SelectItem key={hotel.id} value={hotel.id.toString()}>
+                        {hotel.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="mes-variacion">Mes</Label>
-              <Select value={mesSeleccionado} onValueChange={setMesSeleccionado}>
-                <SelectTrigger className="w-40">
-                  <SelectValue placeholder="Seleccionar mes" />
-                </SelectTrigger>
-                <SelectContent>
-                  {mesesDelAño.map((mes) => (
-                    <SelectItem key={mes.id} value={mes.id.toString()}>
-                      {mes.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+              <div className="space-y-2">
+                <Label htmlFor="mes-reporte">Mes</Label>
+                <Select value={mesSeleccionado} onValueChange={setMesSeleccionado}>
+                  <SelectTrigger className="w-40">
+                    <SelectValue placeholder="Seleccionar mes" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {mesesDelAño.map((mes) => (
+                      <SelectItem key={mes.id} value={mes.id.toString()}>
+                        {mes.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="año-variacion">Año</Label>
-              <Select value={añoSeleccionado} onValueChange={setAñoSeleccionado}>
-                <SelectTrigger className="w-32">
-                  <SelectValue placeholder="Seleccionar año" />
-                </SelectTrigger>
-                <SelectContent>
-                  {añosDisponibles.map((año) => (
-                    <SelectItem key={año.id} value={año.id.toString()}>
-                      {año.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="space-y-2">
+                <Label htmlFor="año-reporte">Año</Label>
+                <Select value={añoSeleccionado} onValueChange={setAñoSeleccionado}>
+                  <SelectTrigger className="w-32">
+                    <SelectValue placeholder="Seleccionar año" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {añosDisponibles.map((año) => (
+                      <SelectItem key={año.id} value={año.id.toString()}>
+                        {año.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
 
-          {/* Contenido de la sección de variación de costos */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Tarjetas de análisis de costos */}
-            <div className="bg-gradient-to-r col-span-3 from-amber-50 to-orange-50 border border-orange-100 w-[1100px]  rounded-lg p-4">
-              <Tabs defaultValue="platillos" className="w-full">
-                <TabsList className="grid w-full grid-cols-2 h-8">
-                  <TabsTrigger value="platillos" className="text-xs">
-                    Recetas
-                  </TabsTrigger>
-                  <TabsTrigger value="recetas" className="text-xs">
-                    SubRecetas
-                  </TabsTrigger>
-                </TabsList>
+          {/* Pestañas */}
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="reporte-recetas">Reporte de Recetas</TabsTrigger>
+              <TabsTrigger value="variacion-costos">Variación Costos (Top 5)</TabsTrigger>
+              <TabsTrigger value="ingredientes-aumento">Insumos Var Costos</TabsTrigger>
+            </TabsList>
 
-                <TabsContent value="platillos" className="mt-4">
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-1 h-[400px] w-full overflow-y-auto">
-                    {cambiosPlatillos.length >= 0 ? (
-                      cambiosPlatillos.slice(0, 5).map((platillo, index) => (
-                        <TooltipProvider key={index}>
-                          <UITooltip>
-                            <TooltipTrigger asChild>
-                              <Card
-                                className="rounded-xs border bg-card text-card-foreground p-3 bg-gradient-to-r h-[100px] w-64 from-orange-50 to-red-50 border-orange-200 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-                                onMouseEnter={() => platillo.id && cargarDetallesPlatilloTooltip(platillo.id)}
-                              >
-                                <div className="grid grid-cols-3 grid-rows-2 h-16">
-                                  {/* Nombre del platillo - ocupa 2 columnas en la primera fila */}
-                                  <div className="col-span-2 row-span-1">
-                                    <h4 className="text-sm font-semibold text-gray-800 truncate leading-tight">
-                                      {platillo.nombre}
-                                    </h4>
-                                  </div>
+            {/* Pestaña Reporte de Recetas */}
+            <TabsContent value="reporte-recetas" className="space-y-4">
+              {isLoadingReporte ? (
+                <div className="flex justify-center items-center py-8">
+                  <div className="text-lg">Cargando reporte de recetas...</div>
+                </div>
+              ) : (
+                <>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>{renderTableHeaders()}</TableRow>
+                      </TableHeader>
+                      <TableBody>{renderTableRows()}</TableBody>
+                    </Table>
+                  </div>
 
-                                  {/* Variación % - ocupa 1 columna y 2 filas del lado derecho */}
-                                  <div className="col-span-1 row-span-2 flex flex-col items-center justify-center bg-white rounded-lg border-2 border-dashed border-gray-200">
-                                    <div
-                                      className={`text-lg font-bold ${platillo.variacion_porcentaje > 0 ? "text-red-600" : "text-green-600"}`}
-                                    >
-                                      +{Math.abs(platillo.variacion_porcentaje).toFixed(2)}%
-                                    </div>
-                                  </div>
+                  {/* Paginación para reporte de recetas */}
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-between mt-4">
+                      <div className="text-sm text-gray-600">
+                        Mostrando {(currentPage - 1) * ITEMS_PER_PAGE + 1} a{" "}
+                        {Math.min(currentPage * ITEMS_PER_PAGE, sortedReporteRecetas.length)} de{" "}
+                        {sortedReporteRecetas.length} registros
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button onClick={goToPreviousPage} disabled={currentPage === 1} variant="outline" size="sm">
+                          Anterior
+                        </Button>
+                        {getPageNumbers().map((page) => (
+                          <Button
+                            key={page}
+                            onClick={() => goToPage(page)}
+                            variant={page === currentPage ? "default" : "outline"}
+                            size="sm"
+                          >
+                            {page}
+                          </Button>
+                        ))}
+                        <Button
+                          onClick={goToNextPage}
+                          disabled={currentPage === totalPages}
+                          variant="outline"
+                          size="sm"
+                        >
+                          Siguiente
+                        </Button>
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        Página {currentPage} de {totalPages}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </TabsContent>
 
-                                  {/* Costo inicial - primera columna, segunda fila */}
-                                  <div className="col-span-1 row-span-1">
-                                    <div className="text-xs text-gray-500">Mes Anterior</div>
-                                    <div className="text-sm font-medium text-gray-700">
-                                      ${platillo.costo_inicial.toFixed(2)}
-                                    </div>
-                                  </div>
-
-                                  {/* Costo actual - segunda columna, segunda fila */}
-                                  <div className="col-span-1 row-span-1">
-                                    <div className="text-xs text-gray-500">Mes Actual</div>
-                                    <div className="text-sm font-medium text-gray-700">
-                                      ${platillo.costo_actual.toFixed(2)}
-                                    </div>
-                                  </div>
-                                </div>
-                              </Card>
-                            </TooltipTrigger>
-                            <TooltipContent className="max-w-sm p-0 bg-white/95 backdrop-blur-sm border border-orange-200 shadow-2xl rounded-xl overflow-hidden">
-                              {loadingTooltip ? (
-                                <div className="flex items-center justify-center p-4">
-                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-600"></div>
-                                  <span className="ml-2 text-sm text-gray-600">Cargando...</span>
-                                </div>
-                              ) : detallesPlatilloTooltip ? (
-                                <div className="bg-gradient-to-br from-orange-50/90 to-red-50/90">
-                                  <div className="p-4 border-b border-orange-200/50 bg-gradient-to-r from-orange-100/80 to-red-100/80">
-                                    <div className="flex items-center gap-3">
+            {/* Pestaña Variación de Costos */}
+            <TabsContent value="variacion-costos" className="space-y-4">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nombre Platillo</TableHead>
+                      <TableHead>Mes Anterior</TableHead>
+                      <TableHead>Mes Actual</TableHead>
+                      <TableHead>Variación de Costo (%)</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedVariacionData.map((platillo, index) => (
+                      <TableRow key={index}>
+                        <TableCell
+                          className="cursor-pointer hover:bg-blue-50"
+                          onMouseEnter={() => cargarDetallesPlatilloTooltip(platillo.id || 0)}
+                        >
+                          <TooltipProvider>
+                            <UITooltip>
+                              <TooltipTrigger asChild>
+                                <span className="text-blue-600 hover:text-blue-800">{platillo.nombre}</span>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-sm p-4 bg-white border shadow-lg">
+                                {loadingTooltip ? (
+                                  <div className="text-sm">Cargando detalles...</div>
+                                ) : detallesPlatilloTooltip ? (
+                                  <div className="space-y-2">
+                                    <div className="flex items-center gap-2">
                                       {detallesPlatilloTooltip.imgurl && (
                                         <img
                                           src={detallesPlatilloTooltip.imgurl || "/placeholder.svg"}
                                           alt={detallesPlatilloTooltip.nombre}
-                                          className="w-12 h-12 rounded-lg object-cover border-2 border-orange-200/50"
+                                          className="w-12 h-12 object-cover rounded"
                                         />
                                       )}
                                       <div>
-                                        <h4 className="font-bold text-orange-800 text-sm">
-                                          {detallesPlatilloTooltip.nombre}
-                                        </h4>
+                                        <h4 className="font-semibold text-sm">{detallesPlatilloTooltip.nombre}</h4>
+                                        <p className="text-xs text-gray-600">ID: {detallesPlatilloTooltip.id}</p>
                                       </div>
                                     </div>
-                                  </div>
-                                  <div className="p-4 space-y-3">
-                                    <div className="grid grid-cols-2 gap-3 text-xs">
-                                      <div className="bg-white/60 rounded-lg p-2 border border-orange-200/50">
-                                        <span className="text-gray-600">Costo Elaboracion:</span>
-                                        <p className="font-bold text-green-600">
-                                          ${detallesPlatilloTooltip.costototal.toFixed(2)}
-                                        </p>
-                                      </div>
-                                      <div className="bg-white/60 rounded-lg p-2 border border-orange-200/50">
-                                        <span className="text-gray-600">Costo Total:</span>
-                                        <p className="font-bold text-blue-600">
-                                          ${detallesPlatilloTooltip.costoadministrativo.toFixed(2)}
-                                        </p>
-                                      </div>
+                                    <div className="text-xs space-y-1">
+                                      <p>
+                                        <span className="font-medium">Costo Total:</span> $
+                                        {detallesPlatilloTooltip.costototal?.toFixed(2) || "0.00"}
+                                      </p>
+                                      <p>
+                                        <span className="font-medium">Costo Administrativo:</span> $
+                                        {detallesPlatilloTooltip.costoadministrativo?.toFixed(2) || "0.00"}
+                                      </p>
                                     </div>
                                   </div>
-                                </div>
-                              ) : (
-                                <div className="p-4 text-center text-gray-500">
-                                  <p className="text-sm">No se pudo cargar la información</p>
-                                </div>
-                              )}
-                            </TooltipContent>
-                          </UITooltip>
-                        </TooltipProvider>
-                      ))
-                    ) : (
-                      <Card className="p-4 bg-gray-50 border-gray-200">
-                        <div className="text-center text-sm text-gray-500">No hay cambios significativos</div>
-                      </Card>
-                    )}
+                                ) : (
+                                  <div className="text-sm text-gray-500">No se pudieron cargar los detalles</div>
+                                )}
+                              </TooltipContent>
+                            </UITooltip>
+                          </TooltipProvider>
+                        </TableCell>
+                        <TableCell>${platillo.costo_inicial.toFixed(2)}</TableCell>
+                        <TableCell>${platillo.costo_actual.toFixed(2)}</TableCell>
+                        <TableCell>
+                          <span
+                            className={`font-medium ${
+                              platillo.variacion_porcentaje > 0 ? "text-red-600" : "text-green-600"
+                            }`}
+                          >
+                            {platillo.variacion_porcentaje > 0 ? "+" : ""}
+                            {platillo.variacion_porcentaje.toFixed(2)}%
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Paginación para variación de costos */}
+              {totalPagesVariacion > 1 && (
+                <div className="flex items-center justify-between mt-4">
+                  <div className="text-sm text-gray-600">
+                    Mostrando {(currentPageVariacion - 1) * ITEMS_PER_PAGE + 1} a{" "}
+                    {Math.min(currentPageVariacion * ITEMS_PER_PAGE, cambiosPlatillos.length)} de{" "}
+                    {cambiosPlatillos.length} registros
                   </div>
-                </TabsContent>
-
-                <TabsContent value="recetas" className="mt-4">
-                  <div className="h-[330px] w-full space-y-2 overflow-y-auto">
-                    {cambiosRecetas.length >= 0 ? (
-                      cambiosRecetas.slice(0, 3).map((receta, index) => (
-                        <TooltipProvider key={index}>
-                          <UITooltip>
-                            <TooltipTrigger asChild>
-                              <Card
-                                className="rounded-xs border bg-card text-card-foreground p-3 bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-                                onMouseEnter={() => receta.id && cargarDetallesRecetaTooltip(receta.id)}
-                              >
-                                <div className="grid grid-cols-3 grid-rows-2 h-16">
-                                  {/* Nombre de la receta - ocupa 2 columnas en la primera fila */}
-                                  <div className="col-span-2 row-span-1">
-                                    <h4 className="text-sm font-semibold text-gray-800 truncate leading-tight">
-                                      {receta.nombre}
-                                    </h4>
-                                  </div>
-
-                                  {/* Variación % - ocupa 1 columna y 2 filas del lado derecho */}
-                                  <div className="col-span-1 row-span-2 flex flex-col items-center justify-center bg-white rounded-lg border-2 border-dashed border-gray-200">
-                                    <div
-                                      className={`text-lg font-bold ${receta.variacion_porcentaje > 0 ? "text-red-600" : "text-green-600"}`}
-                                    >
-                                      {receta.variacion_porcentaje.toFixed(2)}%
-                                    </div>
-                                  </div>
-
-                                  {/* Costo inicial - primera columna, segunda fila */}
-                                  <div className="col-span-1 row-span-1">
-                                    <div className="text-xs text-gray-500">Mes Anterior</div>
-                                    <div className="text-sm font-medium text-gray-700">
-                                      ${receta.costo_inicial.toFixed(2)}
-                                    </div>
-                                  </div>
-
-                                  {/* Costo actual - segunda columna, segunda fila */}
-                                  <div className="col-span-1 row-span-1">
-                                    <div className="text-xs text-gray-500">Mes Actual</div>
-                                    <div className="text-sm font-medium text-gray-700">
-                                      ${receta.costo_actual.toFixed(2)}
-                                    </div>
-                                  </div>
-                                </div>
-                              </Card>
-                            </TooltipTrigger>
-                            <TooltipContent className="max-w-sm p-0 bg-white/95 backdrop-blur-sm border border-blue-200 shadow-2xl rounded-xl overflow-hidden">
-                              {loadingTooltip ? (
-                                <div className="flex items-center justify-center p-4">
-                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                                  <span className="ml-2 text-sm text-gray-600">Cargando...</span>
-                                </div>
-                              ) : detallesRecetaTooltip ? (
-                                <div className="bg-gradient-to-br from-blue-50/90 to-indigo-50/90">
-                                  <div className="p-4 border-b border-blue-200/50 bg-gradient-to-r from-blue-100/80 to-indigo-100/80">
-                                    <div className="flex items-center gap-3">
-                                      {detallesRecetaTooltip.imgurl && (
-                                        <img
-                                          src={detallesRecetaTooltip.imgurl || "/placeholder.svg"}
-                                          alt={detallesRecetaTooltip.nombre}
-                                          className="w-12 h-12 rounded-lg object-cover border-2 border-blue-200/50"
-                                        />
-                                      )}
-                                      <div>
-                                        <h4 className="font-bold text-blue-800 text-sm">
-                                          {detallesRecetaTooltip.nombre}
-                                        </h4>
-                                        <p className="text-xs text-blue-600">{detallesRecetaTooltip.hotel}</p>
-                                      </div>
-                                    </div>
-                                  </div>
-                                  <div className="p-4 space-y-3">
-                                    <div className="grid grid-cols-2 gap-3 text-xs">
-                                      <div className="bg-white/60 rounded-lg p-2 border border-blue-200/50">
-                                        <span className="text-gray-600">Costo:</span>
-                                        <p className="font-bold text-green-600">
-                                          ${detallesRecetaTooltip.costo.toFixed(2)}
-                                        </p>
-                                      </div>
-                                      <div className="bg-white/60 rounded-lg p-2 border border-blue-200/50">
-                                        <span className="text-gray-600">Cantidad:</span>
-                                        <p className="font-bold text-blue-600">
-                                          {detallesRecetaTooltip.cantidad.toFixed(2)}
-                                        </p>
-                                      </div>
-                                    </div>
-                                    <div className="bg-white/60 rounded-lg p-2 border border-blue-200/50">
-                                      <span className="text-gray-600">Unidad Base:</span>
-                                      <p className="font-semibold text-gray-800">{detallesRecetaTooltip.unidadbase}</p>
-                                    </div>
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="p-4 text-center text-gray-500">
-                                  <p className="text-sm">No se pudo cargar la información</p>
-                                </div>
-                              )}
-                            </TooltipContent>
-                          </UITooltip>
-                        </TooltipProvider>
-                      ))
-                    ) : (
-                      <Card className="p-4 bg-gray-50 border-gray-200">
-                        <div className="text-center text-sm text-gray-500">No hay cambios significativos</div>
-                      </Card>
-                    )}
+                  <div className="flex items-center gap-2">
+                    <Button
+                      onClick={goToPreviousPageVariacion}
+                      disabled={currentPageVariacion === 1}
+                      variant="outline"
+                      size="sm"
+                    >
+                      Anterior
+                    </Button>
+                    {getPageNumbersVariacion().map((page) => (
+                      <Button
+                        key={page}
+                        onClick={() => goToPageVariacion(page)}
+                        variant={page === currentPageVariacion ? "default" : "outline"}
+                        size="sm"
+                      >
+                        {page}
+                      </Button>
+                    ))}
+                    <Button
+                      onClick={goToNextPageVariacion}
+                      disabled={currentPageVariacion === totalPagesVariacion}
+                      variant="outline"
+                      size="sm"
+                    >
+                      Siguiente
+                    </Button>
                   </div>
-                </TabsContent>
-              </Tabs>
-            </div>
-
-            
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="mb-8 shadow-lg">
-        <CardHeader>
-          <CardTitle className="text-2xl font-semibold text-gray-700">Filtros de Búsqueda</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form id="frmEstadisticaBuscar" className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
-            <div className="flex flex-col space-y-2">
-              <Label htmlFor="ddlMenu">Menú</Label>
-              <Select value={selectedMenuId} onValueChange={setSelectedMenuId} disabled={isLoadingMenus}>
-                <SelectTrigger id="ddlMenu" name="ddlMenu" className="w-full">
-                  <SelectValue placeholder="Selecciona un menú" />
-                </SelectTrigger>
-                <SelectContent>
-                  {menuOptions.map((menu) => (
-                    <SelectItem key={menu.id} value={menu.id.toString()}>
-                      {menu.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex flex-col space-y-2">
-              <Label htmlFor="txtPlatilloNombre">Platillo</Label>
-              <Popover open={isPlatilloPopoverOpen} onOpenChange={setIsPlatilloPopoverOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={isPlatilloPopoverOpen}
-                    className="w-full justify-between bg-white text-gray-900"
-                  >
-                    {selectedPlatilloName || "Selecciona un platillo..."}
-                    <SearchIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)]">
-                  <Command>
-                    <CommandInput
-                      placeholder="Buscar platillo..."
-                      value={platilloSearchTerm}
-                      onValueChange={(value) => {
-                        setPlatilloSearchTerm(value)
-                        setSelectedPlatilloName(value)
-                        setSelectedPlatilloId(null)
-                      }}
-                    />
-                    <CommandList>
-                      {isLoadingPlatillosDropdown ? (
-                        <div className="flex items-center justify-center p-4">
-                          <Loader2 className="h-6 w-6 animate-spin" />
-                        </div>
-                      ) : (
-                        <>
-                          <CommandEmpty>No se encontraron platillos.</CommandEmpty>
-                          <CommandGroup>
-                            {platilloOptions.map((platillo) => (
-                              <CommandItem
-                                key={platillo.id}
-                                value={platillo.nombre}
-                                onSelect={() => {
-                                  setSelectedPlatilloId(platillo.id)
-                                  setSelectedPlatilloName(platillo.nombre)
-                                  setPlatilloSearchTerm(platillo.nombre)
-                                  setIsPlatilloPopoverOpen(false)
-                                }}
-                              >
-                                <CheckIcon
-                                  className={cn(
-                                    "mr-2 h-4 w-4",
-                                    selectedPlatilloId === platillo.id ? "opacity-100" : "opacity-0",
-                                  )}
-                                />
-                                {platillo.nombre}
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </>
-                      )}
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-            </div>
-
-            <div className="flex flex-col space-y-2">
-              <Label htmlFor="txtFechaInicial">Fecha Inicial</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant={"outline"}
-                    className={cn(
-                      "w-full justify-start text-left font-normal bg-white text-gray-900",
-                      !fechaInicial && "text-muted-foreground",
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {fechaInicial ? format(fechaInicial, "PPP") : <span>Selecciona una fecha</span>}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar mode="single" selected={fechaInicial} onSelect={setFechaInicial} initialFocus />
-                </PopoverContent>
-              </Popover>
-              <Input
-                id="txtFechaInicial"
-                name="txtFechaInicial"
-                type="hidden"
-                value={fechaInicial ? format(fechaInicial, "yyyy-MM-dd") : ""}
-                maxLength={80}
-              />
-            </div>
-
-            <div className="flex flex-col space-y-2">
-              <Label htmlFor="txtFechaFinal">Fecha Final</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant={"outline"}
-                    className={cn(
-                      "w-full justify-start text-left font-normal bg-white text-gray-900",
-                      !fechaFinal && "text-muted-foreground",
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {fechaFinal ? format(fechaFinal, "PPP") : <span>Selecciona una fecha</span>}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar mode="single" selected={fechaFinal} onSelect={setFechaFinal} initialFocus />
-                </PopoverContent>
-              </Popover>
-              <Input
-                id="txtFechaFinal"
-                name="txtFechaFinal"
-                type="hidden"
-                value={fechaFinal ? format(fechaFinal, "yyyy-MM-dd") : ""}
-                maxLength={80}
-              />
-            </div>
-
-            <Button
-              id="btnEstadisticaBuscar"
-              name="btnEstadisticaBuscar"
-              type="button"
-              onClick={handleSearch}
-              className="w-full h-10 mt-auto flex items-center justify-center text-black"
-              style={{ backgroundColor: "#82ffea", fontSize: "12px" }}
-              disabled={isLoadingChartData || isLoadingMargins || isLoadingComparisonChart}
-            >
-              {isLoadingChartData || isLoadingMargins || isLoadingComparisonChart ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : (
-                <SearchIcon className="h-4 w-4 mr-2" />
+                  <div className="text-sm text-gray-600">
+                    Página {currentPageVariacion} de {totalPagesVariacion}
+                  </div>
+                </div>
               )}
-              Buscar
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+            </TabsContent>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-        {/* Top Margen Utilidad */}
+            {/* Pestaña Insumos Var Costos */}
+            <TabsContent value="ingredientes-aumento" className="space-y-4">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nombre Ingrediente</TableHead>
+                      <TableHead>Mes Anterior</TableHead>
+                      <TableHead>Mes Actual</TableHead>
+                      <TableHead>Variación de Costo (%)</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedIngredientesData.map((ingrediente, index) => (
+                      <TableRow key={index}>
+                        <TableCell>{ingrediente.nombre}</TableCell>
+                        <TableCell>${ingrediente.costo_inicial.toFixed(2)}</TableCell>
+                        <TableCell>${ingrediente.costo_actual.toFixed(2)}</TableCell>
+                        <TableCell>
+                          <span className="font-medium text-red-600">
+                            +{ingrediente.aumento_porcentaje?.toFixed(2) || "0.00"}%
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
 
-      </div>
-
-
-      <Card className="shadow-lg">
-        <CardHeader>
-          <CardTitle className="text-2xl font-semibold text-gray-700">Márgenes de Utilidad de Platillos</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoadingMargins ? (
-            <div className="flex items-center justify-center h-64">
-              <Loader2 className="h-8 w-8 animate-spin" />
-            </div>
-          ) : platillosWithMargins.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Platillo</TableHead>
-                  <TableHead>Costo</TableHead>
-                  <TableHead>Precio Venta</TableHead>
-                  <TableHead>Margen Utilidad (%)</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {platillosWithMargins.map((platillo) => (
-                  <TableRow key={platillo.id}>
-                    <TableCell className="font-medium">{platillo.nombre}</TableCell>
-                    <TableCell>${platillo.costo.toFixed(2)}</TableCell>
-                    <TableCell>${platillo.precio_venta.toFixed(2)}</TableCell>
-                    <TableCell>{platillo.margen_utilidad.toFixed(2)}%</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          ) : (
-            <p className="text-center text-gray-500">No hay platillos registrados o datos de margen disponibles.</p>
-          )}
+              {/* Paginación para ingredientes aumento */}
+              {totalPagesIngredientes > 1 && (
+                <div className="flex items-center justify-between mt-4">
+                  <div className="text-sm text-gray-600">
+                    Mostrando {(currentPageIngredientes - 1) * ITEMS_PER_PAGE + 1} a{" "}
+                    {Math.min(currentPageIngredientes * ITEMS_PER_PAGE, ingredientesAumento.length)} de{" "}
+                    {ingredientesAumento.length} registros
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      onClick={goToPreviousPageIngredientes}
+                      disabled={currentPageIngredientes === 1}
+                      variant="outline"
+                      size="sm"
+                    >
+                      Anterior
+                    </Button>
+                    {getPageNumbersIngredientes().map((page) => (
+                      <Button
+                        key={page}
+                        onClick={() => goToPageIngredientes(page)}
+                        variant={page === currentPageIngredientes ? "default" : "outline"}
+                        size="sm"
+                      >
+                        {page}
+                      </Button>
+                    ))}
+                    <Button
+                      onClick={goToNextPageIngredientes}
+                      disabled={currentPageIngredientes === totalPagesIngredientes}
+                      variant="outline"
+                      size="sm"
+                    >
+                      Siguiente
+                    </Button>
+                  </div>
+                  <div className="text-sm text-gray-600">
+                    Página {currentPageIngredientes} de {totalPagesIngredientes}
+                  </div>
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
     </div>

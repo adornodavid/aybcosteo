@@ -767,7 +767,7 @@ export default function NuevoPlatilloPage() {
             <div className="flex flex-col items-center justify-center p-8 bg-white rounded-lg shadow-xl">
               <div className="relative w-24 h-24 mb-4">
                 <Image
-                  src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/design-mode-images/RegistroReceta%281%29%281%29%281%29%281%29%281%29%281%29%281%29%281%29%281%29%281%29%281%29-imdnIk1RnVs5u4wx36jq9fVQv3MgmT.gif"
+                  src="/images/design-mode/RegistroReceta%281%29%281%29%281%29%281%29%281%29%281%29%281%29%281%29%281%29%281%29%281%29(1).gif"
                   alt="Cocinando"
                   width={200}
                   height={200}

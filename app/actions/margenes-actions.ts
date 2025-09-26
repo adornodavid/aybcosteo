@@ -57,6 +57,21 @@ export interface PlatilloDetail {
   margenutilidad: number
 }
 
+// Nueva interfaz para el reporte de recetas
+export interface ReporteReceta {
+  id: number
+  nombre: string
+  descripcion: string
+  hotel: string
+  costototal: number
+  costoadministrativo: number
+  fechacreacion: string
+  fechaactualizacion: string
+  imgurl?: string
+  categoria?: string
+  estado?: string
+}
+
 export async function getMenusForDropdown(): Promise<MenuOption[]> {
   try {
     const { data, error } = await supabaseAdmin.from("menus").select("id, nombre").order("id", { ascending: true })
@@ -254,7 +269,7 @@ export async function getTopMarginPlatillos(): Promise<MarginPlatilloSummary[]> 
       margenutilidad: p.margenutilidad || 0,
     }))
 
-/*
+    /*
     const result = data.map((p: any) => ({
       id: p.id,
       Platillo: p.nombre,
@@ -348,5 +363,137 @@ export async function getPlatilloDetailsForTooltip(platilloId: number, MenuId: n
   } catch (error) {
     console.error(`Unexpected error fetching platillo details for ID ${platilloId}:`, error)
     return null
+  }
+}
+
+// Nueva función para obtener el reporte de recetas
+export async function obtenerReporteRecetas(hotelId: number, mes: number, año: number): Promise<ReporteReceta[]> {
+  try {
+    console.log("Obteniendo reporte de recetas con parámetros:", { hotelId, mes, año })
+
+    const { data, error } = await supabaseAdmin.rpc("reportelistadorecetas", {
+      hotelesid: hotelId,
+      mes: mes,
+      year: año,
+    })
+
+    if (error) {
+      console.error("Error fetching reporte recetas:", error)
+      return []
+    }
+
+    console.log("Datos del reporte de recetas:", data)
+
+    return data || []
+  } catch (error) {
+    console.error("Unexpected error fetching reporte recetas:", error)
+    return []
+  }
+}
+
+// Nueva función para obtener cambios significativos en costos de platillos usando función de Supabase
+export async function obtenerCambiosCostosPlatillos(mes: number, año: number, hotelId: number) {
+  try {
+    // Llamar a la función de Supabase con RPC
+    const { data: platillosCostos, error } = await supabaseAdmin.rpc("sellistadocostoplatillos", {
+      mes: mes,
+      year: año,
+      hotelesid: hotelId,
+    })
+
+    if (error) {
+      console.error("Error obteniendo costos de platillos:", error)
+      return { success: false, data: [] }
+    }
+
+    if (!platillosCostos || platillosCostos.length === 0) {
+      return { success: true, data: [] }
+    }
+
+    // Procesar datos para calcular variaciones
+    const cambiosSignificativos = []
+
+    platillosCostos.forEach((platillo) => {
+      const costoInicial = platillo.costohistorico || platillo.costo_inicial
+      const costoActual = platillo.costoactual || platillo.costo_actual
+
+      // Verificar que ambos costos sean válidos
+      if (costoInicial && costoActual && costoInicial > 0) {
+        const variacion = ((costoActual - costoInicial) / costoInicial) * 100
+
+        // Filtrar cambios significativos (≥5%)
+        if (Math.abs(variacion) >= 0) {
+          cambiosSignificativos.push({
+            id: platillo.id || platillo.platilloid,
+            nombre: platillo.nombre,
+            costo_inicial: costoInicial,
+            costo_actual: costoActual,
+            variacion_porcentaje: variacion,
+          })
+        }
+      }
+    })
+
+    // Ordenar por variación más significativa y tomar top 5
+    const resultado = cambiosSignificativos
+      .sort((a, b) => Math.abs(b.variacion_porcentaje) - Math.abs(a.variacion_porcentaje))
+      .slice(0, 50)
+
+    return { success: true, data: resultado }
+  } catch (error) {
+    console.error("Error en obtenerCambiosCostosPlatillos:", error)
+    return { success: false, data: [] }
+  }
+}
+
+// Nueva función para obtener ingredientes que aumentaron de precio
+export async function obtenerIngredientesAumentoPrecio(mes: number, año: number, hotelId: number) {
+  try {
+    const { data: ingredientesCostos, error } = await supabaseAdmin.rpc("sellistadocostoingredientes", {
+      mes: mes,
+      year: año,
+      hotelesid: hotelId,
+    })
+
+    if (error) {
+      console.error("Error obteniendo costos de ingredientes:", error)
+      return { success: false, data: [] }
+    }
+
+    if (!ingredientesCostos || ingredientesCostos.length === 0) {
+      return { success: true, data: [] }
+    }
+
+    // Procesar datos para calcular aumentos
+    const aumentosSignificativos = []
+
+    ingredientesCostos.forEach((ingrediente) => {
+      const costoHistorico = ingrediente.costohistorico
+      const costoActual = ingrediente.costoactual
+
+      // Verificar que ambos costos sean válidos y que haya un aumento
+      if (costoHistorico && costoActual && costoHistorico > 0 && costoActual > costoHistorico) {
+        const aumentoPorcentaje = ((costoActual - costoHistorico) / costoHistorico) * 100
+
+        // Filtrar aumentos significativos (≥2%)
+        if (aumentoPorcentaje >= 2) {
+          aumentosSignificativos.push({
+            codigo: ingrediente.codigo || "",
+            nombre: ingrediente.nombre,
+            costo_inicial: costoHistorico,
+            costo_actual: costoActual,
+            aumento_porcentaje: aumentoPorcentaje,
+          })
+        }
+      }
+    })
+
+    // Ordenar por aumento más significativo y tomar top 10
+    const resultado = aumentosSignificativos.sort((a, b) => b.aumento_porcentaje - a.aumento_porcentaje).slice(0, 10)
+
+    return { success: true, data: resultado }
+  } catch (error) {
+    console.error("Error en obtenerIngredientesAumentoPrecio:", error)
+    return { success: false, data: [] }
   }
 }

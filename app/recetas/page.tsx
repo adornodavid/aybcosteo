@@ -464,7 +464,7 @@ export default function RecetasPage() {
         <div className="flex flex-col items-center justify-center p-8">
           <div className="relative w-24 h-24 mb-4">
             <Image
-              src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/design-mode-images/CargarPage%281%29%281%29%281%29%281%29%281%29%281%29%281%29%281%29%281%29%281%29%281%29-gizJKKg9b0KEafLqXqsorTrqMiiel0.gif"
+              src="/images/design-mode/CargarPage%281%29%281%29%281%29%281%29%281%29%281%29%281%29%281%29%281%29%281%29%281%29(1).gif"
               alt="Procesando..."
               width={300}
               height={300}

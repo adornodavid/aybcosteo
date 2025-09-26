@@ -37,8 +37,12 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog" // Importar componentes de Dialog
 import * as DialogPrimitive from "@radix-ui/react-dialog" // Importar DialogPrimitive directamente
-import { Search, Eye, Edit, ToggleLeft, ToggleRight, Loader2, PlusCircle, RotateCcw } from "lucide-react"
+import { Search, Eye, Edit, ToggleLeft, ToggleRight, Loader2, PlusCircle, RotateCcw, Trash2 } from "lucide-react" // Added Plus and Trash2
 import { getPlatilloDetailsForModal } from "@/app/actions/platillos-details-actions" // Importar la nueva acción
+import { obtenerPlatillos, eliminarPlatillo } from "@/app/actions/platillos-actions" // Importar acciones de platillos
+import { obtenerHotelesPorRol } from "@/app/actions/dashboard-actions" // Importar acciones de dashboard
+import { Label } from "@/components/ui/label" // Importar Label
+import { Badge } from "@/components/ui/badge" // Importar Badge
 
 // --- Interfaces ---
 interface DropdownItem {
@@ -106,6 +110,26 @@ interface SubrecetaPlatillo {
   recetacostoparcial: number
 }
 
+// Interfaz para el nuevo listado de platillos
+interface Platillo {
+  id: number
+  nombre: string
+  descripcion: string
+  costototal: number
+  costoadministrativo: number
+  imgurl?: string
+  fechacreacion: string
+  fechaactualizacion: string
+  hotelid: number
+  hotel_nombre?: string
+}
+
+// Interfaz para hoteles en el nuevo listado
+interface Hotel {
+  id: number
+  nombre: string
+}
+
 // --- Componente Principal ---
 export default function PlatillosPage() {
   const router = useRouter()
@@ -146,6 +170,17 @@ export default function PlatillosPage() {
   // Paginación
   const [paginaActual, setPaginaActual] = useState(1)
   const resultadosPorPagina = 20
+
+  // Estados para el nuevo listado de platillos
+  const [platillosList, setPlatillosList] = useState<Platillo[]>([])
+  const [hotelesList, setHotelesList] = useState<Hotel[]>([])
+  const [loadingList, setLoadingList] = useState(true)
+  const [searchLoadingList, setSearchLoadingList] = useState(false)
+  const [deleteLoadingList, setDeleteLoadingList] = useState<number | null>(null)
+
+  // Filtros para el nuevo listado
+  const [nombreFiltroList, setNombreFiltroList] = useState("")
+  const [hotelFiltroList, setHotelFiltroList] = useState("todos")
 
   const esAdmin = useMemo(() => user && [1, 2, 3, 4].includes(user.RolId), [user])
 
@@ -583,6 +618,104 @@ export default function PlatillosPage() {
   const formatCurrency = (amount: number | null) =>
     new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(amount || 0)
 
+  // --- Nuevo listado de platillos ---
+  const cargarDatosListado = async () => {
+    setLoadingList(true)
+    try {
+      // Cargar hoteles para el filtro
+      const hotelesResponse = await obtenerHotelesPorRol()
+      if (hotelesResponse.success) {
+        setHotelesList(hotelesResponse.data)
+      }
+
+      // Cargar platillos iniciales para el listado
+      await ejecutarBusquedaList()
+    } catch (error) {
+      console.error("Error cargando datos iniciales para listado:", error)
+      toast({
+        title: "Error",
+        description: "No se pudieron cargar los datos iniciales del listado",
+        variant: "destructive",
+      })
+    } finally {
+      setLoadingList(false)
+    }
+  }
+
+  const ejecutarBusquedaList = async () => {
+    setSearchLoadingList(true)
+    try {
+      const hotelId = hotelFiltroList === "todos" ? undefined : Number.parseInt(hotelFiltroList)
+      const response = await obtenerPlatillos({
+        nombre: nombreFiltroList,
+        hotelId: hotelId,
+      })
+
+      if (response.success) {
+        setPlatillosList(response.data)
+      } else {
+        toast({
+          title: "Error",
+          description: response.error || "Error al buscar platillos",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error en búsqueda para listado:", error)
+      toast({
+        title: "Error",
+        description: "Error al realizar la búsqueda",
+        variant: "destructive",
+      })
+    } finally {
+      setSearchLoadingList(false)
+    }
+  }
+
+  const handleEliminarList = async (id: number) => {
+    setDeleteLoadingList(id)
+    try {
+      const response = await eliminarPlatillo(id)
+      if (response.success) {
+        toast({
+          title: "Éxito",
+          description: "Platillo eliminado correctamente",
+        })
+        await ejecutarBusquedaList() // Recargar la lista
+      } else {
+        toast({
+          title: "Error",
+          description: response.error || "Error al eliminar el platillo",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error eliminando platillo para listado:", error)
+      toast({
+        title: "Error",
+        description: "Error al eliminar el platillo",
+        variant: "destructive",
+      })
+    } finally {
+      setDeleteLoadingList(null)
+    }
+  }
+
+  const formatearFecha = (fecha: string) => {
+    return new Date(fecha).toLocaleDateString("es-ES", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    })
+  }
+
+  const formatearMoneda = (cantidad: number | null) => {
+    return new Intl.NumberFormat("es-MX", {
+      style: "currency",
+      currency: "MXN",
+    }).format(cantidad || 0)
+  }
+
   // --- Renderizado ---
   if (pageLoading) {
     return (
@@ -591,7 +724,7 @@ export default function PlatillosPage() {
           <div className="flex flex-col items-center justify-center p-8">
             <div className="relative w-24 h-24 mb-4">
               <Image
-                src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/design-mode-images/CargarPage%281%29%281%29%281%29%281%29%281%29%281%29%281%29%281%29%281%29%281%29%281%29-gizJKKg9b0KEafLqXqsorTrqMiiel0.gif"
+                src="/images/design-mode/CargarPage%281%29%281%29%281%29%281%29%281%29%281%29%281%29%281%29%281%29%281%29%281%29(1).gif"
                 alt="Procesando..."
                 width={300} // Ajusta el tamaño según sea necesario
                 height={300} // Ajusta el tamaño según sea necesario
@@ -658,7 +791,7 @@ export default function PlatillosPage() {
         </Card>
       </div>
 
-      {/* 3. Filtros */}
+      {/* 3. Filtros (para el primer listado) */}
       <Card>
         <CardHeader>
           <CardTitle>Filtros de Búsqueda</CardTitle>
@@ -763,7 +896,7 @@ export default function PlatillosPage() {
         </CardContent>
       </Card>
 
-      {/* 4. Grid de Resultados */}
+      {/* 4. Grid de Resultados (para el primer listado) */}
       <Card>
         <CardHeader>
           <CardTitle>Resultados</CardTitle>
@@ -870,7 +1003,7 @@ export default function PlatillosPage() {
                                 title="Eliminar Platillo"
                                 onClick={() => setPlatilloToDelete(p.PlatilloId)}
                               >
-                              
+
                                 <Trash2 className="h-4 w-4" />
                               </Button>
                               */}
@@ -924,6 +1057,163 @@ export default function PlatillosPage() {
               >
                 Siguiente
               </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Nuevo Listado de Platillos */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Gestión de Recetas</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {/* Filtros de búsqueda para el nuevo listado */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div className="space-y-2">
+              <Label htmlFor="nombreList">Nombre de la Receta</Label>
+              <Input
+                id="nombreList"
+                placeholder="Buscar por nombre..."
+                value={nombreFiltroList}
+                onChange={(e) => setNombreFiltroList(e.target.value)}
+                onKeyPress={(e) => e.key === "Enter" && ejecutarBusquedaList()}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="hotelList">Hotel</Label>
+              <Select value={hotelFiltroList} onValueChange={setHotelFiltroList}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccionar hotel" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos los hoteles</SelectItem>
+                  {hotelesList.map((hotel) => (
+                    <SelectItem key={hotel.id} value={hotel.id.toString()}>
+                      {hotel.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-end">
+              <Button onClick={ejecutarBusquedaList} disabled={searchLoadingList} className="w-full">
+                {searchLoadingList ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Search className="h-4 w-4 mr-2" />
+                )}
+                Buscar
+              </Button>
+            </div>
+          </div>
+
+          {/* Tabla de resultados del nuevo listado */}
+          {loadingList ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin" />
+            </div>
+          ) : platillosList.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">No se encontraron recetas con los filtros aplicados</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Imagen</TableHead>
+                    <TableHead>Nombre</TableHead>
+                    <TableHead>Hotel</TableHead>
+                    <TableHead>Costo Elaboración</TableHead>
+                    <TableHead>Costo Total</TableHead>
+                    <TableHead>Fecha Creación</TableHead>
+                    <TableHead>Acciones</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {platillosList.map((platillo) => (
+                    <TableRow key={platillo.id}>
+                      <TableCell>
+                        <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100">
+                          {platillo.imgurl ? (
+                            <img
+                              src={platillo.imgurl || "/placeholder.svg"}
+                              alt={platillo.nombre}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-gray-400">
+                              <span className="text-xs">Sin imagen</span>
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div>
+                          <div className="font-medium">{platillo.nombre}</div>
+                          {platillo.descripcion && (
+                            <div className="text-sm text-gray-500 truncate max-w-xs">{platillo.descripcion}</div>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{platillo.hotel_nombre || "N/A"}</Badge>
+                      </TableCell>
+                      <TableCell>{formatearMoneda(platillo.costototal)}</TableCell>
+                      <TableCell>{formatearMoneda(platillo.costoadministrativo)}</TableCell>
+                      <TableCell>{formatearFecha(platillo.fechacreacion)}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Button variant="outline" size="sm" onClick={() => router.push(`/platillos/${platillo.id}`)}>
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => router.push(`/platillos/editar?id=${platillo.id}`)}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-red-600 hover:text-red-700 bg-transparent"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Esta acción no se puede deshacer. Se eliminará permanentemente la receta "
+                                  {platillo.nombre}".
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => handleEliminarList(platillo.id)}
+                                  disabled={deleteLoadingList === platillo.id}
+                                  className="bg-red-600 hover:bg-red-700"
+                                >
+                                  {deleteLoadingList === platillo.id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                  ) : null}
+                                  Eliminar
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
           )}
         </CardContent>
