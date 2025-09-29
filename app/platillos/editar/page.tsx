@@ -1088,7 +1088,7 @@ export default function EditarPlatilloPage() {
 
           for (const menuAssoc of platilloMenus) {
             const hotelId = menuAssoc.menus.restaurantes.hotelid
-            const restauranteId = menuAssoc.menus.restaurantes.restauranteid
+            const restauranteId = menuAssoc.menus.restauranteid
             const menuIdAssoc = menuAssoc.menuid
             const PrecioAssoc = menuAssoc.precioventa
 

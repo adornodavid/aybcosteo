@@ -35,6 +35,7 @@ export async function agregarPlatilloAMenu(data: AgregarPlatilloData) {
           menuid: data.menuid, // Usar 'menuid'
           platilloid: data.platilloid, // Usar 'platilloid'
           precioventa: data.precioventa, // Usar 'precioventa'
+          precioconiva: data.precioventa*1.16, // Usar 'precioventa'
           margenutilidad: margenUtilidad, // Usar 'margenutilidad'
           activo: data.activo ?? true,
           fechacreacion: new Date().toISOString(), // Usar 'fechacreacion'

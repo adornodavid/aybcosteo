@@ -12,8 +12,8 @@ import {
   obtenerTodosLosPlatillos,
   eliminarPlatilloDeMenu,
   obtenerDetallePlatillo,
-  actualizarPrecioVenta, // Importar la acción de actualizar precio
-  obtenerNombreMenu, // Importar la nueva función
+  actualizarPrecioVenta,
+  obtenerNombreMenu,
 } from "@/app/actions/menu-platillos-actions"
 import type { MenuPlatillo, Platillo } from "@/lib/types-sistema-costeo"
 import { Button } from "@/components/ui/button"
@@ -30,13 +30,13 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/components/ui/use-toast"
-import { Loader2, ArrowLeft, Plus, Trash2, Pencil, TriangleAlert } from "lucide-react" // Importar Pencil y TriangleAlert
+import { Loader2, ArrowLeft, Plus, Trash2, Pencil, TriangleAlert } from "lucide-react"
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table"
-import { createClient } from "@/lib/supabase" // Import the correct client for client-side fetching
+import { createClient } from "@/lib/supabase"
 
 interface AgregarPlatillosPageProps {
   params: {
-    id: string // menu.id
+    id: string
   }
 }
 
@@ -47,33 +47,29 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
 
   const [assignedPlatillos, setAssignedPlatillos] = useState<MenuPlatillo[]>([])
   const [availablePlatillos, setAvailablePlatillos] = useState<Platillo[]>([])
-  const [nombreMenu, setNombreMenu] = useState<string>("") // Nuevo estado para el nombre del menú
+  const [nombreMenu, setNombreMenu] = useState<string>("")
   const [loading, setLoading] = useState(true)
-  const [dialogOpen, setDialogOpen] = useState(false) // Para agregar platillo
+  const [dialogOpen, setDialogOpen] = useState(false)
   const [selectedPlatilloId, setSelectedPlatilloId] = useState<string>("")
   const [costoPlatillo, setCostoPlatillo] = useState<string>("")
-  const [costoAdministrativo, setCostoAdministrativo] = useState<string>("") // Nueva variable de estado
+  const [costoAdministrativo, setCostoAdministrativo] = useState<string>("")
   const [precioVenta, setPrecioVenta] = useState<string>("")
-  const [precioSugerido, setPrecioSugerido] = useState<string>("") // Nueva variable de estado para precio sugerido
+  const [precioSugerido, setPrecioSugerido] = useState<string>("")
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [showValidationAlert, setShowValidationAlert] = useState(false) // Nuevo estado para la alerta de validación
-  const [costoPorcentual, setCostoPorcentual] = useState<string>("") // Nuevo estado para Costo%
-  const [searchFilter, setSearchFilter] = useState<string>("") // Nuevo estado para el filtro de búsqueda
-  const [sortOrder, setSortOrder] = useState<string>("") // Nuevo estado para el ordenamiento
+  const [showValidationAlert, setShowValidationAlert] = useState(false)
+  const [costoPorcentual, setCostoPorcentual] = useState<string>("")
+  const [searchFilter, setSearchFilter] = useState<string>("")
+  const [sortOrder, setSortOrder] = useState<string>("")
 
-  // Estados para el modal de detalles del platillo
   const [showDetailsDialog, setShowDetailsDialog] = useState(false)
   const [selectedPlatilloForDetails, setSelectedPlatilloForDetails] = useState<Platillo | null>(null)
 
-  // Estado para la tabla de información del platillo en el formulario de agregar
   const [selectedPlatilloDetailsForForm, setSelectedPlatilloDetailsForForm] = useState<Platillo | null>(null)
 
-  // Nuevos estados para el modal de edición de precio
   const [showEditPriceDialog, setShowEditPriceDialog] = useState(false)
   const [platilloToEdit, setPlatilloToEdit] = useState<MenuPlatillo | null>(null)
   const [editPrecioVenta, setEditPrecioVenta] = useState<string>("")
 
-  // Función para obtener el nombre del menú
   const fetchNombreMenu = useCallback(async () => {
     const res = await obtenerNombreMenu(menuId)
     if (res.data) {
@@ -119,11 +115,10 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
   }, [menuId, toast])
 
   useEffect(() => {
-    fetchNombreMenu() // Cargar el nombre del menú
+    fetchNombreMenu()
     fetchPlatillos()
   }, [fetchNombreMenu, fetchPlatillos])
 
-  // Función para limpiar los inputs del diálogo
   const resetDialogInputs = useCallback(() => {
     setSelectedPlatilloId("")
     setCostoPlatillo("")
@@ -132,7 +127,7 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
     setPrecioSugerido("")
     setSelectedPlatilloDetailsForForm(null)
     setCostoPorcentual("")
-    setShowValidationAlert(false) // También limpiar la alerta de validación
+    setShowValidationAlert(false)
   }, [])
 
   const calcularCostoPorcentual = async (precioVenta: string, platilloId: number) => {
@@ -142,7 +137,7 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
     }
 
     try {
-      const supabase = createClient() // Usar createClient para el lado del cliente
+      const supabase = createClient()
       const { data, error } = await supabase
         .from("platillos")
         .select("costoadministrativo")
@@ -156,20 +151,19 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
 
       const costoAdmin = data.costoadministrativo || 0
       const precio = Number.parseFloat(precioVenta)
-      const porcentaje = (costoAdmin / precio) * 100 // Multiplicar por 100 para obtener porcentaje
-      setCostoPorcentual(porcentaje.toFixed(2)) // Formatear a 2 decimales
+      const porcentaje = (costoAdmin / precio) * 100
+      setCostoPorcentual(porcentaje.toFixed(2))
     } catch (error) {
       setCostoPorcentual("")
     }
   }
 
   const handleAddPlatillo = async () => {
-    // Validar que se haya seleccionado un platillo y se haya ingresado un precio de venta
     if (!selectedPlatilloId || !precioVenta || Number.parseFloat(precioVenta) <= 0) {
-      setShowValidationAlert(true) // Mostrar la alerta
+      setShowValidationAlert(true)
       return
     }
-    setShowValidationAlert(false) // Ocultar la alerta si la validación pasa
+    setShowValidationAlert(false)
 
     const platilloExistente = assignedPlatillos.find((p) => p.platilloid === Number.parseInt(selectedPlatilloId))
     if (platilloExistente) {
@@ -181,7 +175,6 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
       return
     }
 
-    // Asegurarse de que costoPorcentual esté calculado antes de llamar a la acción
     const currentCostoPorcentual = Number.parseFloat(costoPorcentual)
     if (isNaN(currentCostoPorcentual)) {
       toast({
@@ -198,8 +191,8 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
       platilloid: Number.parseInt(selectedPlatilloId),
       precioventa: Number.parseFloat(precioVenta),
       costoplatillo: Number.parseFloat(costoPlatillo),
-      costoadministrativo: Number.parseFloat(costoAdministrativo), // Pasar el costo administrativo
-      costoporcentual: currentCostoPorcentual, // Pasar el nuevo parámetro
+      costoadministrativo: Number.parseFloat(costoAdministrativo),
+      costoporcentual: currentCostoPorcentual,
     })
 
     if (res.data) {
@@ -208,8 +201,8 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
         description: "Platillo asignado al menú.",
       })
       setDialogOpen(false)
-      resetDialogInputs() // Limpiar inputs al agregar exitosamente
-      fetchPlatillos() // Actualizar el listado
+      resetDialogInputs()
+      fetchPlatillos()
     } else {
       toast({
         title: "Error",
@@ -222,7 +215,6 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
 
   const handlePlatilloSelect = async (value: string) => {
     setSelectedPlatilloId(value)
-    // Reset validation alert when a platillo is selected
     setShowValidationAlert(false)
 
     const selected = availablePlatillos.find((p) => p.id === Number.parseInt(value))
@@ -232,35 +224,31 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
       setCostoPlatillo("")
     }
 
-    // Cargar detalles completos del platillo para la tabla de información
     if (value) {
       const detailsRes = await obtenerDetallePlatillo(Number.parseInt(value))
       if (detailsRes.data) {
         setSelectedPlatilloDetailsForForm(detailsRes.data)
-        // Actualizar el costo administrativo si está disponible
         if (detailsRes.data.costoadministrativo !== null) {
           setCostoAdministrativo(detailsRes.data.costoadministrativo.toString())
         } else {
-          setCostoAdministrativo("") // Limpiar si no hay costo administrativo
+          setCostoAdministrativo("")
         }
-        // Actualizar el precio sugerido si está disponible
         if (detailsRes.data.precioSugerido !== null && detailsRes.data.precioSugerido !== undefined) {
           setPrecioSugerido(detailsRes.data.precioSugerido.toFixed(2).toString())
         } else {
-          setPrecioSugerido("") // Limpiar si no hay precio sugerido
+          setPrecioSugerido("")
         }
 
-        // Calcular costo porcentual si hay precio de venta
         if (precioVenta) {
           await calcularCostoPorcentual(precioVenta, Number.parseInt(value))
         } else {
-          setCostoPorcentual("") // Limpiar si no hay precio de venta
+          setCostoPorcentual("")
         }
       } else {
         setSelectedPlatilloDetailsForForm(null)
-        setCostoAdministrativo("") // Limpiar si hay error
-        setPrecioSugerido("") // Limpiar si hay error
-        setCostoPorcentual("") // Limpiar si hay error
+        setCostoAdministrativo("")
+        setPrecioSugerido("")
+        setCostoPorcentual("")
         toast({
           title: "Error",
           description: detailsRes.error || "Error al cargar detalles del platillo.",
@@ -269,9 +257,9 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
       }
     } else {
       setSelectedPlatilloDetailsForForm(null)
-      setCostoAdministrativo("") // Limpiar si no hay selección
-      setPrecioSugerido("") // Limpiar si no hay selección
-      setCostoPorcentual("") // Limpiar si no hay selección
+      setCostoAdministrativo("")
+      setPrecioSugerido("")
+      setCostoPorcentual("")
     }
   }
 
@@ -281,7 +269,7 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
   }
 
   const handleDeletePlatillo = async (platilloIdToDelete: number) => {
-    setIsSubmitting(true) // Reutilizar isSubmitting para el botón de eliminar
+    setIsSubmitting(true)
     const res = await eliminarPlatilloDeMenu({ menuid: menuId, platilloid: platilloIdToDelete })
 
     if (res.success) {
@@ -289,7 +277,7 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
         title: "Éxito",
         description: "Platillo eliminado del menú.",
       })
-      fetchPlatillos() // Actualizar el listado
+      fetchPlatillos()
     } else {
       toast({
         title: "Error",
@@ -300,17 +288,14 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
     setIsSubmitting(false)
   }
 
-  // Función para abrir el modal de edición de precio
   const handleEditPrice = (platillo: MenuPlatillo) => {
     setPlatilloToEdit(platillo)
     setEditPrecioVenta(platillo.precioventa?.toString() || "")
-    // Establecer el precio sugerido del platillo para el modal de edición
     if (platillo.platillos?.precioSugerido !== null && platillo.platillos?.precioSugerido !== undefined) {
       setPrecioSugerido(platillo.platillos.precioSugerido.toFixed(2).toString())
     } else {
       setPrecioSugerido("")
     }
-    // Recalcular costo porcentual al abrir el modal de edición
     if (platillo.precioventa && platillo.platilloid) {
       calcularCostoPorcentual(platillo.precioventa.toString(), platillo.platilloid)
     } else {
@@ -319,7 +304,6 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
     setShowEditPriceDialog(true)
   }
 
-  // Función para actualizar el precio de venta
   const handleUpdatePrecioVenta = async () => {
     if (!platilloToEdit || !editPrecioVenta) {
       toast({
@@ -330,7 +314,6 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
       return
     }
 
-    // Asegurarse de que costoPorcentual esté calculado antes de llamar a la acción
     const currentCostoPorcentual = Number.parseFloat(costoPorcentual)
     if (isNaN(currentCostoPorcentual)) {
       toast({
@@ -346,9 +329,9 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
       menuid: menuId,
       platilloid: platilloToEdit.platilloid,
       precioventa: Number.parseFloat(editPrecioVenta),
-      costoplatillo: platilloToEdit.platillos?.costototal || 0, // Usar el costo del platillo asignado
-      costoadministrativo: platilloToEdit.platillos?.costoadministrativo || 0, // Pasar el costo administrativo
-      costoporcentual: currentCostoPorcentual, // Pasar el nuevo parámetro
+      costoplatillo: platilloToEdit.platillos?.costototal || 0,
+      costoadministrativo: platilloToEdit.platillos?.costoadministrativo || 0,
+      costoporcentual: currentCostoPorcentual,
     })
 
     if (res.data) {
@@ -359,7 +342,7 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
       setShowEditPriceDialog(false)
       setPlatilloToEdit(null)
       setEditPrecioVenta("")
-      fetchPlatillos() // Actualizar el listado
+      fetchPlatillos()
     } else {
       toast({
         title: "Error",
@@ -387,6 +370,14 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
       }
     })
 
+  // Función para actualizar el listado de platillos disponibles
+  const handleOpenDialog = async () => {
+    resetDialogInputs()
+    setDialogOpen(true)
+    // Actualizar el listado de platillos disponibles
+    await fetchPlatillos()
+  }
+
   return (
     <div className="flex flex-col min-h-screen p-4 md:p-6">
       <div className="flex items-center justify-between mb-6">
@@ -403,14 +394,7 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
           </Button>
           <h1 className="text-3xl font-bold">Recetas de Menú: {nombreMenu || "Cargando..."}</h1>
         </div>
-        <Button
-          id="btnAgregarPlatillo"
-          name="btnAgregarPlatillo"
-          onClick={() => {
-            resetDialogInputs() // Limpiar inputs al abrir el diálogo
-            setDialogOpen(true)
-          }}
-        >
+        <Button id="btnAgregarPlatillo" name="btnAgregarPlatillo" onClick={handleOpenDialog}>
           <Plus className="mr-2 h-4 w-4" />
           Agregar Recetas
         </Button>
@@ -501,7 +485,7 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
                           size="icon"
                           className="h-6 w-6 text-gray-500 hover:text-gray-700"
                           onClick={(e) => {
-                            e.stopPropagation() // Evitar que se dispare handleViewDetails
+                            e.stopPropagation()
                             handleEditPrice(platillo)
                           }}
                         >
@@ -521,19 +505,16 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
         )}
       </section>
 
-      {/* Dialog para agregar platillo al menú */}
       <Dialog
         open={dialogOpen}
         onOpenChange={(open) => {
           setDialogOpen(open)
           if (!open) {
-            // Si el diálogo se está cerrando
-            resetDialogInputs() // Limpiar inputs al cerrar el diálogo
+            resetDialogInputs()
           }
         }}
       >
         <DialogContent className="sm:max-w-lg">
-          {/* Aumentado el ancho aquí */}
           <DialogHeader>
             <DialogTitle>Agregar Recetas al Menú</DialogTitle>
             <DialogDescription>Selecciona una Recetas y define su precio de venta.</DialogDescription>
@@ -589,19 +570,11 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
                           {selectedPlatilloDetailsForForm.instruccionespreparacion || "N/A"}
                         </TableCell>
                       </TableRow>
-                      {/*<TableRow>
-                        <TableCell className="font-medium">Costo de Elaboracion:</TableCell>
-                        <TableCell>${(selectedPlatilloDetailsForForm.costototal ?? 0).toFixed(2)}</TableCell>
-                      </TableRow>*/}
                       <TableRow>
                         <TableCell className="font-medium">Costo Total:</TableCell>
                         <TableCell>${(selectedPlatilloDetailsForForm.costoadministrativo ?? 0).toFixed(2)}</TableCell>
                       </TableRow>
-                      {/*<TableRow>
-                        <TableCell className="font-medium">% Administracion:</TableCell>
-                        <TableCell className="text-sm">75%</TableCell>
-                      </TableRow>*/}
-                      {precioSugerido && ( // Mostrar solo si hay un precio sugerido
+                      {precioSugerido && (
                         <TableRow>
                           <TableCell className="font-medium">Precio Mínimo:</TableCell>
                           <TableCell>${precioSugerido}</TableCell>
@@ -613,36 +586,6 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
                 </CardContent>
               </Card>
             )}
-            {/*<div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="txtCostoPlatillo" className="text-right">
-                Costo Platillo
-              </Label>
-              <Input
-                id="txtCostoPlatillo"
-                name="txtCostoPlatillo"
-                type="text"
-                value={costoPlatillo}
-                onChange={(e) => setCostoPlatillo(e.target.value)}
-                className="col-span-3"
-                placeholder="Costo total del platillo"
-                readOnly
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="txtCostoAdministrativo" className="text-right">
-                Costo Administrativo
-              </Label>
-              <Input
-                id="txtCostoAdministrativo"
-                name="txtCostoAdministrativo"
-                type="text"
-                value={costoAdministrativo}
-                onChange={(e) => setCostoAdministrativo(e.target.value)}
-                className="col-span-3"
-                placeholder="Costo administrativo del platillo"
-                readOnly
-              />
-            </div>*/}
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="txtPrecioVenta" className="text-right">
                 Precio Venta
@@ -654,19 +597,17 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
                 value={precioVenta}
                 onChange={async (e) => {
                   setPrecioVenta(e.target.value)
-                  setShowValidationAlert(false) // Ocultar la alerta al empezar a escribir
-                  // Calcular costo porcentual si hay platillo seleccionado
+                  setShowValidationAlert(false)
                   if (selectedPlatilloId) {
                     await calcularCostoPorcentual(e.target.value, Number.parseInt(selectedPlatilloId))
                   } else {
-                    setCostoPorcentual("") // Limpiar si no hay platillo seleccionado
+                    setCostoPorcentual("")
                   }
                 }}
                 className="col-span-3"
                 placeholder="Precio de venta del platillo"
               />
             </div>
-            {/* Nuevo input Costo% - Después de la línea 482 */}
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="txtCostoPorcentual" className="text-right">
                 Costo%
@@ -715,7 +656,6 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
         </DialogContent>
       </Dialog>
 
-      {/* Dialog para mostrar detalles del platillo */}
       <Dialog open={showDetailsDialog} onOpenChange={setShowDetailsDialog}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
@@ -743,15 +683,11 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
                     <TableCell className="font-medium">Instrucciones:</TableCell>
                     <TableCell>{selectedPlatilloForDetails.instruccionespreparacion || "N/A"}</TableCell>
                   </TableRow>
-                  {/* <TableRow>
-                   <TableCell className="font-medium">Costo de Elaboracion:</TableCell>
-                    <TableCell>${(selectedPlatilloForDetails.costototal ?? 0).toFixed(2)}</TableCell>
-                  </TableRow>*/}
                   <TableRow>
                     <TableCell className="font-medium">Costo Total:</TableCell>
                     <TableCell>${(selectedPlatilloForDetails.costoadministrativo ?? 0).toFixed(2)}</TableCell>
                   </TableRow>
-                  {precioSugerido && ( // Mostrar solo si hay un precio sugerido
+                  {precioSugerido && (
                     <TableRow>
                       <TableCell className="font-medium">Precio Mínimo:</TableCell>
                       <TableCell>${precioSugerido}</TableCell>
@@ -767,7 +703,6 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
         </DialogContent>
       </Dialog>
 
-      {/* Nuevo Dialog para editar precio de venta */}
       <Dialog open={showEditPriceDialog} onOpenChange={setShowEditPriceDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -804,19 +739,6 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
                 </div>
               </div>
             )}
-            {/*<div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="txtCostoPla" className="text-right">
-                Costo Platillo
-              </Label>
-              <Input
-                id="txtCostoPla"
-                name="txtCostoPla"
-                type="text"
-                value={(platilloToEdit?.platillos?.costototal ?? 0).toFixed(2) || ""}
-                className="col-span-3"
-                readOnly
-              />
-            </div> */}
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="txtCostoAdmin" className="text-right">
                 Costo Total
@@ -831,8 +753,7 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
                 disabled
               />
             </div>
-            {/* Línea 742: Aquí se inserta el Precio Mínimo */}
-            {precioSugerido && ( // Mostrar solo si hay un precio sugerido
+            {precioSugerido && (
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="txtPrecioMinimo" className="text-right">
                   Precio Mínimo
@@ -841,14 +762,13 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
                   id="txtPrecioMinimo"
                   name="txtPrecioMinimo"
                   type="text"
-                  value={precioSugerido} // Usar el estado precioSugerido que se setea en handleEditPrice
+                  value={precioSugerido}
                   className="col-span-3"
                   readOnly
                   disabled
                 />
               </div>
             )}
-            {/* Línea 743: Continúa el código original */}
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="txtPreVen" className="text-right">
                 Precio Venta(SinIva)
@@ -858,22 +778,19 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
                 name="txtPreVen"
                 type="number"
                 value={editPrecioVenta}
-                //onChange={(e) => setEditPrecioVenta(e.target.value)}
                 className="col-span-3"
                 placeholder="Nuevo precio de venta"
                 onChange={async (e) => {
                   setEditPrecioVenta(e.target.value)
-                  setShowValidationAlert(false) // Ocultar la alerta al empezar a escribir
-                  // Calcular costo porcentual si hay platillo seleccionado
+                  setShowValidationAlert(false)
                   if (platilloToEdit?.platilloid) {
                     await calcularCostoPorcentual(e.target.value, Number.parseInt(platilloToEdit.platilloid))
                   } else {
-                    setCostoPorcentual("") // Limpiar si no hay platillo seleccionado
+                    setCostoPorcentual("")
                   }
                 }}
               />
             </div>
-            {/* Nuevo input Costo% - Después de la línea 482 */}
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="txtCostoPorc" className="text-right">
                 Costo%
@@ -895,7 +812,6 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
                 readOnly
               />
             </div>
-            {/* Precio Venta (Con IVA) */}
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="txtPrecioConIva" className="text-right">
                 Precio Venta (Con IVA)

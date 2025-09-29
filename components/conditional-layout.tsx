@@ -1,29 +1,22 @@
 "use client"
 
 import type React from "react"
+
 import { usePathname } from "next/navigation"
 import { AppSidebar } from "@/components/app-sidebar-final"
 
-interface ConditionalLayoutProps {
-  children: React.ReactNode
-}
-
-export default function ConditionalLayout({ children }: ConditionalLayoutProps) {
+export default function ConditionalLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
+  const isLoginPage = pathname === "/login"
 
-  // Páginas que no deben mostrar la navegación
-  const noSidebarPages = ["/login", "/logout"]
-
-  const shouldShowSidebar = !noSidebarPages.includes(pathname)
-
-  if (!shouldShowSidebar) {
+  if (isLoginPage) {
     return <>{children}</>
   }
 
   return (
-    <div className="flex min-h-screen flex-row items-stretch">
+    <div className="flex h-screen">
       <AppSidebar />
-      <main className="flex-1 bg-gray-50">{children}</main>
+      <main className="flex-1 ml-[100px] overflow-auto">{children}</main>
     </div>
   )
 }
