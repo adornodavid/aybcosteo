@@ -95,38 +95,19 @@ interface DetallesRecetaTooltip {
   unidadbase: string
 }
 
-// Función para obtener los meses disponibles hasta el mes actual
-const obtenerMesesDisponibles = () => {
-  const fechaActual = new Date()
-  const mesActual = fechaActual.getMonth() + 1 // getMonth() devuelve 0-11, necesitamos 1-12
+const mesesDelAño = [
+  { id: 1, nombre: "Enero" },
+  { id: 2, nombre: "Febrero" },
+  { id: 3, nombre: "Marzo" },
+  { id: 4, nombre: "Abril" },
+  { id: 5, nombre: "Mayo" },
+  { id: 6, nombre: "Junio" },
+  { id: 7, nombre: "Julio" },
+  { id: 8, nombre: "Agosto" },
+  { id: 9, nombre: "Septiembre" },
+]
 
-  const todosMeses = [
-    { id: 1, nombre: "Enero" },
-    { id: 2, nombre: "Febrero" },
-    { id: 3, nombre: "Marzo" },
-    { id: 4, nombre: "Abril" },
-    { id: 5, nombre: "Mayo" },
-    { id: 6, nombre: "Junio" },
-    { id: 7, nombre: "Julio" },
-    { id: 8, nombre: "Agosto" },
-    { id: 9, nombre: "Septiembre" },
-    { id: 10, nombre: "Octubre" },
-    { id: 11, nombre: "Noviembre" },
-    { id: 12, nombre: "Diciembre" },
-  ]
-
-  // Filtrar solo los meses hasta el mes actual
-  return todosMeses.filter((mes) => mes.id <= mesActual)
-}
-
-// Función para obtener los años disponibles
-const obtenerAñosDisponibles = () => {
-  const añoActual = new Date().getFullYear()
-  return [{ id: añoActual, nombre: añoActual.toString() }]
-}
-
-const mesesDelAño = obtenerMesesDisponibles()
-const añosDisponibles = obtenerAñosDisponibles()
+const añosDisponibles = [{ id: 2025, nombre: "2025" }]
 
 const ITEMS_PER_PAGE = 20
 
@@ -167,18 +148,9 @@ export default function MargenesUtilidadPage() {
   const [ingredientesAumento, setIngredientesAumento] = useState<CambioIngrediente[]>([])
   const [ingredientesDisminucion, setIngredientesDisminucion] = useState<CambioIngrediente[]>([])
   const [hoteles, setHoteles] = useState<OpcionSelect[]>([])
-  const [hotelSeleccionado, setHotelSeleccionado] = useState<string>(() => {
-    const hotelActual = obtenerHotelesPorRol()
-    return hotelActual.then((data) => (data.success && data.data.length > 0 ? data.data[0].id.toString() : ""))
-  })
-  const [mesSeleccionado, setMesSeleccionado] = useState<string>(() => {
-    const mesActual = new Date().getMonth() + 1
-    return mesActual.toString()
-  })
-  const [añoSeleccionado, setAñoSeleccionado] = useState<string>(() => {
-    const añoActual = new Date().getFullYear()
-    return añoActual.toString()
-  })
+  const [hotelSeleccionado, setHotelSeleccionado] = useState<string>("")
+  const [mesSeleccionado, setMesSeleccionado] = useState<string>("7")
+  const [añoSeleccionado, setAñoSeleccionado] = useState<string>("2025")
 
   // Estados para tooltips
   const [detallesPlatilloTooltip, setDetallesPlatilloTooltip] = useState<DetallesPlatilloTooltip | null>(null)
