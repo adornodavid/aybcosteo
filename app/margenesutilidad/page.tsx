@@ -185,7 +185,13 @@ export default function MargenesUtilidadPage() {
   const [ingredientesDisminucion, setIngredientesDisminucion] = useState<CambioIngrediente[]>([])
   const [hoteles, setHoteles] = useState<OpcionSelect[]>([])
   const [hotelSeleccionado, setHotelSeleccionado] = useState<string>("")
-  const [mesSeleccionado, setMesSeleccionado] = useState<string>("7")
+  //const [mesSeleccionado, setMesSeleccionado] = useState<string>("7")
+
+    const [mesSeleccionado, setMesSeleccionado] = useState<string>(() => {
+    const mesActual = new Date().getMonth() + 1
+    return mesActual.toString()
+  })
+
   const [añoSeleccionado, setAñoSeleccionado] = useState<string>("2025")
 
   // Estados para tooltips
