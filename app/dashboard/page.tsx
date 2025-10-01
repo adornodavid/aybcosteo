@@ -198,7 +198,7 @@ const mesesDelAño = [
   { id: 7, nombre: "Julio" },
   { id: 8, nombre: "Agosto" },
   { id: 9, nombre: "Septiembre" },
-  //{ id: 9, nombre: "Septiembre" },
+  { id: 10, nombre: "Octubre" },
 ]
 
 const añosDisponibles = [{ id: 2025, nombre: "2025" }]
@@ -257,7 +257,7 @@ export default function DashboardPage() {
   // Estados de filtros de fecha con valores por defecto
   const fechaActual = new Date()
   const fechaanterior = new Date(fechaActual.getFullYear(), fechaActual.getMonth() - 1, 1)
-  const mesAnterior = fechaActual.getMonth()+1
+  const mesAnterior = fechaActual.getMonth() + 1
   const añoActual = fechaActual.getFullYear()
 
   const [mesSeleccionado, setMesSeleccionado] = useState<string>(mesAnterior.toString())
@@ -1698,7 +1698,7 @@ export default function DashboardPage() {
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent className="w-auto p-0">
-                        <Calendar mode="single" selected={fechaFinal} onSelect={fechaFinal} initialFocus />
+                        <Calendar mode="single" selected={fechaFinal} onSelect={setFechaFinal} initialFocus />
                       </PopoverContent>
                     </Popover>
                   </div>
@@ -2089,7 +2089,7 @@ export default function DashboardPage() {
 
         {/* Tarjetas de análisis de costos del lado derecho */}
         <div className="w-4/4 row-span-4">
-          <Card className="rounded-xs border bg-card text-card-foreground shadow bg-gradient-to-r h-[650px] from-amber-50 to-orange-50 border-orange-100">
+          <Card className="rounded-xs border bg-card text-card-foreground shadow bg-gradient-to-r from-amber-50 to-orange-50 border-orange-100">
             <CardHeader>
               <CardTitle className="flex items-center justify-between text-orange-800">
                 <div className="flex items-center gap-2">
@@ -2426,7 +2426,7 @@ export default function DashboardPage() {
 
         {/* 4. Sección Insumos */}
         <div className="w-4/4 row-span-4">
-          <Card className="rounded-xs border bg-card text-card-foreground shadow bg-gradient-to-r h-[650px] from-[#fdfaff] to-[#fdfaff] border-purple-100">
+          <Card className="rounded-xs border bg-card text-card-foreground shadow bg-gradient-to-r from-[#fdfaff] to-[#fdfaff] border-purple-100">
             <CardHeader>
               <CardTitle className="flex items-center justify-between text-purple-800">
                 <div className="flex items-center gap-2">
@@ -2624,7 +2624,7 @@ export default function DashboardPage() {
 
         {/* Gráfico del lado izquierdo */}
         <div className="col-span-2 row-span-2">
-          <Card className="rounded-xs border bg-card text-card-foreground shadow bg-gradient-to-r h-[315px] from-cyan-50 to-blue-50 border-cyan-200">
+          <Card className="rounded-xs border bg-card text-card-foreground shadow bg-gradient-to-r from-cyan-50 to-blue-50 border-cyan-200">
             <CardHeader className="flex flex-col space-y-1.5 p-4">
               <CardTitle className="flex items-center justify-between text-cyan-800">
                 <div className="flex items-center gap-2">
@@ -2869,7 +2869,7 @@ export default function DashboardPage() {
                                 <div className="flex-1 bg-gray-200 rounded-full h-4 relative overflow-hidden">
                                   <div
                                     className="h-full bg-gradient-to-r from-green-500 to-emerald-400 rounded-full transition-all duration-300 group-hover:from-green-600 group-hover:to-emerald-500"
-                                    style={{ width: `${Math.min(margen.margenutilidad, 100)}%` }}
+                                    style={{ width: `${Math.min(margen.margenutilidad, 500)}%` }}
                                   />
                                 </div>
                                 <span className="text-xs font-medium text-green-700 min-w-[40px] text-right">
@@ -3146,7 +3146,7 @@ export default function DashboardPage() {
                       <div className="text-sm font-semibold text-orange-800">Costo Porcentual</div>
                     </div>
 
-                    {/* Filas de datos */}
+                    {/* Filas de datos con barra que se llena según el valor real */}
                     {promedioMenuCosto.map((menu, index) => (
                       <TooltipProvider key={index}>
                         <UITooltip>
@@ -3161,7 +3161,7 @@ export default function DashboardPage() {
                                   <div
                                     className="h-full bg-gradient-to-r from-orange-500 to-red-400 rounded-full transition-all duration-300 group-hover:from-orange-600 group-hover:to-red-500"
                                     style={{
-                                      width: `${Math.min(menu.costoporcentual, 100)}%`,
+                                      width: `${(menu.costoporcentual / 60) * 100}%`,
                                     }}
                                   />
                                 </div>
@@ -3253,7 +3253,7 @@ export default function DashboardPage() {
                       </div>
                     </div>
 
-                    {/* Tabla de ingredientes y recetas históricos combinada */}
+                    {/*Tabla de ingredientes y recetas históricos combinada */}
                     <div className="bg-white rounded-lg border overflow-hidden">
                       <div className="max-h-96 overflow-y-auto">
                         <table className="w-full text-sm">
@@ -3342,7 +3342,7 @@ export default function DashboardPage() {
                       </div>
                     </div>
 
-                    {/* Tabla de detalles actuales */}
+                    {/*Tabla de detalles actuales */}
                     <div className="bg-white rounded-lg border overflow-hidden">
                       <div className="max-h-96 overflow-y-auto">
                         <table className="w-full text-sm">

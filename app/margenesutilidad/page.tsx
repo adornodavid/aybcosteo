@@ -192,7 +192,12 @@ export default function MargenesUtilidadPage() {
     return mesActual.toString()
   })
 
-  const [añoSeleccionado, setAñoSeleccionado] = useState<string>("2025")
+    const [añoSeleccionado, setAñoSeleccionado] = useState<string>(() => {
+    const añoActual = new Date().getFullYear()
+    return añoActual.toString()
+  })
+
+  //const [añoSeleccionado, setAñoSeleccionado] = useState<string>("2025")
 
   // Estados para tooltips
   const [detallesPlatilloTooltip, setDetallesPlatilloTooltip] = useState<DetallesPlatilloTooltip | null>(null)

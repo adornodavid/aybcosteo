@@ -157,7 +157,7 @@ export async function obtenerCambiosCostosPlatillos(mes: number, año: number, h
         const variacion = ((costoActual - costoInicial) / costoInicial) * 100
 
         // Filtrar cambios significativos (≥5%)
-        if (Math.abs(variacion) >= 0) {
+        if (Math.abs(variacion) >= 0.1) {
           cambiosSignificativos.push({
             id: platillo.id || platillo.platilloid,
             nombre: platillo.nombre,

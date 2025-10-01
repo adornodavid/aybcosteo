@@ -32,10 +32,24 @@ export function useUserSession() {
     if (!user) return
 
     try {
-      // Buscar usuario en la tabla usuarios
+      // Buscar usuario en la tabla usuarios usando el email del usuario autenticado
+      const userEmail = user.email
+      console.log("emial",user.email)
+      if (!user.email) {
+        console.error("No hay email en el usuario autenticado")
+        setProfile({
+          id: user.id,
+          email: "Sin email",
+          nombre: "Usuario",
+        })
+        setLoading(false)
+        return
+      }
+
       const { data: userData, error } = await supabase
         .from("usuarios")
-        .select(`
+        .select(
+          `
           id,
           nombrecompleto,
           email,
@@ -48,23 +62,32 @@ export function useUserSession() {
           hoteles:hotelid (
             nombre
           )
-        `)
+        `,
+        )
         .eq("email", user.email)
-        .single()
+        .maybeSingle()
 
       if (error) {
         console.error("Error fetching user profile:", error)
         // Si no existe en usuarios, crear perfil básico
         setProfile({
           id: user.id,
-          email: user.email || "",
-          nombre: user.email?.split("@")[0] || "Usuario",
+          email: user.email,
+          nombre: user.email.split("@")[0] || "Usuario",
+        })
+      } else if (!userData) {
+        // No se encontró el usuario en la base de datos
+        console.warn("Usuario no encontrado en la tabla usuarios")
+        setProfile({
+          id: user.id,
+          email: user.email,
+          nombre: user.email.split("@")[0] || "Usuario",
         })
       } else {
         setProfile({
           id: userData.id.toString(),
-          email: userData.email || user.email || "",
-          nombre: userData.nombre || user.email?.split("@")[0] || "Usuario",
+          email: userData.email || user.email,
+          nombre: userData.nombrecompleto || user.email.split("@")[0] || "Usuario",
           rol: userData.roles?.nombre || "Usuario",
           hotel_id: userData.hotelid,
           hotel_nombre: userData.hoteles?.nombre,

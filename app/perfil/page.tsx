@@ -3,94 +3,238 @@
 /* ==================================================
   Imports
 ================================================== */
-import { useUserSession } from "@/hooks/use-user-session"
-import { UserInfo } from "@/components/user-info"
+import { useEffect, useState, useMemo } from "react"
+//import { useUserSession } from "@/hooks/use-user-session"
+import { useAuth } from "@/contexts/auth-context"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-//import { useAuth } from "@/contexts/auth-context"
-//import { useRouter } from "next/navigation"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { obtenerUsuariosPorRol, obtenerUsuariosPorHotel } from "@/app/actions/perfil-actions"
+import { supabase } from "@/lib/supabase"
+
+interface Usuario {
+  id: string
+  nombrecompleto: string
+  email: string
+  rol: string
+  hotel: string
+  imgurl?: string
+}
+
+interface DropdownItem {
+  id: number
+  nombre: string
+}
 
 export default function PerfilPage() {
-  const { profile, user, loading } = useUserSession() // Destructuramos 'user' también
-  //const { signOut } = useAuth()
-  //const router = useRouter()
+  const { profile, user, loading } = useAuth()
+  const [usuarios, setUsuarios] = useState<Usuario[]>([])
+  const [hoteles, setHoteles] = useState<DropdownItem[]>([])
+  const [filtroHotel, setFiltroHotel] = useState("-1")
+  const [loadingUsuarios, setLoadingUsuarios] = useState(false)
+  const [pageLoading, setPageLoading] = useState(true)
 
-  /*
-  const handleSignOut = async () => {
-    await signOut()
-    router.push("/login")
-  }
-  */
+  // Determinar si es admin basado en la cookie de sesión
+  const esAdmin = useMemo(() => {
+    if (!user) return false
+    const rolId = user.RolId
+    return rolId && [1, 2, 3, 4].includes(rolId)
+  }, [user])
 
-  if (loading) {
-    return <div>Cargando perfil...</div>
+  // Cargar datos iniciales (hoteles)
+  const cargarDatosIniciales = async () => {
+    if (!user) {
+      console.log("No hay usuario para cargar datos iniciales")
+      return
+    }
+
+    console.log("Cargando datos iniciales. Usuario:", user.Email, "RolId:", user.RolId, "HotelId:", user.HotelId)
+
+    try {
+      // Cargar hoteles
+      if (esAdmin) {
+        console.log("Usuario es admin, cargando todos los hoteles")
+        const { data: hotelesData, error: hotelesError } = await supabase
+          .from("hoteles")
+          .select("id, nombre")
+          .order("nombre")
+
+        if (!hotelesError) {
+          const hotelesConTodos = [
+            { id: -1, nombre: "Todos" },
+            ...(hotelesData || []).map((h: any) => ({ id: h.id, nombre: h.nombre })),
+          ]
+          console.log("Hoteles cargados:", hotelesConTodos.length)
+          setHoteles(hotelesConTodos)
+          setFiltroHotel("-1")
+        } else {
+          console.error("Error cargando hoteles:", hotelesError)
+        }
+      } else {
+        console.log("Usuario NO es admin, cargando solo su hotel:", user.HotelId)
+        const { data: hotelData, error: hotelError } = await supabase
+          .from("hoteles")
+          .select("id, nombre")
+          .eq("id", user.HotelId)
+          .order("nombre")
+
+        if (!hotelError) {
+          const hotelesData = (hotelData || []).map((h: any) => ({ id: h.id, nombre: h.nombre }))
+          console.log("Hotel del usuario cargado:", hotelesData)
+          setHoteles(hotelesData)
+          if (hotelesData.length > 0) {
+            setFiltroHotel(hotelesData[0].id.toString())
+          }
+        } else {
+          console.error("Error cargando hotel del usuario:", hotelError)
+        }
+      }
+    } catch (error) {
+      console.error("Error al cargar datos iniciales:", error)
+    }
   }
+
+  // Cargar hoteles al montar el componente
+  useEffect(() => {
+    if (!loading && user) {
+      console.log("useEffect: Inicializando carga de datos")
+      const inicializar = async () => {
+        setPageLoading(true)
+        await cargarDatosIniciales()
+        setPageLoading(false)
+      }
+      inicializar()
+    }
+  }, [loading, user, esAdmin])
+
+  // Cargar usuarios iniciales
+  useEffect(() => {
+    async function cargarUsuariosIniciales() {
+      console.log("Cargando usuarios iniciales...")
+      setLoadingUsuarios(true)
+      const usuariosData = await obtenerUsuariosPorRol()
+      console.log("Usuarios cargados:", usuariosData.length)
+      setUsuarios(usuariosData)
+      setLoadingUsuarios(false)
+    }
+    if (user && !pageLoading) {
+      console.log("useEffect: Condiciones cumplidas para cargar usuarios")
+      cargarUsuariosIniciales()
+    } else {
+      console.log("useEffect: Esperando condiciones. user:", !!user, "pageLoading:", pageLoading)
+    }
+  }, [user, pageLoading])
+
+  // Manejar cambio de hotel
+  const handleHotelChange = async (value: string) => {
+    console.log("Cambiando filtro de hotel a:", value)
+    setFiltroHotel(value)
+    setLoadingUsuarios(true)
+    const usuariosData = await obtenerUsuariosPorHotel(value)
+    console.log("Usuarios después de filtrar por hotel:", usuariosData.length)
+    setUsuarios(usuariosData)
+    setLoadingUsuarios(false)
+  }
+
+  if (loading || pageLoading) {
+    return (
+      <div className="container mx-auto p-6">
+        <div>Cargando perfil...</div>
+      </div>
+    )
+  }
+
+  // Determinar si debe mostrar el selector de hotel
+  const mostrarSelectorHotel = esAdmin
+
+  console.log(
+    "Renderizando página. Usuarios:",
+    usuarios.length,
+    "EsAdmin:",
+    esAdmin,
+    "MostrarSelector:",
+    mostrarSelectorHotel,
+  )
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      {/*
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Mi Perfil</h1>
-        <Button onClick={handleSignOut} variant="outline">
-          Cerrar Sesión
-        </Button>
+      {/* Título */}
+      <div>
+        <h1 className="text-3xl font-bold">Administración de Usuarios</h1>
       </div>
-      */}
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {" "}
-        {/* Ajustado para 3 columnas */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Información del Usuario</CardTitle>
-            <CardDescription>Datos de tu cuenta en el sistema</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <UserInfo />
-          </CardContent>
-        </Card>
+      {/* Selector de Hotel */}
+      {mostrarSelectorHotel && (
+        <div className="w-full max-w-xs">
+          <label className="text-sm font-medium mb-2 block">Hotel</label>
+          <Select value={filtroHotel} onValueChange={handleHotelChange}>
+            <SelectTrigger>
+              <SelectValue placeholder="Selecciona un hotel" />
+            </SelectTrigger>
+            <SelectContent>
+              {hoteles.map((hotel) => (
+                <SelectItem key={hotel.id} value={hotel.id.toString()}>
+                  {hotel.nombre}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
-        {/*
-        <Card>
-          <CardHeader>
-            <CardTitle>Variables de Sesión (Perfil Enriquecido)</CardTitle>
-            <CardDescription>Información técnica de la sesión actual (con datos de BD si existen)</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2 text-sm">
-              <div>
-                <strong>ID:</strong> {profile?.id}
-              </div>
-              <div>
-                <strong>Email:</strong> {profile?.email}
-              </div>
-              <div>
-                <strong>Nombre:</strong> {profile?.nombre}
-              </div>
-              <div>
-                <strong>Rol:</strong> {profile?.rol || "No asignado"}
-              </div>
-              <div>
-                <strong>Hotel ID:</strong> {profile?.hotel_id || "No asignado"}
-              </div>
-              <div>
-                <strong>Hotel:</strong> {profile?.hotel_nombre || "No asignado"}
-              </div>
-              <div>
-                <strong>Permisos:</strong> {profile?.permisos ? profile.permisos.join(", ") : "No asignado"}
-              </div>
-              */}
-              {/* Asumiendo que SesionActiva podría ser parte del perfil enriquecido si se añade */}
-              {/* <div>
-                <strong>Sesión Activa:</strong> {profile?.SesionActiva ? "Sí" : "No"}
-              </div> */}
-            {/*
-            </div>
-          </CardContent>
-        </Card>
-        */}
+      {/* Listado de Usuarios en Tarjetas */}
+      <div className="space-y-4">
+        <h2 className="text-2xl font-semibold">Usuarios</h2>
+        {loadingUsuarios ? (
+          <div className="text-center py-8">Cargando usuarios...</div>
+        ) : usuarios.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            <p>No hay usuarios para mostrar</p>
+            <p className="text-xs mt-2">
+              RolId: {user?.RolId} | HotelId: {user?.HotelId} | Email: {user?.Email}
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {usuarios.map((usuario) => (
+              <Card key={usuario.id} className="overflow-hidden">
+                <CardContent className="p-6">
+                  <div className="flex flex-col items-center text-center space-y-4">
+                    <Avatar className="w-24 h-24">
+                      <AvatarImage src={usuario.imgurl || "/placeholder.svg"} alt={usuario.nombrecompleto} />
+                      <AvatarFallback className="text-2xl">
+                        {usuario.nombrecompleto
+                          .split(" ")
+                          .map((n) => n[0])
+                          .join("")
+                          .toUpperCase()
+                          .slice(0, 2)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="space-y-1 w-full">
+                      <h3 className="font-semibold text-lg">{usuario.nombrecompleto}</h3>
+                      <p className="text-sm text-muted-foreground">{usuario.email}</p>
+                      <div className="pt-2 space-y-1">
+                        <div className="flex items-center justify-center gap-2">
+                          <span className="text-xs font-medium">Rol:</span>
+                          <span className="text-xs text-muted-foreground">{usuario.rol}</span>
+                        </div>
+                        <div className="flex items-center justify-center gap-2">
+                          <span className="text-xs font-medium">Hotel:</span>
+                          <span className="text-xs text-muted-foreground">{usuario.hotel}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
 
-        {/* Nueva tarjeta para mostrar los valores directos de la cookie de sesión */}
+      {/* Información de la sesión (mantener la existente) */}
+      <div className="grid gap-6 md:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Valores de la Cookie de Sesión (Raw)</CardTitle>
