@@ -1620,7 +1620,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Sección del gráfico histórico de costeo */}
-      <div className="w-full flex grid grid-cols-4 grid-rows-4 h-[650px] gap-6">
+      <div className="w-full flex grid grid-cols-4 grid-rows-4 h-[610px] gap-6">
         {/* Nuevo gráfico de análisis de costos */}
         <div className="w-full col-span-2 row-span-2 h-[320px]">
           <Card className="rounded-xs border bg-card text-card-foreground shadow bg-gradient-to-r h-[320px] from-cyan-50 to-blue-50 border-cyan-200">
@@ -2623,8 +2623,8 @@ export default function DashboardPage() {
         </div>
 
         {/* Gráfico del lado izquierdo */}
-        <div className="col-span-2 row-span-2">
-          <Card className="rounded-xs border bg-card text-card-foreground shadow bg-gradient-to-r from-cyan-50 to-blue-50 border-cyan-200">
+        <div className="mt-3 col-span-2 row-span-2">
+          <Card className="rounded-xs border bg-card text-card-foreground shadow bg-gradient-to-r from-cyan-50 to-blue-50 border-cyan-200 h-[267px]">
             <CardHeader className="flex flex-col space-y-1.5 p-4">
               <CardTitle className="flex items-center justify-between text-cyan-800">
                 <div className="flex items-center gap-2">
@@ -2660,18 +2660,18 @@ export default function DashboardPage() {
 
             <CardContent className="space-y-4">
               <Tabs defaultValue="platillos" className="w-full">
-                <TabsList className="grid w-full grid-cols-2 h-8">
+                {/*<TabsList className="grid w-full grid-cols-2 h-8">
                   <TabsTrigger value="platillos" className="text-xs">
                     Recetas
                   </TabsTrigger>
                   <TabsTrigger value="recetas" className="text-xs">
                     Subrecetas
                   </TabsTrigger>
-                </TabsList>
+                </TabsList>*/}
 
                 <TabsContent value="platillos" className="mt-1">
-                  {/* Filtros para platillos */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4"></div>
+                  {/* Filtros para platillos*/}
+                  {/*<div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4"></div>*/}
 
                   {/* Gráfico de platillos */}
                   <div className="h-[200px] w-full">
