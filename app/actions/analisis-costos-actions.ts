@@ -483,6 +483,7 @@ export async function getPlatilloActualInfo(platilloId: number, menuId: number):
 export async function getPlatilloHistoricoInfo(
   platilloId: number,
   fecha: string,
+  menu: number,
 ): Promise<PlatilloHistoricoInfo | null> {
   const supabase = createClient(cookies())
 
@@ -512,6 +513,7 @@ export async function getPlatilloHistoricoInfo(
       `)
       .eq("platilloid", platilloId)
       .eq("fechacreacion", fecha)
+      .eq("menuid", menu)
 
     if (error) {
       console.error("Error fetching platillo historico info:", error.message)

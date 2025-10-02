@@ -323,6 +323,7 @@ export default function AnalisisCostosPage() {
       const originalItem = tooltipData.data
       const platilloId = tooltipData.dataset.id
       const fechaOriginal = originalItem.fechacreacion
+      const menuNombre = originalItem.nombremenu
 
       if (!fechaOriginal || !/^\d{4}-\d{2}-\d{2}$/.test(fechaOriginal)) {
         setValidationMessage("Error: No se pudo obtener la fecha del punto seleccionado en formato válido.")
@@ -347,11 +348,12 @@ export default function AnalisisCostosPage() {
       }
 
       setSelectedPointDetails(pointDetails)
+  
 
       // Obtener información actual y histórica del platillo
       const [actualInfo, historicoInfo] = await Promise.all([
         getPlatilloActualInfo(platilloId, menuIdNum),
-        getPlatilloHistoricoInfo(platilloId, fechaOriginal),
+        getPlatilloHistoricoInfo(platilloId, fechaOriginal, menuIdNum),
       ])
 
       setPlatilloActual(actualInfo)

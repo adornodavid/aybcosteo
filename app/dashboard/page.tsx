@@ -1142,7 +1142,7 @@ export default function DashboardPage() {
 
     try {
       // Cargar detalles actuales
-      const detallesActualesData = await obtenerDetallesPlatilloActual(platillo.id)
+      const detallesActualesData = await obtenerDetallesPlatilloActual(platillo.id, Number.parseInt(mesSeleccionado),)
 
       // Cargar detalles históricos de ingredientes
       const ingredientesHistoricosData = await obtenerDetallesPlatilloIngredientesHistorico(

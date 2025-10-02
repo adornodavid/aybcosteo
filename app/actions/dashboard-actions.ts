@@ -757,13 +757,14 @@ export async function obtenerHistoricoCosteoRecetas(hotelId: number, recetaId: n
 }
 
 // Nueva función para obtener detalles actuales del platillo
-export async function obtenerDetallesPlatilloActual(platilloId: number) {
+export async function obtenerDetallesPlatilloActual(platilloId: number, mes: number,) {
   try {
     const supabase = createSupabaseServerClient()
 
     // Llamar a la función de Supabase con RPC
     const { data: detalles, error } = await supabase.rpc("selplatillodetalles", {
       platillosid: platilloId,
+      mes: mes,
     })
 
     if (error) {
