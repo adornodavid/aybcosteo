@@ -369,10 +369,9 @@ export async function agregarIngrediente(
       .select("id")
       .eq("platilloid", platilloId)
       .eq("ingredienteid", ingredienteId)
-      .single()
+      .maybeSingle()
 
-    if (checkError && checkError.code !== "PGRST116") {
-      // PGRST116 means "No rows found"
+    if (checkError) {
       console.error("Error al verificar existencia de ingrediente:", checkError)
       throw new Error("Error al verificar existencia del ingrediente.")
     }
@@ -445,10 +444,9 @@ export async function agregarReceta(platilloId: number, recetaId: number, cantid
       .select("id")
       .eq("platilloid", platilloId)
       .eq("recetaid", recetaId)
-      .single()
+      .maybeSingle()
 
-    if (checkError && checkError.code !== "PGRST116") {
-      // PGRST116 means "No rows found"
+    if (checkError) {
       console.error("Error al verificar existencia de sub-receta:", checkError)
       throw new Error("Error al verificar existencia de la sub-receta.")
     }

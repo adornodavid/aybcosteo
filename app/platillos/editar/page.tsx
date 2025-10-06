@@ -28,7 +28,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Loader2, ArrowLeft, PlusCircle, Trash2, XCircle } from "lucide-react"
+import { Loader2, ArrowLeft, PlusCircle, Trash2, XCircle, HelpCircle } from "lucide-react"
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip" // Import TooltipProvider
 
 import { deleteImage } from "@/app/actions/recetas-image-actions" // Mantener deleteImage
 import {
@@ -188,9 +189,9 @@ export default function EditarPlatilloPage() {
           setImageUrl(data.imgurl) // Establecer la URL de la imagen guardada
           setImagenPreview(data.imgurl) // También establecer la previsualización inicial
         }
-		
-    console.log("nombre", menuNombre)
-		// Obtener el menuId basándose en el nombre del menú si se proporciona
+
+        console.log("nombre", menuNombre)
+        // Obtener el menuId basándose en el nombre del menú si se proporciona
         if (menuNombre) {
           const { data: menuData, error: menuError } = await supabase
             .from("menus")
@@ -224,7 +225,6 @@ export default function EditarPlatilloPage() {
             console.log("MenuId obtenido desde platillosxmenu:", platilloMenuData.menuid)
           }
         }
-		
       } catch (error) {
         console.error("Error inesperado al cargar receta:", error)
         toast.error("Error inesperado al cargar receta.")
@@ -793,12 +793,12 @@ export default function EditarPlatilloPage() {
     }
   }
 
-  const handleDeleteIngrediente = async () => {
-    if (ingredienteToDelete === null) return
+  const handleDeleteIngrediente = async (ingredienteToDeletes: number) => {
+    if (ingredienteToDeletes === null) return
 
     setIsSubmitting(true)
     try {
-      const { error } = await supabase.from("ingredientesxplatillo").delete().eq("id", ingredienteToDelete)
+      const { error } = await supabase.from("ingredientesxplatillo").delete().eq("id", ingredienteToDeletes)
 
       if (error) {
         console.error("Error al eliminar ingrediente:", error)
@@ -806,7 +806,7 @@ export default function EditarPlatilloPage() {
         return
       }
 
-      setIngredientesPlatillo((prev) => prev.filter((ing) => ing.id !== ingredienteToDelete))
+      setIngredientesPlatillo((prev) => prev.filter((ing) => ing.id !== ingredienteToDeletes))
       toast.success("Ingrediente eliminado correctamente.")
     } catch (error) {
       console.error("Error inesperado al eliminar ingrediente:", error)
@@ -914,12 +914,15 @@ export default function EditarPlatilloPage() {
     }
   }
 
-  const handleDeleteReceta = async () => {
-    if (recetaToDelete === null) return
+  const handleDeleteReceta = async (recetaToDeletes: number) => {
+
+     
+    console.log("receta", recetaToDeletes)
+    if (recetaToDeletes === null) return
 
     setIsSubmitting(true)
     try {
-      const { error } = await supabase.from("recetasxplatillo").delete().eq("id", recetaToDelete)
+      const { error } = await supabase.from("recetasxplatillo").delete().eq("id", recetaToDeletes)
 
       if (error) {
         console.error("Error al eliminar sub-receta:", error)
@@ -927,7 +930,7 @@ export default function EditarPlatilloPage() {
         return
       }
 
-      setRecetasPlatillo((prev) => prev.filter((rec) => rec.id !== recetaToDelete))
+      setRecetasPlatillo((prev) => prev.filter((rec) => rec.id !== recetaToDeletes))
       toast.success("Sub-Receta eliminada correctamente.")
     } catch (error) {
       console.error("Error inesperado al eliminar sub-receta:", error)
@@ -1015,7 +1018,7 @@ export default function EditarPlatilloPage() {
           if (updateCostoAdministrativoError) throw updateCostoAdministrativoError
 
           // Actualizar platillosxmenu solo para el menuId específico si se proporciona
-          console.log("menu",menuId)
+          console.log("menu", menuId)
           if (menuId) {
             const margenUtilidadCalculado = precioVentaNum - costoAdministrativoCalculado
 
@@ -1092,7 +1095,7 @@ export default function EditarPlatilloPage() {
             const menuIdAssoc = menuAssoc.menuid
             const PrecioAssoc = menuAssoc.precioventa
 
-             const CostoAssoc = ((costoAdministrativoCalculado / PrecioAssoc)*100)
+            const CostoAssoc = (costoAdministrativoCalculado / PrecioAssoc) * 100
             // Verificar si existe registro del mismo mes para este platilloid y menuid
             const { data: existingHistoricoMonth, error: checkHistoricoMonthError } = await supabase
               .from("historico")
@@ -1603,7 +1606,7 @@ export default function EditarPlatilloPage() {
                                   <AlertDialogCancel onClick={() => setIngredienteToDelete(null)}>
                                     Cancelar
                                   </AlertDialogCancel>
-                                  <AlertDialogAction onClick={handleDeleteIngrediente}>Confirmar</AlertDialogAction>
+                                  <AlertDialogAction onClick={() => handleDeleteIngrediente(ing.id)} >Confirmar</AlertDialogAction>
                                 </AlertDialogFooter>
                               </AlertDialogContent>
                             </AlertDialog>
@@ -1629,7 +1632,7 @@ export default function EditarPlatilloPage() {
               <CardDescription>Agrega, actualiza o elimina sub-recetas de tu receta.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
                 <div className="col-span-full">
                   <label htmlFor="ddlReceta" className="text-sm font-medium">
                     Sub-Receta
@@ -1665,8 +1668,26 @@ export default function EditarPlatilloPage() {
                     disabled={!selectedRecetaId || maxRangeReceta === 0}
                   />
                 </div>
-                <div className="col-span-2">
-                  <Label htmlFor="txtCant">Rango de Cantidad</Label>
+
+                {/* START: Update for Rango de Cantidad */}
+                <div className="col-span-2 w-[300px]">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Label htmlFor="txtCant">Porcion de Cantidad</Label>
+                    <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p>
+                          Rango de cantidad, favor de seleccionar la cantidad requerida de la subreceta que utiliza para
+                          esta Receta, la linea define el rango de la cantidad minima y maxima que se puede utilizar con
+                          esta subreceta.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                    </TooltipProvider>
+                  </div>
                   <Input
                     id="txtCant"
                     name="txtCant"
@@ -1677,7 +1698,19 @@ export default function EditarPlatilloPage() {
                     max={maxRangeReceta}
                     disabled={!selectedRecetaId || maxRangeReceta === 0}
                   />
+                  <div className="mt-2 text-sm text-muted-foreground flex items-center justify-between">
+                    <span>
+                      {selectedRecetaCantidad} / {maxRangeReceta} {selectedRecetaUnidadBase || "unidades"}
+                    </span>
+                    {selectedRecetaId && selectedRecetaCantidad && costoReceta && (
+                      <span className="font-semibold text-primary">
+                        Costo: {formatCurrency((Number(costoReceta) / maxRangeReceta) * Number(selectedRecetaCantidad))}
+                      </span>
+                    )}
+                  </div>
                 </div>
+                {/* END: Update for Rango de Cantidad */}
+
                 <div>
                   <Label htmlFor="txtUnidadBase">Unidad Base</Label>
                   <Input
@@ -1690,7 +1723,7 @@ export default function EditarPlatilloPage() {
                 </div>
                 <div>
                   <label htmlFor="txtCostoReceta" className="text-sm font-medium">
-                    Costo Sub-Receta
+                    Costo Total Sub-Receta
                   </label>
                   <Input
                     id="txtCostoReceta"
@@ -1762,7 +1795,7 @@ export default function EditarPlatilloPage() {
                                   <AlertDialogCancel onClick={() => setRecetaToDelete(null)}>
                                     Cancelar
                                   </AlertDialogCancel>
-                                  <AlertDialogAction onClick={handleDeleteReceta}>Confirmar</AlertDialogAction>
+                                  <AlertDialogAction onClick={() => handleDeleteReceta(rec.id)} >Confirmar</AlertDialogAction>
                                 </AlertDialogFooter>
                               </AlertDialogContent>
                             </AlertDialog>

@@ -6,7 +6,7 @@
 import type React from "react"
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
-import { Loader2, UploadCloud } from "lucide-react"
+import { Loader2, UploadCloud, HelpCircle } from "lucide-react"
 import { toast } from "sonner"
 import { Suspense } from "react"
 import Loading from "./loading"
@@ -33,6 +33,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 // Interfaces para los datos cargados
 interface Hotel {
@@ -1136,7 +1137,23 @@ export default function NuevoPlatilloPage() {
                     />
                   </div>
                   <div className="col-span-2">
-                    <Label htmlFor="txtCant">Rango de Cantidad</Label>
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="txtCant">Cantidad por unidad</Label>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs">
+                            <p>
+                              Rango de cantidad, favor de seleccionar la cantidad requerida de la subreceta que utiliza
+                              para esta Receta, la linea define el rango de la cantidad minima y maxima que se puede
+                              utilizar con esta subreceta
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
                     <Input
                       id="txtCant"
                       name="txtCant"
@@ -1147,6 +1164,18 @@ export default function NuevoPlatilloPage() {
                       max={maxRangeReceta}
                       disabled={!selRecetaId || maxRangeReceta === 0}
                     />
+                    {/* INICIO: Código reemplazado */}
+                    <div className="text-sm text-muted-foreground mt-1 flex items-center justify-between">
+                      <span>
+                        {selRecetaCantidad} / {maxRangeReceta} {selRecetaUnidadBase}
+                      </span>
+                      {selRecetaId && selRecetaCantidad && selRecetaCosto && (
+                        <span className="font-semibold text-primary">
+                          Costo: ${((Number(selRecetaCosto) / maxRangeReceta) * Number(selRecetaCantidad)).toFixed(2)}
+                        </span>
+                      )}
+                    </div>
+                    {/* FIN: Código reemplazado */}
                   </div>
                   <div>
                     <Label htmlFor="txtUnidadBase">Unidad Base</Label>
@@ -1159,9 +1188,8 @@ export default function NuevoPlatilloPage() {
                       disabled
                     />
                   </div>
-                  {/* FIN NUEVOS INPUTS */}
-                  <div>
-                    <Label htmlFor="txtCostoReceta">Costo Sub-Receta</Label>
+                  <div className="w-[180px]">
+                    <Label htmlFor="txtCostoReceta">Costo Total Sub-Receta</Label>
                     <Input id="txtCostoReceta" name="txtCostoReceta" value={selRecetaCosto} disabled />
                   </div>
                 </div>

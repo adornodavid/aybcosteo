@@ -1015,7 +1015,7 @@ export default function PlatillosPage() {
                   <h4 className="text-xl font-bold text-gray-800 border-b-2 border-gray-200 pb-2">
                     Asociaciones con Menús
                   </h4>
-                  <div className="grid gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-16">
                     {selectedPlatilloDetails.map((detail, idx) => (
                       <Card
                         key={idx}

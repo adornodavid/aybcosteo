@@ -450,10 +450,9 @@ export async function checkSubRecetaExistsInReceta(recetaId: string, subRecetaId
       .eq("recetaid", recetaId)
       .eq("elementoid", subRecetaId)
       .eq("tiposegmentoid", 2)
-      .single()
+      .maybeSingle() // Cambiado de .single() a .maybeSingle()
 
-    if (error && error.code !== "PGRST116") {
-      // PGRST116 means "No rows found"
+    if (error) {
       console.error("Error checking existing sub-receta in receta:", error.message)
       return { data: null, error }
     }

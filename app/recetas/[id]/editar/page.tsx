@@ -48,6 +48,8 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Loader2, ArrowLeft, PlusCircle, Trash2, XCircle } from "lucide-react"
 import { Slider } from "@/components/ui/slider"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { HelpCircle } from "lucide-react"
 
 interface RecetaData {
   id: number
@@ -579,7 +581,6 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
   }
 
   const handleDeleteIngrediente = async (Ingredienteid: number) => {
-    
     //if (ingredienteToDelete === null) return
 
     setIsSubmitting(true)
@@ -633,6 +634,16 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
     setTxtCantidadReceta(nuevaCantidad.toString())
   }
 
+  // Calcular el costo en base a la cantidad de la sub-receta
+  const calcularCostoReceta = () => {
+    const costoTotal = Number.parseFloat(txtCostoReceta) || 0
+    const cantidadIngresada = Number.parseFloat(txtCantidadReceta) || 0
+    if (maxCantidadReceta > 0 && cantidadIngresada > 0) {
+      return (costoTotal / maxCantidadReceta) * cantidadIngresada
+    }
+    return 0
+  }
+
   const handleAddSubReceta = async () => {
     if (!ddlRecetas || !txtCantidadReceta) {
       toast.error("Favor de llenar la información de la sub-receta.")
@@ -646,7 +657,8 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
         Number.parseInt(ddlRecetas),
       )
 
-      if (checkError && checkError.code !== "PGRST116") {
+      // Cambiado: removido la verificación de error.code !== "PGRST116"
+      if (checkError) {
         console.error("Error al verificar sub-receta existente:", checkError)
         toast.error("Error al verificar sub-receta existente: " + checkError.message)
         setIsSubmitting(false)
@@ -1059,7 +1071,9 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
                                   <AlertDialogCancel onClick={() => setIngredienteToDelete(null)}>
                                     Cancelar
                                   </AlertDialogCancel>
-                                  <AlertDialogAction  onClick={() => handleDeleteIngrediente(ing.ingredienteid)}>Confirmar</AlertDialogAction>
+                                  <AlertDialogAction onClick={() => handleDeleteIngrediente(ing.ingredienteid)}>
+                                    Confirmar
+                                  </AlertDialogAction>
                                 </AlertDialogFooter>
                               </AlertDialogContent>
                             </AlertDialog>
@@ -1147,9 +1161,25 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
                   />
                 </div>
                 <div>
-                  <label htmlFor="cantidadRangoReceta" className="text-sm font-medium">
-                    Cantidad Rango: {cantidadRangoReceta[0]}
-                  </label>
+                  <div className="flex items-center gap-2 mb-2">
+                    <label htmlFor="cantidadRangoReceta" className="text-sm font-medium">
+                      Rango de Cantidad
+                    </label>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <HelpCircle className="h-4 w-4 text-gray-500 cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs">
+                          <p>
+                            Rango de cantidad, favor de seleccionar la cantidad requerida de la subreceta que utiliza
+                            para esta Receta, la línea define el rango de la cantidad mínima y máxima que se puede
+                            utilizar con esta subreceta.
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
                   <div className="px-2 py-2">
                     <Slider
                       id="cantidadRangoReceta"
@@ -1160,9 +1190,13 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
                       onValueChange={handleCantidadRangoRecetaChange}
                       className="w-full"
                     />
-                    <div className="flex justify-between text-xs text-gray-500 mt-1">
-                      <span>1</span>
-                      <span>{maxCantidadReceta}</span>
+                    <div className="flex justify-between items-center text-xs text-gray-500 mt-2">
+                      <span>
+                        <strong>
+                          {cantidadRangoReceta[0].toFixed(1)} / {maxCantidadReceta} {txtUnidadReceta}
+                        </strong>
+                      </span>
+                      <span className="font-semibold text-green-600">Costo: ${calcularCostoReceta().toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
@@ -1220,7 +1254,7 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
                                 <AlertDialogFooter>
                                   <AlertDialogCancel>Cancelar</AlertDialogCancel>
                                   <AlertDialogAction onClick={() => handleDeleteSubReceta(receta.recetaId)}>
-                                    Confirmar       
+                                    Confirmar
                                   </AlertDialogAction>
                                 </AlertDialogFooter>
                               </AlertDialogContent>
@@ -1319,7 +1353,7 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
                 )}
               </div>
 
-              {/* Tabla de sub-recetas en el resumen */}
+              {/*Tabla de sub-recetas en el resumen */}
               {subRecetasSeleccionadas.length > 0 && (
                 <div className="space-y-2">
                   <h3 className="text-lg font-semibold">Sub-Recetas Agregadas</h3>

@@ -26,7 +26,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Loader2, ArrowLeft, Plus, CheckCircle, ImageIcon, X, Trash2 } from "lucide-react"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { Loader2, ArrowLeft, Plus, CheckCircle, ImageIcon, X, Trash2, HelpCircle } from "lucide-react"
 import { getSession } from "@/app/actions/session-actions"
 import { toast } from "sonner"
 import { useNavigationGuard } from "@/contexts/navigation-guard-context"
@@ -951,6 +952,16 @@ export default function NuevaRecetaPage() {
     }
   }, [etapaActual, cargarIngredientesReceta, cargarRecetasReceta])
 
+  // Calcular el costo en base a la cantidad de la sub-receta
+  const calcularCostoReceta = () => {
+    const costoTotal = Number.parseFloat(txtCostoReceta) || 0
+    const cantidadIngresada = Number.parseFloat(txtCantidadReceta) || 0
+    if (maxCantidadReceta > 0 && cantidadIngresada > 0) {
+      return (costoTotal / maxCantidadReceta) * cantidadIngresada
+    }
+    return 0
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -1414,7 +1425,23 @@ export default function NuevaRecetaPage() {
                         />
                       </div>
                       <div>
-                        <Label htmlFor="cantidadRangoReceta">Cantidad Rango: {cantidadRangoReceta[0]}</Label>
+                        <div className="flex items-center gap-2 mb-2">
+                          <Label htmlFor="cantidadRangoReceta">Rango de Cantidad</Label>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <HelpCircle className="h-4 w-4 text-gray-500 cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs">
+                                <p>
+                                  Rango de cantidad, favor de seleccionar la cantidad requerida de la subreceta que
+                                  utiliza para esta Receta, la línea define el rango de la cantidad mínima y máxima que
+                                  se puede utilizar con esta subreceta.
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </div>
                         <div className="px-2 py-2">
                           <Slider
                             id="cantidadRangoReceta"
@@ -1425,9 +1452,15 @@ export default function NuevaRecetaPage() {
                             onValueChange={handleCantidadRangoRecetaChange}
                             className="w-full"
                           />
-                          <div className="flex justify-between text-xs text-gray-500 mt-1">
-                            <span>1</span>
-                            <span>{maxCantidadReceta}</span>
+                          <div className="flex justify-between items-center text-xs text-gray-500 mt-2">
+                            <span>
+                              <strong>
+                                {cantidadRangoReceta[0].toFixed(1)} / {maxCantidadReceta} {txtUnidadReceta}
+                              </strong>
+                            </span>
+                            <span className="font-semibold text-green-600">
+                              Costo: ${calcularCostoReceta().toFixed(2)}
+                            </span>
                           </div>
                         </div>
                       </div>

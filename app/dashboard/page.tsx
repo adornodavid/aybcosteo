@@ -280,8 +280,8 @@ export default function DashboardPage() {
   const [loadingTooltip, setLoadingTooltip] = useState(false)
 
   // Estados para el nuevo gráfico de análisis de costos
-  const [fechaInicial, setFechaInicial] = useState<string>(fechaanterior.toString())
-  const [fechaFinal, setFechaFinal] = useState<string>(fechaActual.toString())
+  const [fechaInicial, setFechaInicial] = useState<Date | undefined>(fechaanterior)
+  const [fechaFinal, setFechaFinal] = useState<Date | undefined>(fechaActual)
   const [chartData, setChartData] = useState<CostHistoryItem[]>([])
   const [platillosDatasets, setPlatillosDatasets] = useState<PlatilloDataset[]>([])
   const [selectedPointDetails, setSelectedPointDetails] = useState<SelectedPointDetails | null>(null)
@@ -960,6 +960,40 @@ export default function DashboardPage() {
     setPlatillosDatasets(datasets)
   }, [chartData])
 
+  // useEffect para actualizar el gráfico cuando cambien las fechas
+  useEffect(() => {
+    const actualizarGraficoConFechas = async () => {
+      // Solo actualizar si hay un platillo seleccionado y ambas fechas están definidas
+      if (platilloSeleccionadoObj && fechaInicial && fechaFinal && hotelSeleccionado) {
+        setLoadingAnalisisCostos(true)
+
+        const platilloIdNum = platilloSeleccionadoObj.id
+        const menuIdNum = menuSeleccionado !== "-1" ? Number.parseInt(menuSeleccionado) : -1
+        const restauranteIdNum = restauranteSeleccionado !== "-1" ? Number.parseInt(restauranteSeleccionado) : -1
+        const hotelIdNum = Number.parseInt(hotelSeleccionado)
+
+        const history = await getPlatilloCostHistory(
+          platilloIdNum,
+          format(fechaInicial, "yyyy-MM-dd"),
+          format(fechaFinal, "yyyy-MM-dd"),
+          menuIdNum,
+          restauranteIdNum,
+          hotelIdNum,
+        )
+        setChartData(history)
+
+        // Limpiar la selección de punto específico
+        setSelectedPointDetails(null)
+        setPlatilloActual(null)
+        setPlatilloHistorico(null)
+
+        setLoadingAnalisisCostos(false)
+      }
+    }
+
+    actualizarGraficoConFechas()
+  }, [fechaInicial, fechaFinal])
+
   // Función para manejar la búsqueda del análisis de costos
   const handleSearchAnalisisCostos = async () => {
     if (!fechaInicial || !fechaFinal || !platilloSeleccionadoObj) {
@@ -1142,7 +1176,7 @@ export default function DashboardPage() {
 
     try {
       // Cargar detalles actuales
-      const detallesActualesData = await obtenerDetallesPlatilloActual(platillo.id, Number.parseInt(mesSeleccionado),)
+      const detallesActualesData = await obtenerDetallesPlatilloActual(platillo.id, Number.parseInt(mesSeleccionado))
 
       // Cargar detalles históricos de ingredientes
       const ingredientesHistoricosData = await obtenerDetallesPlatilloIngredientesHistorico(
@@ -1623,7 +1657,7 @@ export default function DashboardPage() {
       <div className="w-full flex grid grid-cols-4 grid-rows-4 h-[610px] gap-6">
         {/* Nuevo gráfico de análisis de costos */}
         <div className="w-full col-span-2 row-span-2 h-[320px]">
-          <Card className="rounded-xs border bg-card text-card-foreground shadow bg-gradient-to-r h-[320px] from-cyan-50 to-blue-50 border-cyan-200">
+          <Card className="rounded-xs border bg-card text-card-foreground shadow bg-gradient-to-r from-cyan-50 to-blue-50 border-cyan-200">
             <CardHeader className="flex flex-col space-y-1.5 p-2">
               <CardTitle className="flex items-center justify-between text-cyan-800">
                 <div className="flex items-center gap-2">
@@ -2451,7 +2485,7 @@ export default function DashboardPage() {
                         <div className="bg-purple-50 p-2 rounded-md">
                           <p className="text-xs font-medium text-purple-700 mb-1">Objetivo:</p>
                           <p className="text-xs text-gray-600">
-                            Identificar rápidamente las materias primas más críticas para tomar acciones.
+                            Identificar las materias primas más críticas para tomar acciones.
                           </p>
                         </div>
                         <div className="border-t border-purple-100 pt-2">
