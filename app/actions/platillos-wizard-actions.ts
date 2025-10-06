@@ -153,6 +153,7 @@ export async function getRecetas(hotelId: number): Promise<Receta[]> {
   `,
     ) // Asegúrate de que 'costo', 'cantidad', 'unidadbaseid' existan en tu tabla 'recetas'
     .eq("activo", true)
+    .eq("hotelid", hotelId)
     .order("nombre", { ascending: true })
   // Nota: La lógica de filtrar por hotel_id a través de ingredientesxreceta e ingredientes
   // es compleja para una simple selección de recetas. Si 'recetas' tiene un 'hotel_id' directo,
