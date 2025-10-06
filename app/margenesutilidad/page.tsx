@@ -1284,11 +1284,11 @@ export default function MargenesUtilidadPage() {
                   <h4 className="text-xl font-bold text-gray-800 border-b-2 border-gray-200 pb-2">
                     Asociaciones con Menús
                   </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-16">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {selectedPlatilloDetails.map((detail, idx) => (
                       <Card
                         key={idx}
-                        className="rounded-xl border bg-card w-96 text-card-foreground p-4 shadow-sm hover:shadow-md transition-shadow"
+                        className="rounded-xl border bg-card w-[340px] text-card-foreground p-4 shadow-sm hover:shadow-md transition-shadow"
                       >
                         <div className="space-y-2">
                           <div className="flex justify-between">
