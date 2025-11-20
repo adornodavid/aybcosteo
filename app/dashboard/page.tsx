@@ -199,6 +199,7 @@ const mesesDelAño = [
   { id: 8, nombre: "Agosto" },
   { id: 9, nombre: "Septiembre" },
   { id: 10, nombre: "Octubre" },
+  { id: 11, nombre: "Noviembre" },
 ]
 
 const añosDisponibles = [{ id: 2025, nombre: "2025" }]

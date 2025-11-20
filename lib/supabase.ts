@@ -1,4 +1,6 @@
-import { createClientComponentClient, createServerComponentClient } from "@supabase/auth-helpers-nextjs" // Importar createServerComponentClient
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs" // Importar createServerComponentClient
+import { createClient as createSupabaseClient } from "@supabase/supabase-js"
+import type { cookies } from "next/headers"
 import type { Database } from "@/lib/types-sistema-costeo" // Asegúrate de que esta ruta sea correcta
 
 // Define the database schema types
@@ -51,6 +53,14 @@ export const createClient = () => createClientComponentClient<Database>()
 
 // Instancia principal de Supabase (para uso en cliente)
 export const supabase = createClient()
+
+export function createServerSupabaseClientWrapper(cookieStore: ReturnType<typeof cookies>) {
+  return createSupabaseClient<Database>(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+    auth: {
+      persistSession: false,
+    },
+  })
+}
 
 // Exportación por defecto
 export default supabase

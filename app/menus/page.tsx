@@ -1,10 +1,8 @@
 "use client"
-
-/* ==================================================
-  Imports
-================================================== */
-import Link from "next/link"
 import Image from "next/image"
+import { Utensils, Search, RotateCcw, Eye, Plus, Edit, Ban, Check, HandPlatter,PowerOff, Power, X } from "lucide-react"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import { supabase } from "@/lib/supabase"
@@ -12,34 +10,12 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationPrevious,
-  PaginationLink,
-  PaginationNext,
-} from "@/components/ui/pagination"
-import { Utensils, Search, RotateCcw, Eye, Edit, PowerOff, Power, HandPlatter, X } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { getSession } from "@/app/actions/session-actions"
-import { useToast } from "@/components/ui/use-toast"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
-import { Loader2 } from "@/components/ui/loader2"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
-import * as DialogPrimitive from "@radix-ui/react-dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { useToast } from "@/components/ui/use-toast"
+import * as DialogPrimitive from "@radix-ui/react-dialog"
+import { Loader2 } from "@/components/ui/loader2"
 import { getMenuDetails } from "@/app/actions/menus-details-actions"
 import { updateMenu, getHotelsForDropdown, getRestaurantsForDropdown } from "@/app/actions/menus-editar-actions"
 
@@ -228,15 +204,16 @@ export default function MenusPage() {
 
       setSearching(true)
       try {
-        // Modificación aquí: Usar !inner si hay un filtro de hotel para asegurar que la relación exista
         const selectString = `
           id,
           nombre,
           descripcion,
           activo,
-          restaurante:restaurantes${hotelIdFilter !== "-1" ? "!inner" : ""}(
+          restauranteid,
+          restaurante:restaurantes(
             id,
             nombre,
+            hotelid,
             hotel:hoteles(
               id,
               nombre
@@ -254,18 +231,50 @@ export default function MenusPage() {
           query = query.eq("restauranteid", restauranteIdFilter)
         }
 
-        if (hotelIdFilter !== "-1") {
-          query = query.eq("restaurante.hotelid", hotelIdFilter)
-        }
-
         const { data, error, count } = await query
-          .order("nombre", { ascending: true })
-          .range((page - 1) * itemsPerPage, page * itemsPerPage - 1)
 
         if (error) throw error
 
-        setMenus((data || []).map((m) => ({ ...m, id: String(m.id) })) as Menu[])
-        setTotalMenus(count || 0)
+        // Convertir IDs a string y procesar datos
+        let processedData = (data || []).map((m: any) => ({
+          ...m,
+          id: String(m.id),
+          restaurante: m.restaurante
+            ? {
+                ...m.restaurante,
+                id: String(m.restaurante.id),
+                hotel: m.restaurante.hotel
+                  ? {
+                      ...m.restaurante.hotel,
+                      id: String(m.restaurante.hotel.id),
+                    }
+                  : null,
+              }
+            : null,
+        })) as Menu[]
+
+        // Aplicar filtro de hotel en el cliente si es necesario
+        if (hotelIdFilter !== "-1") {
+          processedData = processedData.filter((m) => String(m.restaurante?.hotel?.id) === hotelIdFilter)
+        }
+
+        // Ordenar por hotelid ascendente
+        const sortedData = processedData.sort((a, b) => {
+          const hotelIdA = Number(a.restaurante?.hotel?.id) || 0
+          const hotelIdB = Number(b.restaurante?.hotel?.id) || 0
+          return hotelIdA - hotelIdB
+        })
+
+        // Actualizar el total con los datos filtrados
+        const totalFiltered = sortedData.length
+
+        // Aplicar paginación en el cliente
+        const startIndex = (page - 1) * itemsPerPage
+        const endIndex = startIndex + itemsPerPage
+        const paginatedData = sortedData.slice(startIndex, endIndex)
+
+        setMenus(paginatedData)
+        setTotalMenus(totalFiltered)
       } catch (error: any) {
         console.error("Error cargando menús:", error.message)
         toast({
@@ -623,7 +632,7 @@ export default function MenusPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="flex flex-col items-center justify-center p-8">
+        <div className="flex flex-col items-center justify-center p-8 md:p-8 pt-6">
           <div className="relative w-24 h-24 mb-4">
             <Image
               src="/images/design-mode/CargarPage%281%29%281%29%281%29%281%29%281%29%281%29%281%29%281%29%281%29%281%29%281%29(1).gif"
@@ -641,7 +650,7 @@ export default function MenusPage() {
   }
 
   return (
-  <div className="container-fluid flex-1 space-y-4 p-4 md:p-8 pt-6">
+    <div className="container-fluid flex-1 space-y-4 p-4 md:p-8 pt-6">
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-3xl font-bold">Menús</h1>
@@ -650,7 +659,7 @@ export default function MenusPage() {
         <Button
           type="button"
           onClick={() => router.push("/menus/nuevo")}
-          style={{ backgroundColor: "#5d8f72", color: "white"}}
+          style={{ backgroundColor: "#5d8f72", color: "white" }}
           id="btnMenuNuevo"
           name="btnMenuNuevo"
         >
@@ -798,244 +807,211 @@ export default function MenusPage() {
               <p className="mt-2">Cargando menús...</p>
             </div>
           ) : menus.length === 0 ? (
-            <div className="text-center text-gray-500 py-8">No se encontraron menús con los filtros aplicados.</div>
+            <div className="text-center py-8 text-gray-500">No se encontraron menús.</div>
           ) : (
-            <>
-              <div className="overflow-x-auto">
-                <ScrollArea className="max-h-[500px]">
-                  <Table id="tblMenuResultados">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left p-4">Hotel</th>
+                    <th className="text-left p-4">Restaurante</th>
+                    <th className="text-left p-4">Menú</th>
+                    <th className="text-left p-4">Descripción</th>
+                    <th className="text-center p-4">Estatus</th>
+                    <th className="text-center p-4">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {menus.map((menu) => (
+                    <tr key={menu.id} className="border-b hover:bg-gray-50">
+                      <td className="p-4">{menu.restaurante?.hotel?.nombre || "N/A"}</td>
+                      <td className="p-4">{menu.restaurante?.nombre || "N/A"}</td>
+                      <td className="p-4 font-medium">{menu.nombre}</td>
+                      <td className="p-4">{menu.descripcion || "Sin descripción"}</td>
+                      <td className="p-4 text-center">
+                        <span
+                          className={`px-2 py-1 rounded text-xs ${menu.activo ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}
+                        >
+                          {menu.activo ? "Activo" : "Inactivo"}
+                        </span>
+                      </td>
+                      <td className="p-4 text-center">
+                        <div className="flex gap-2 justify-center">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            title="Ver detalles"
+                            onClick={() => handleViewMenuDetails(menu.id)}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            title="Agregar platillos"
+                            onClick={() => router.push(`/menus/${menu.id}/agregar`)}
+                          >
+                             <HandPlatter className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            title="Editar"
+                            onClick={() => handleOpenEditDialog(menu.id)}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            title={menu.activo ? "Inactivar" : "Activar"}
+                            onClick={() => handleStatusToggle(menu.id, menu.activo)}
+                          >
+                            {menu.activo ? (
+                              <PowerOff className="h-4 w-4" />
+                            ) : (
+                              <Power className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Paginación */}
+          {totalPages > 1 && (
+            <div className="flex justify-center gap-2 mt-4">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={currentPage === 1}
+                onClick={() => handlePageChange(currentPage - 1)}
+              >
+                Anterior
+              </Button>
+              <span className="flex items-center px-4">
+                Página {currentPage} de {totalPages}
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={currentPage === totalPages}
+                onClick={() => handlePageChange(currentPage + 1)}
+              >
+                Siguiente
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Dialog open={showDetailsDialog} onOpenChange={setShowDetailsDialog}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Detalles del Menú</DialogTitle>
+            <DialogDescription>Información completa del menú y platillos asignados</DialogDescription>
+          </DialogHeader>
+
+          {loadingDetails ? (
+            <div className="flex flex-col items-center justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-[#c49deb]" />
+              <p className="mt-2 text-gray-500">Cargando detalles del menú...</p>
+            </div>
+          ) : detailsError ? (
+            <div className="text-center py-8 text-red-500">
+              <p>{detailsError}</p>
+            </div>
+          ) : selectedMenuDetails ? (
+            <div className="space-y-6">
+              {/* Información del Menú */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-gray-500">Nombre del Menú</label>
+                  <p className="text-lg font-semibold">{selectedMenuDetails.nombre}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-500">Restaurante</label>
+                  <p className="text-lg">{selectedMenuDetails.restaurante?.nombre || "N/A"}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-500">Hotel</label>
+                  <p className="text-lg">{selectedMenuDetails.restaurante?.hotel?.nombre || "N/A"}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-500">Estado</label>
+                  <p>
+                    <span
+                      className={`px-2 py-1 rounded text-xs ${selectedMenuDetails.activo ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}
+                    >
+                      {selectedMenuDetails.activo ? "Activo" : "Inactivo"}
+                    </span>
+                  </p>
+                </div>
+                {selectedMenuDetails.descripcion && (
+                  <div className="col-span-2">
+                    <label className="text-sm font-medium text-gray-500">Descripción</label>
+                    <p className="text-base">{selectedMenuDetails.descripcion}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Platillos Asignados */}
+              <div>
+                <h3 className="text-lg font-semibold mb-4">Platillos Asignados ({assignedPlatillos.length})</h3>
+                {assignedPlatillos.length === 0 ? (
+                  <p className="text-center text-gray-500 py-4">No hay platillos asignados a este menú.</p>
+                ) : (
+                  <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Folio</TableHead>
-                        <TableHead>Menú</TableHead>
-                        <TableHead>Restaurante</TableHead>
-                        <TableHead>Hotel</TableHead>
-                        <TableHead>Descripción</TableHead>
-                        <TableHead className="text-center">Acciones</TableHead>
+                        <TableHead>Imagen</TableHead>
+                        <TableHead>Platillo</TableHead>
+                        <TableHead className="text-right">Costo Total</TableHead>
+                        <TableHead className="text-right">Precio Venta</TableHead>
+                        <TableHead className="text-right">Margen %</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {menus.map((menu) => (
-                        <TableRow key={menu.id}>
-                          <TableCell>{menu.id.substring(0, 8)}...</TableCell>
-                          <TableCell>{menu.nombre}</TableCell>
-                          <TableCell>{menu.restaurante?.nombre || "N/A"}</TableCell>
-                          <TableCell>{menu.restaurante?.hotel?.nombre || "N/A"}</TableCell>
-                          <TableCell>{menu.descripcion || "Sin descripción"}</TableCell>
-                          <TableCell className="flex justify-center gap-2">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              aria-label="Ver detalles del menú"
-                              onClick={() => handleViewMenuDetails(menu.id)}
+                      {assignedPlatillos.map((platillo) => (
+                        <TableRow key={platillo.id}>
+                          <TableCell>
+                            {platillo.platillo.imgurl ? (
+                              <Image
+                                src={platillo.platillo.imgurl || "/placeholder.svg"}
+                                alt={platillo.platillo.nombre}
+                                width={50}
+                                height={50}
+                                className="rounded object-cover"
+                              />
+                            ) : (
+                              <div className="w-12 h-12 bg-gray-200 rounded flex items-center justify-center">
+                                <Utensils className="h-6 w-6 text-gray-400" />
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell className="font-medium">{platillo.platillo.nombre}</TableCell>
+                          <TableCell className="text-right">
+                            ${platillo.platillo.costototal?.toFixed(2) || "0.00"}
+                          </TableCell>
+                          <TableCell className="text-right">${platillo.precioventa?.toFixed(2) || "0.00"}</TableCell>
+                          <TableCell className="text-right">
+                            <span
+                              className={`px-2 py-1 rounded text-xs ${platillo.margenutilidad >= 30 ? "bg-green-100 text-green-800" : platillo.margenutilidad >= 15 ? "bg-yellow-100 text-yellow-800" : "bg-red-100 text-red-800"}`}
                             >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                            <Link href={`/menus/${menu.id}/agregar`} passHref>
-                              <Button variant="ghost" size="icon" aria-label="Agregar">
-                                <HandPlatter className="h-4 w-4" />
-                              </Button>
-                            </Link>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              aria-label="Editar menú"
-                              onClick={() => handleOpenEditDialog(menu.id)}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className={menu.activo ? "text-red-500" : "text-green-500"}
-                                  aria-label={menu.activo ? "Inactivar menú" : "Activar menú"}
-                                >
-                                  {menu.activo ? <PowerOff className="h-4 w-4" /> : <Power className="h-4 w-4" />}
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    Esta acción {menu.activo ? "inactivará" : "activará"} el menú "{menu.nombre}".
-                                    ¿Deseas continuar?
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                  <AlertDialogAction onClick={() => handleStatusToggle(menu.id, menu.activo)}>
-                                    {menu.activo ? "Inactivar" : "Activar"}
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
+                              {platillo.margenutilidad?.toFixed(2) || "0.00"}%
+                            </span>
                           </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
                   </Table>
-                </ScrollArea>
+                )}
               </div>
-              <Pagination className="mt-4">
-                <PaginationContent>
-                  <PaginationItem>
-                    <PaginationPrevious
-                      href="#"
-                      onClick={() => handlePageChange(currentPage - 1)}
-                      aria-disabled={currentPage === 1}
-                      tabIndex={currentPage === 1 ? -1 : undefined}
-                    />
-                  </PaginationItem>
-                  {[...Array(totalPages)].map((_, index) => (
-                    <PaginationItem key={index}>
-                      <PaginationLink
-                        href="#"
-                        isActive={currentPage === index + 1}
-                        onClick={() => handlePageChange(index + 1)}
-                      >
-                        {index + 1}
-                      </PaginationLink>
-                    </PaginationItem>
-                  ))}
-                  <PaginationItem>
-                    <PaginationNext
-                      href="#"
-                      onClick={() => handlePageChange(currentPage + 1)}
-                      aria-disabled={currentPage === totalPages}
-                      tabIndex={currentPage === totalPages ? -1 : undefined}
-                    />
-                  </PaginationItem>
-                </PaginationContent>
-              </Pagination>
-            </>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Modal de Detalles del Menú */}
-      <Dialog open={showDetailsDialog} onOpenChange={setShowDetailsDialog}>
-        <DialogContent className="sm:max-w-[900px] max-h-[90vh] flex flex-col">
-          <DialogHeader className="relative pb-4">
-            <DialogTitle className="text-3xl font-bold text-[#986ec2]">Detalles del Menú</DialogTitle>
-            <DialogDescription className="text-gray-600">
-              Información detallada y platillos asignados al menú.
-            </DialogDescription>
-            <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
-              <X className="h-6 w-6 text-gray-500" />
-              <span className="sr-only">Cerrar</span>
-            </DialogPrimitive.Close>
-          </DialogHeader>
-
-          {loadingDetails ? (
-            <div className="flex flex-col items-center justify-center h-64 text-[#c49deb]">
-              <Loader2 className="h-16 w-16 animate-spin" />
-              <p className="mt-4 text-lg">Cargando detalles del menú...</p>
             </div>
-          ) : detailsError ? (
-            <div className="text-center text-red-500 py-8">
-              <p className="text-lg font-semibold">Error al cargar los detalles:</p>
-              <p>{detailsError}</p>
-            </div>
-          ) : selectedMenuDetails ? (
-            <ScrollArea className="flex-1 pr-4 max-h-[60vh] overflow-y-auto">
-              <div className="grid gap-6 py-4">
-                {/* Sección de Información General del Menú */}
-                <Card className="shadow-lg border-l-4 border-[#986ec2]">
-                  <CardHeader>
-                    <CardTitle className="text-xl font-semibold text-[#986ec2]">Información General</CardTitle>
-                  </CardHeader>
-                  <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                    <div className="flex items-center">
-                      <span className="font-medium text-gray-700 w-28">ID:</span>
-                      <span className="text-gray-900">{selectedMenuDetails.id}</span>
-                    </div>
-                    <div className="flex items-center">
-                      <span className="font-medium text-gray-700 w-28">Nombre:</span>
-                      <span className="text-gray-900">{selectedMenuDetails.nombre}</span>
-                    </div>
-                    <div className="flex items-center">
-                      <span className="font-medium text-gray-700 w-28">Restaurante:</span>
-                      <span className="text-gray-900">{selectedMenuDetails.restaurante?.nombre || "N/A"}</span>
-                    </div>
-                    <div className="flex items-center">
-                      <span className="font-medium text-gray-700 w-28">Hotel:</span>
-                      <span className="text-gray-900">{selectedMenuDetails.restaurante?.hotel?.nombre || "N/A"}</span>
-                    </div>
-                    <div className="flex items-center">
-                      <span className="font-medium text-gray-700 w-28">Estatus:</span>
-                      <span
-                        className={`font-semibold ${selectedMenuDetails.activo ? "text-green-600" : "text-red-600"}`}
-                      >
-                        {selectedMenuDetails.activo ? "Activo" : "Inactivo"}
-                      </span>
-                    </div>
-                    <div className="flex items-center">
-                      <span className="font-medium text-gray-700 w-28">Creación:</span>
-                      <span className="text-gray-900">
-                        {new Date(selectedMenuDetails.fechacreacion).toLocaleDateString()}
-                      </span>
-                    </div>
-                    <div className="col-span-full">
-                      <span className="font-medium text-gray-700 block mb-1">Descripción:</span>
-                      <p className="text-gray-900 bg-gray-50 p-3 rounded-md border border-gray-200">
-                        {selectedMenuDetails.descripcion || "Sin descripción."}
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Sección de Platillos Asignados */}
-                <Card className="shadow-lg border-l-4 border-[#c49deb]">
-                  <CardHeader>
-                    <CardTitle className="text-xl font-semibold text-[#c49deb]">Platillos Asignados</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {assignedPlatillos.length === 0 ? (
-                      <div className="text-center text-gray-500 py-4">Este menú no tiene platillos asignados.</div>
-                    ) : (
-                      <div className="overflow-x-auto">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead className="w-[80px]">Imagen</TableHead>
-                              <TableHead>Platillo</TableHead>
-                              <TableHead>Costo Total</TableHead>
-                              <TableHead>Precio Venta</TableHead>
-                              <TableHead>Margen Utilidad</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {assignedPlatillos.map((item) => (
-                              <TableRow key={item.id}>
-                                <TableCell>
-                                  <div className="relative w-16 h-16 rounded-md overflow-hidden">
-                                    <Image
-                                      src={
-                                        item.platillo?.imgurl || "/placeholder.svg?height=64&width=64&query=platillo"
-                                      }
-                                      alt={item.platillo?.nombre || "Platillo"}
-                                      layout="fill"
-                                      objectFit="cover"
-                                      className="rounded-md"
-                                    />
-                                  </div>
-                                </TableCell>
-                                <TableCell className="font-medium">{item.platillo?.nombre || "N/A"}</TableCell>
-                                <TableCell>${(item.platillo?.costoadministrativo || 0).toFixed(2)}</TableCell>
-                                <TableCell>${(item.precioventa || 0).toFixed(2)}</TableCell>
-                                <TableCell>{(item.margenutilidad || 0).toFixed(2)}</TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-            </ScrollArea>
           ) : null}
         </DialogContent>
       </Dialog>
@@ -1165,6 +1141,7 @@ export default function MenusPage() {
           ) : null}
         </DialogContent>
       </Dialog>
+      
     </div>
   )
 }

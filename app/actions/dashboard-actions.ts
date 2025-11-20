@@ -30,6 +30,32 @@ function createSupabaseServerClient() {
   })
 }
 
+function createSupabaseServerClientWithTimeout() {
+  const cookieStore = cookies()
+
+  return createServerClient(supabaseUrl, supabaseAnonKey, {
+    cookies: {
+      get(name: string) {
+        return cookieStore.get(name)?.value
+      },
+      set(name: string, value: string, options: any) {
+        cookieStore.set({ name, value, ...options })
+      },
+      remove(name: string, options: any) {
+        cookieStore.set({ name, value: "", ...options })
+      },
+    },
+    global: {
+      fetch: (url, options = {}) => {
+        return fetch(url, {
+          ...options,
+          signal: AbortSignal.timeout(15000), // 15 segundos
+        })
+      },
+    },
+  })
+}
+
 /* ==================================================
   Funciones
   --------------------
@@ -335,7 +361,7 @@ export async function obtenerAlertasCostoPorcentual(hotelId: number, restaurante
 // Nueva función para obtener ingredientes que aumentaron de precio
 export async function obtenerIngredientesAumentoPrecio(mes: number, año: number, hotelId: number) {
   try {
-    const supabase = createSupabaseServerClient()
+    const supabase = createSupabaseServerClientWithTimeout()
 
     // Llamar a la función de Supabase para obtener listado de costos de ingredientes
     const { data: ingredientesCostos, error } = await supabase.rpc("sellistadocostoingredientes", {
@@ -390,7 +416,7 @@ export async function obtenerIngredientesAumentoPrecio(mes: number, año: number
 // Nueva función para obtener ingredientes que disminuyeron de precio usando función de Supabase
 export async function obtenerIngredientesDisminucionPrecio(mes: number, año: number, hotelId: number) {
   try {
-    const supabase = createSupabaseServerClient()
+    const supabase = createSupabaseServerClientWithTimeout()
 
     // Llamar a la función de Supabase para obtener listado de costos de ingredientes
     const { data: ingredientesCostos, error } = await supabase.rpc("sellistadocostoingredientes", {
@@ -757,7 +783,7 @@ export async function obtenerHistoricoCosteoRecetas(hotelId: number, recetaId: n
 }
 
 // Nueva función para obtener detalles actuales del platillo
-export async function obtenerDetallesPlatilloActual(platilloId: number, mes: number,) {
+export async function obtenerDetallesPlatilloActual(platilloId: number, mes: number) {
   try {
     const supabase = createSupabaseServerClient()
 
