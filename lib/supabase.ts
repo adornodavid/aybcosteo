@@ -1,4 +1,4 @@
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs" // Importar createServerComponentClient
+import { createBrowserClient } from "@supabase/ssr"
 import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 import type { cookies } from "next/headers"
 import type { Database } from "@/lib/types-sistema-costeo" // Asegúrate de que esta ruta sea correcta
@@ -49,7 +49,12 @@ export type Enums<PublicEnumNameOrOptions extends keyof PublicSchema["Enums"] | 
       : never
 
 // Client-side Supabase client
-export const createClient = () => createClientComponentClient<Database>()
+export const createClient = () => {
+  return createBrowserClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  )
+}
 
 // Instancia principal de Supabase (para uso en cliente)
 export const supabase = createClient()

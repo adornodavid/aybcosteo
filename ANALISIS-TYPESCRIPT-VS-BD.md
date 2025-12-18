@@ -9,19 +9,19 @@
 ## 📋 **ANÁLISIS DETALLADO POR TABLA**
 
 ### 1. **CATEGORIAINGREDIENTES** ✅
-\`\`\`sql
+```sql
 -- BD Real
 id: integer NOT NULL (PK)
 descripcion: text nullable
-\`\`\`
-\`\`\`typescript
+```
+```typescript
 // TypeScript - CORRECTO
 id: number
 descripcion?: string
-\`\`\`
+```
 
 ### 2. **HOTELES** ✅
-\`\`\`sql
+```sql
 -- BD Real
 id: integer NOT NULL (PK)
 acronimo: text nullable
@@ -29,8 +29,8 @@ nombre: text nullable
 direccion: text nullable
 activo: boolean nullable (default: true)
 fechacreacion: date nullable
-\`\`\`
-\`\`\`typescript
+```
+```typescript
 // TypeScript - CORRECTO
 id: number
 acronimo?: string
@@ -38,10 +38,10 @@ nombre?: string
 direccion?: string
 activo?: boolean
 fechacreacion?: string
-\`\`\`
+```
 
 ### 3. **INGREDIENTES** ✅
-\`\`\`sql
+```sql
 -- BD Real
 id: integer NOT NULL (PK)
 codigo: text nullable
@@ -52,8 +52,8 @@ unidadmedidaid: integer nullable (FK)
 hotelid: integer nullable (FK)
 imgurl: text nullable
 cambio: integer nullable
-\`\`\`
-\`\`\`typescript
+```
+```typescript
 // TypeScript - CORRECTO
 id: number
 codigo?: string
@@ -64,10 +64,10 @@ unidadmedidaid?: number
 hotelid?: number
 imgurl?: string
 cambio?: number
-\`\`\`
+```
 
 ### 4. **RESTAURANTES** ✅
-\`\`\`sql
+```sql
 -- BD Real
 id: integer NOT NULL (PK)
 nombre: text nullable
@@ -76,8 +76,8 @@ direccion: text nullable
 activo: boolean nullable (default: true)
 imgurl: text nullable
 fechacreacion: date nullable
-\`\`\`
-\`\`\`typescript
+```
+```typescript
 // TypeScript - CORRECTO
 id: number
 nombre?: string
@@ -86,10 +86,10 @@ direccion?: string
 activo?: boolean
 imgurl?: string
 fechacreacion?: string
-\`\`\`
+```
 
 ### 5. **PLATILLOS** ✅
-\`\`\`sql
+```sql
 -- BD Real
 id: integer NOT NULL (PK)
 nombre: text nullable
@@ -99,8 +99,8 @@ costo: numeric nullable
 activo: boolean nullable (default: true)
 imgurl: text nullable
 fechacreacion: date nullable
-\`\`\`
-\`\`\`typescript
+```
+```typescript
 // TypeScript - CORRECTO
 id: number
 nombre?: string
@@ -110,10 +110,10 @@ costo?: number
 activo?: boolean
 imgurl?: string
 fechacreacion?: string
-\`\`\`
+```
 
 ### 6. **INGREDIENTESXPLATILLO** ✅
-\`\`\`sql
+```sql
 -- BD Real
 id: integer NOT NULL (PK)
 platilloid: integer nullable (FK)
@@ -121,8 +121,8 @@ ingredienteid: integer nullable (FK)
 cantidad: numeric nullable
 unidadmedida: text nullable
 costo: numeric nullable
-\`\`\`
-\`\`\`typescript
+```
+```typescript
 // TypeScript - CORRECTO
 id: number
 platilloid?: number
@@ -130,10 +130,10 @@ ingredienteid?: number
 cantidad?: number
 unidadmedida?: string
 costo?: number
-\`\`\`
+```
 
 ### 7. **MENUS** ✅
-\`\`\`sql
+```sql
 -- BD Real
 id: integer NOT NULL (PK)
 nombre: text nullable
@@ -141,8 +141,8 @@ descripcion: text nullable
 restauranteid: integer nullable (FK)
 activo: boolean nullable (default: true)
 fechacreacion: date nullable
-\`\`\`
-\`\`\`typescript
+```
+```typescript
 // TypeScript - CORRECTO
 id: number
 nombre?: string
@@ -150,25 +150,25 @@ descripcion?: string
 restauranteid?: number
 activo?: boolean
 fechacreacion?: string
-\`\`\`
+```
 
 ### 8. **PLATILLOSXMENU** ✅
-\`\`\`sql
+```sql
 -- BD Real
 id: integer NOT NULL (PK)
 menuid: integer nullable (FK)
 platilloid: integer nullable (FK)
 precio: numeric nullable
 activo: boolean nullable (default: true)
-\`\`\`
-\`\`\`typescript
+```
+```typescript
 // TypeScript - CORRECTO
 id: number
 menuid?: number
 platilloid?: number
 precio?: number
 activo?: boolean
-\`\`\`
+```
 
 ## 🔍 **PUNTOS CLAVE IDENTIFICADOS**
 
@@ -188,7 +188,7 @@ activo?: boolean
 5. **Relaciones** correctamente definidas
 
 ### 📊 **MAPEO DE TIPOS:**
-\`\`\`typescript
+```typescript
 // SQL → TypeScript
 integer → number
 text → string
@@ -197,7 +197,7 @@ boolean → boolean
 date → string
 nullable → ? (opcional)
 NOT NULL → requerido
-\`\`\`
+```
 
 ## ✅ **CONFIRMACIÓN FINAL**
 

@@ -1,16 +1,36 @@
 "use server"
 
-import { createServerComponentClient } from "@supabase/auth-helpers-nextjs"
+import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 import { revalidatePath } from "next/cache"
 
-// Helper para crear el cliente Supabase con cookies
-function createServerSupabaseClientWrapper(cookieStore: ReturnType<typeof cookies>) {
-  return createServerComponentClient({ cookies: () => cookieStore })
+function createServerSupabaseClientWrapper() {
+  const cookieStore = cookies()
+  return createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+    cookies: {
+      get(name: string) {
+        return cookieStore.get(name)?.value
+      },
+      set(name: string, value: string, options: any) {
+        try {
+          cookieStore.set({ name, value, ...options })
+        } catch (error) {
+          // Handle cookies errors in Server Actions
+        }
+      },
+      remove(name: string, options: any) {
+        try {
+          cookieStore.set({ name, value: "", ...options })
+        } catch (error) {
+          // Handle cookies errors in Server Actions
+        }
+      },
+    },
+  })
 }
 
 export async function obtenerHotelesFiltrados(acronimo = "", nombre = "", page = 1, limit = 20) {
-  const supabase = createServerSupabaseClientWrapper(cookies())
+  const supabase = createServerSupabaseClientWrapper()
   const offset = (page - 1) * limit
 
   try {
@@ -60,7 +80,7 @@ export async function obtenerHotelesFiltrados(acronimo = "", nombre = "", page =
 }
 
 export async function obtenerTotalHoteles() {
-  const supabase = createServerSupabaseClientWrapper(cookies())
+  const supabase = createServerSupabaseClientWrapper()
   try {
     const { count, error } = await supabase.from("hoteles").select("*", { count: "exact", head: true })
 
@@ -82,7 +102,7 @@ export async function crearHotel(hotelData: {
   direccion?: string
   telefono?: string
 }) {
-  const supabase = createServerSupabaseClientWrapper(cookies())
+  const supabase = createServerSupabaseClientWrapper()
   try {
     const { data, error } = await supabase
       .from("hoteles")
@@ -115,7 +135,7 @@ export async function actualizarHotel(
   id: number,
   hotelData: { nombre?: string; acronimo?: string; direccion?: string; telefono?: string; activo?: boolean },
 ) {
-  const supabase = createServerSupabaseClientWrapper(cookies())
+  const supabase = createServerSupabaseClientWrapper()
   try {
     const { data, error } = await supabase
       .from("hoteles")
@@ -141,7 +161,7 @@ export async function actualizarHotel(
 }
 
 export async function eliminarHotel(id: number) {
-  const supabase = createServerSupabaseClientWrapper(cookies())
+  const supabase = createServerSupabaseClientWrapper()
   try {
     // Check for associated restaurants first
     const { data: restaurantes, error: restaurantesError } = await supabase

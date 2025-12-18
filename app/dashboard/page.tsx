@@ -200,6 +200,7 @@ const mesesDelAño = [
   { id: 9, nombre: "Septiembre" },
   { id: 10, nombre: "Octubre" },
   { id: 11, nombre: "Noviembre" },
+  { id: 12, nombre: "Diciembre" },
 ]
 
 const añosDisponibles = [{ id: 2025, nombre: "2025" }]
@@ -1658,7 +1659,7 @@ export default function DashboardPage() {
       <div className="w-full flex grid grid-cols-4 grid-rows-4 h-[610px] gap-6">
         {/* Nuevo gráfico de análisis de costos */}
         <div className="w-full col-span-2 row-span-2 h-[320px]">
-          <Card className="rounded-xs border bg-card text-card-foreground shadow bg-gradient-to-r from-cyan-50 to-blue-50 border-cyan-200">
+          <Card className="rounded-xs border bg-card h-[320px] text-card-foreground shadow bg-gradient-to-r from-cyan-50 to-blue-50 border-cyan-200">
             <CardHeader className="flex flex-col space-y-1.5 p-2">
               <CardTitle className="flex items-center justify-between text-cyan-800">
                 <div className="flex items-center gap-2">

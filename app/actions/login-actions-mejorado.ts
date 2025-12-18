@@ -1,10 +1,39 @@
-import { createServerComponentClient } from "@supabase/auth-helpers-nextjs"
+import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 import { type SessionData, setSessionCookies, clearSession } from "./session-actions"
 import type { Database } from "@/lib/types-sistema-costeo"
 
+function createServerSupabaseClient() {
+  const cookieStore = cookies()
+  return createServerClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value
+        },
+        set(name: string, value: string, options: any) {
+          try {
+            cookieStore.set({ name, value, ...options })
+          } catch (error) {
+            // Handle cookies errors in Server Actions
+          }
+        },
+        remove(name: string, options: any) {
+          try {
+            cookieStore.set({ name, value: "", ...options })
+          } catch (error) {
+            // Handle cookies errors in Server Actions
+          }
+        },
+      },
+    },
+  )
+}
+
 export async function obtenerVariablesSesion(): Promise<SessionData> {
-  const supabase = createServerComponentClient<Database>({ cookies })
+  const supabase = createServerSupabaseClient()
 
   try {
     const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
@@ -52,7 +81,7 @@ export async function obtenerVariablesSesion(): Promise<SessionData> {
 export async function procesarInicioSesion(formData: FormData) {
   const email = formData.get("email") as string
   const password = formData.get("password") as string
-  const supabase = createServerComponentClient<Database>({ cookies })
+  const supabase = createServerSupabaseClient()
 
   try {
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -97,7 +126,7 @@ export async function procesarInicioSesion(formData: FormData) {
 }
 
 export async function logout() {
-  const supabase = createServerComponentClient<Database>({ cookies })
+  const supabase = createServerSupabaseClient()
   try {
     await supabase.auth.signOut()
     await clearSession()

@@ -1,9 +1,34 @@
 "use server"
 
-import { createServerComponentClient } from "@supabase/auth-helpers-nextjs"
+import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 import { v4 as uuidv4 } from "uuid"
-import { obtenerVariablesSesion as getSessionData } from "./session-actions-with-expiration" // Importa la función correcta y renómbrala
+import { obtenerVariablesSesion as getSessionData } from "./session-actions-with-expiration"
+
+function createServerSupabaseClient() {
+  const cookieStore = cookies()
+  return createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+    cookies: {
+      get(name: string) {
+        return cookieStore.get(name)?.value
+      },
+      set(name: string, value: string, options: any) {
+        try {
+          cookieStore.set({ name, value, ...options })
+        } catch (error) {
+          // Handle cookies errors in Server Actions
+        }
+      },
+      remove(name: string, options: any) {
+        try {
+          cookieStore.set({ name, value: "", ...options })
+        } catch (error) {
+          // Handle cookies errors in Server Actions
+        }
+      },
+    },
+  })
+}
 
 // Tipos para los datos que devuelven las funciones
 type Hotel = { id: number; nombre: string }
@@ -43,7 +68,7 @@ export async function obtenerVariablesSesion() {
 }
 
 export async function getHoteles(hotelId: number): Promise<Hotel[]> {
-  const supabase = createServerComponentClient({ cookies })
+  const supabase = createServerSupabaseClient()
   let query = supabase.from("hoteles").select("id, nombre")
   if (hotelId !== -1) {
     query = query.eq("id", hotelId)
@@ -57,7 +82,7 @@ export async function getHoteles(hotelId: number): Promise<Hotel[]> {
 }
 
 export async function getRestaurantes(hotelId: number): Promise<Restaurante[]> {
-  const supabase = createServerComponentClient({ cookies })
+  const supabase = createServerSupabaseClient()
   const { data, error } = await supabase
     .from("restaurantes")
     .select("id, nombre")
@@ -71,7 +96,7 @@ export async function getRestaurantes(hotelId: number): Promise<Restaurante[]> {
 }
 
 export async function getMenus(restauranteId: number, hotelId: number): Promise<Menu[]> {
-  const supabase = createServerComponentClient({ cookies })
+  const supabase = createServerSupabaseClient()
   // Adaptado a tu SQL: SELECT a.id, a.nombre from menus a inner join restaurantes b on a.restauranteid = b.id inner join hoteles c on b.hotelid = c.id where b.id =[ddlRestaurante.value] and c.id = [ddlHotel.value]
   const { data, error } = await supabase
     .from("menus")
@@ -97,7 +122,7 @@ export async function getMenus(restauranteId: number, hotelId: number): Promise<
 }
 
 export async function getIngredientes(hotelId: number): Promise<Ingrediente[]> {
-  const supabase = createServerComponentClient({ cookies })
+  const supabase = createServerSupabaseClient()
   // Adaptado a tu SQL: select id, nombre from ingredientes where hotelid = [ddlHotel.value]
   // Incluyo 'costo' para el campo bloqueado 'txtCostoIngrediente'
   const { data, error } = await supabase
@@ -114,7 +139,7 @@ export async function getIngredientes(hotelId: number): Promise<Ingrediente[]> {
 
 // NUEVA FUNCIÓN: Buscar ingredientes por término de búsqueda
 export async function searchIngredientes(hotelId: number, searchTerm: string): Promise<Ingrediente[]> {
-  const supabase = createServerComponentClient({ cookies })
+  const supabase = createServerSupabaseClient()
   let query = supabase
     .from("ingredientes")
     .select("id, nombre, codigo, costo") // Incluir 'codigo'
@@ -134,7 +159,7 @@ export async function searchIngredientes(hotelId: number, searchTerm: string): P
 }
 
 export async function getRecetas(hotelId: number): Promise<Receta[]> {
-  const supabase = createServerComponentClient({ cookies })
+  const supabase = createServerSupabaseClient()
   // Adaptado a tu SQL: SELECT distinct a.id, a.nombre from recetas a inner join ingredientesxreceta b on a.id = b.recetaid inner join ingredientes c on b.ingredienteid = c.id inner join hoteles d on c.hotelid = d.id WHERE d.id = [ddlHotel.value] AND a.activo = true;
   // Incluyo 'costo', 'cantidad' y 'unidadbaseid' con su descripción para los campos bloqueados
   // ASUMPTION: 'recetas' table has 'cantidad' and 'unidadbaseid' columns.
@@ -170,7 +195,7 @@ export async function getRecetas(hotelId: number): Promise<Receta[]> {
 
 // NUEVA FUNCIÓN: Obtener unidades de medida por ingrediente
 export async function getUnidadesMedidaByIngrediente(ingredienteId: number): Promise<UnidadMedida[]> {
-  const supabase = createServerComponentClient({ cookies })
+  const supabase = createServerSupabaseClient()
   // SQL proporcionado: SELECT b.id, b.descripcion from ingredientes a inner join tipounidadmedida b on a.unidadmedidaid = b.id where a.id = [ddlIngredientes.value]
   const { data, error } = await supabase
     .from("ingredientes")
@@ -204,7 +229,7 @@ export async function getUnidadesMedidaByIngrediente(ingredienteId: number): Pro
 export async function getPlatilloTotalCost(
   platilloId: number,
 ): Promise<{ totalCost: number; costoAdministrativo: number; precioSugerido: number }> {
-  const supabase = createServerComponentClient({ cookies })
+  const supabase = createServerSupabaseClient()
 
   // Fetch sum of ingredient costs
   const { data: ingredientesSum, error: ingSumError } = await supabase
@@ -299,7 +324,7 @@ export async function getPlatilloTotalCost(
 // --- ACCIONES DEL WIZARD ---
 
 export async function registrarPlatilloBasico(formData: FormData) {
-  const supabase = createServerComponentClient({ cookies })
+  const supabase = createServerSupabaseClient()
   const nombre = formData.get("nombre") as string
   const descripcion = formData.get("descripcion") as string
   const instruccionespreparacion = formData.get("instruccionespreparacion") as string
@@ -362,7 +387,7 @@ export async function agregarIngrediente(
   cantidad: number,
   unidadId: number,
 ) {
-  const supabase = createServerComponentClient({ cookies })
+  const supabase = createServerSupabaseClient()
   try {
     // Validar si el ingrediente ya existe en el platillo
     const { data: existingEntry, error: checkError } = await supabase
@@ -437,7 +462,7 @@ export async function agregarIngrediente(
 }
 
 export async function agregarReceta(platilloId: number, recetaId: number, cantidadIngresada: number) {
-  const supabase = createServerComponentClient({ cookies })
+  const supabase = createServerSupabaseClient()
   try {
     // Validar si la sub-receta ya existe en el platillo
     const { data: existingEntry, error: checkError } = await supabase
@@ -515,7 +540,7 @@ export async function finalizarRegistro(
   costoPorcentual: number,
   hotelId: number, // Agregar el nuevo parámetro
 ) {
-  const supabase = createServerComponentClient({ cookies })
+  const supabase = createServerSupabaseClient()
   try {
     // 1. Calcular y actualizar costototal en la tabla platillos
     const { data: ingredientesCost, error: ingCostError } = await supabase
@@ -667,7 +692,7 @@ export async function finalizarRegistro(
 
 // NUEVA SERVER ACTION: Para cancelar el registro y limpiar la base de datos
 export async function cancelarRegistro(platilloId: number) {
-  const supabase = createServerComponentClient({ cookies })
+  const supabase = createServerSupabaseClient()
   try {
     // Obtener URL de la imagen para borrarla del storage antes de borrar el platillo
     const { data: platilloData, error: platilloFetchError } = await supabase
@@ -720,7 +745,7 @@ export async function cancelarRegistro(platilloId: number) {
 
 // NUEVA SERVER ACTION: Eliminar ingrediente de un platillo
 export async function eliminarIngredienteDePlatillo(platilloId: number, ingredienteXPlatilloId: number) {
-  const supabase = createServerComponentClient({ cookies })
+  const supabase = createServerSupabaseClient()
   try {
     const { error } = await supabase
       .from("ingredientesxplatillo")
@@ -741,7 +766,7 @@ export async function eliminarIngredienteDePlatillo(platilloId: number, ingredie
 
 // NUEVA SERVER ACTION: Eliminar sub-receta de un platillo
 export async function eliminarRecetaDePlatillo(platilloId: number, Id: number) {
-  const supabase = createServerComponentClient({ cookies })
+  const supabase = createServerSupabaseClient()
   try {
     console.log("Entramos en la funcion de eliminar subreceta de receta para la receta")
     const { error } = await supabase.from("recetasxplatillo").delete().eq("platilloid", platilloId).eq("id", Id) // Usar el ID de la relacion de la receta con el platillo
