@@ -188,7 +188,13 @@ interface PlatilloDataset {
   data: CostHistoryItem[]
 }
 
-const mesesDelAño = [
+// Obtener fecha actual
+const fechaActualCalculoInicial = new Date()
+const mesActualNumero = fechaActualCalculoInicial.getMonth() + 1 // 1-12
+const añoActualNumero = fechaActualCalculoInicial.getFullYear()
+
+// Todos los meses del año para referencia
+const todosMesesDelAño = [
   { id: 1, nombre: "Enero" },
   { id: 2, nombre: "Febrero" },
   { id: 3, nombre: "Marzo" },
@@ -203,7 +209,11 @@ const mesesDelAño = [
   { id: 12, nombre: "Diciembre" },
 ]
 
-const añosDisponibles = [{ id: 2025, nombre: "2025" }]
+// Generar lista de años: año actual y últimos 3 años
+const añosDisponibles = Array.from({ length: 4 }, (_, i) => {
+  const año = añoActualNumero - i
+  return { id: año, nombre: año.toString() }
+})
 
 /* ==================================================
   Componente Principal, Pagina
@@ -259,11 +269,10 @@ export default function DashboardPage() {
   // Estados de filtros de fecha con valores por defecto
   const fechaActual = new Date()
   const fechaanterior = new Date(fechaActual.getFullYear(), fechaActual.getMonth() - 1, 1)
-  const mesAnterior = fechaActual.getMonth() + 1
-  const añoActual = fechaActual.getFullYear()
 
-  const [mesSeleccionado, setMesSeleccionado] = useState<string>(mesAnterior.toString())
-  const [añoSeleccionado, setAñoSeleccionado] = useState<string>(añoActual.toString())
+  const [mesSeleccionado, setMesSeleccionado] = useState<string>(mesActualNumero.toString())
+  const [añoSeleccionado, setAñoSeleccionado] = useState<string>(añoActualNumero.toString())
+  const [mesesDisponibles, setMesesDisponibles] = useState<Array<{ id: number; nombre: string }>>([])
   const [topIngredientesCosto, setTopIngredientesCosto] = useState<any[]>([])
   const [promedioMenuCosto, setPromedioMenuCosto] = useState<any[]>([])
 
@@ -308,6 +317,40 @@ export default function DashboardPage() {
     "#dda0dd",
     "#98fb98",
   ]
+
+  // Función para calcular meses disponibles según el año seleccionado
+  const calcularMesesDisponibles = (añoSeleccionado: string) => {
+    const añoSeleccionadoNum = Number.parseInt(añoSeleccionado)
+    
+    // Si el año seleccionado es el año actual, solo mostrar hasta el mes actual
+    if (añoSeleccionadoNum === añoActualNumero) {
+      return todosMesesDelAño.filter(mes => mes.id <= mesActualNumero)
+    }
+    
+    // Si es un año anterior, mostrar todos los meses
+    return todosMesesDelAño
+  }
+
+  // useEffect para actualizar meses disponibles cuando cambia el año
+  useEffect(() => {
+    const nuevosMeses = calcularMesesDisponibles(añoSeleccionado)
+    setMesesDisponibles(nuevosMeses)
+    
+    // Si el mes seleccionado no está disponible en el nuevo año, seleccionar el último mes disponible
+    const mesSeleccionadoNum = Number.parseInt(mesSeleccionado)
+    const mesDisponible = nuevosMeses.find(m => m.id === mesSeleccionadoNum)
+    
+    if (!mesDisponible && nuevosMeses.length > 0) {
+      // Seleccionar el último mes disponible
+      setMesSeleccionado(nuevosMeses[nuevosMeses.length - 1].id.toString())
+    }
+  }, [añoSeleccionado])
+
+  // useEffect para inicializar meses disponibles al cargar
+  useEffect(() => {
+    const mesesIniciales = calcularMesesDisponibles(añoActualNumero.toString())
+    setMesesDisponibles(mesesIniciales)
+  }, [])
 
   // Procesar datos para crear datasets por platillo y menú
   const processDataByPlatillo = () => {
@@ -1626,7 +1669,7 @@ export default function DashboardPage() {
                     <SelectValue placeholder="Seleccionar mes" />
                   </SelectTrigger>
                   <SelectContent>
-                    {mesesDelAño.map((mes) => (
+                    {mesesDisponibles.map((mes) => (
                       <SelectItem key={mes.id} value={mes.id.toString()}>
                         {mes.nombre}
                       </SelectItem>
@@ -3281,7 +3324,7 @@ export default function DashboardPage() {
                   <div className="space-y-4">
                     <div className="bg-white p-3 rounded-lg border">
                       <div className="text-sm text-gray-600">
-                        Costo Total ({mesesDelAño.find((m) => m.id === Number.parseInt(mesSeleccionado))?.nombre}{" "}
+                        Costo Total ({todosMesesDelAño.find((m) => m.id === Number.parseInt(mesSeleccionado))?.nombre}{" "}
                         {añoSeleccionado})
                       </div>
                       <div className="text-2xl font-bold text-orange-600">
