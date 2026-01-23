@@ -461,14 +461,14 @@ export default function AnalisisCostosPage() {
   }, [])
 
   // Función para calcular la diferencia y mostrar el indicador
-  const renderComparison = (actual: number, historico: number, isPercentage = false) => {
+  const renderComparison = (actual: number, historico: number, isPercentage = false, invertColors = false) => {
     const diferencia = actual - historico
     const porcentajeCambio = historico !== 0 ? (diferencia / historico) * 100 : 0
     const suffix = isPercentage ? "%" : ""
 
     if (diferencia > 0) {
       return (
-        <div className="flex items-center gap-1 text-red-600">
+        <div className={`flex items-center gap-1 ${invertColors ? 'text-green-600' : 'text-red-600'}`}>
           <TrendingUp className="h-4 w-4" />
           <span className="text-sm font-medium">
             +{diferencia.toFixed(2)}
@@ -478,7 +478,7 @@ export default function AnalisisCostosPage() {
       )
     } else if (diferencia < 0) {
       return (
-        <div className="flex items-center gap-1 text-green-600">
+        <div className={`flex items-center gap-1 ${invertColors ? 'text-red-600' : 'text-green-600'}`}>
           <TrendingDown className="h-4 w-4" />
           <span className="text-sm font-medium">
             {diferencia.toFixed(2)}
@@ -1060,7 +1060,7 @@ export default function AnalisisCostosPage() {
                       {/* Tarjeta de Información Actual */}
                       <div className="relative">
                         <div className="absolute inset-0 bg-gradient-to-br from-blue-50/80 via-white/60 to-indigo-50/80 backdrop-blur-sm rounded-xl border border-blue-200/30"></div>
-                        <Card className="rounded-xl text-card-foreground relative border-0 bg-transparent shadow-lg">
+                        <Card className="rounded-xl text-card-foreground relative bg-transparent border-0 shadow-lg">
                           <CardHeader className="text-center pb-4">
                             <CardTitle className="text-xl font-bold text-blue-700 flex items-center justify-center gap-2">
                               📊 Información Actual
@@ -1107,7 +1107,7 @@ export default function AnalisisCostosPage() {
                                 <p className="text-2xl font-bold text-purple-400">
                                   ${platilloActual.margenutilidad.toFixed(2)}
                                 </p>
-                                {renderComparison(platilloActual.margenutilidad, platilloHistorico.margenutilidad)}
+                                {renderComparison(platilloActual.margenutilidad, platilloHistorico.margenutilidad, false, true)}
                               </div>
 
                               <div className="backdrop-blur-sm rounded-lg p-3">
@@ -1125,7 +1125,7 @@ export default function AnalisisCostosPage() {
                       {/* Tarjeta de Información Histórica */}
                       <div className="relative">
                         <div className="absolute inset-0 bg-gradient-to-br from-amber-50/80 via-white/60 to-orange-50/80 backdrop-blur-sm rounded-xl border border-amber-200/30"></div>
-                        <Card className="relative border-0 bg-transparent shadow-lg">
+                        <Card className="rounded-xl bg-card text-card-foreground bg-transparent relative">
                           <CardHeader className="text-center pb-4">
                             <CardTitle className="text-xl font-bold text-amber-700 flex items-center justify-center gap-2">
                               📅 Información Histórica
@@ -1133,10 +1133,11 @@ export default function AnalisisCostosPage() {
                             <p className="text-sm text-slate-600">Datos del {selectedPointDetails.fecha}</p>
                           </CardHeader>
                           <CardContent className="space-y-4">
-                            <div className="flex justify-center mb-4">
-                              <div className="w-24 h-24 bg-gradient-to-br from-amber-200 to-orange-200 rounded-full flex items-center justify-center border-4 border-amber-200/50">
-                                <span className="text-2xl">📊</span>
-                              </div>
+                            <div className="h-[95px] flex justify-center mb-4">
+                              <img
+                                src={platilloActual.imgurl || "/placeholder.svg"}
+                                className="w-24 h-24 object-cover rounded-full border-4 border-blue-200/50"
+                              />
                             </div>
 
                             <div className="space-y-2">
