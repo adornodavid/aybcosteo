@@ -464,12 +464,12 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
                 </Button>
                 <div className="cursor-pointer w-full" onClick={() => handleViewDetails(platillo.platillos!)}>
                   <CardHeader className="p-0 w-full">
-                    <div className="relative w-full h-40">
+                    <div className="relative w-full h-40 bg-gray-100">
                       <Image
                         src={platillo.platillos?.imgurl || "/placeholder.svg?height=160&width=240&query=dish"}
                         alt={platillo.platillos?.nombre || "Imagen de platillo"}
                         fill
-                        style={{ objectFit: "cover" }}
+                        style={{ objectFit: "contain" }}
                         className="rounded-t-lg"
                       />
                     </div>
@@ -664,12 +664,12 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
           </DialogHeader>
           {selectedPlatilloForDetails && (
             <div className="grid gap-4 py-4">
-              <div className="relative w-full h-48">
+              <div className="relative w-full h-48 bg-gray-100">
                 <Image
                   src={selectedPlatilloForDetails.imgurl || "/placeholder.svg?height=192&width=400&query=dish"}
                   alt={selectedPlatilloForDetails.nombre || "Imagen de platillo"}
                   fill
-                  style={{ objectFit: "cover" }}
+                  style={{ objectFit: "contain" }}
                   className="rounded-md"
                 />
               </div>
