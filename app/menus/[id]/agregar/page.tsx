@@ -520,7 +520,7 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
             <DialogDescription>Selecciona una Recetas y define su precio de venta.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
+            <div className="4grid grid-cols-4 items-center gap-8">
               <Label htmlFor="ddlPlatillos" className="text-right">
                 Platillo
               </Label>
@@ -586,7 +586,7 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
                 </CardContent>
               </Card>
             )}
-            <div className="grid grid-cols-4 items-center gap-4">
+            <div className="grid grid-cols-4 items-center gap-8">
               <Label htmlFor="txtPrecioVenta" className="text-right">
                 Precio Venta
               </Label>
@@ -608,7 +608,7 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
                 placeholder="Precio de venta del platillo"
               />
             </div>
-            <div className="grid grid-cols-4 items-center gap-4">
+            <div className="grid grid-cols-4 items-center gap-10">
               <Label htmlFor="txtCostoPorcentual" className="text-right">
                 Costo%
               </Label>
