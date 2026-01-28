@@ -205,16 +205,16 @@ export default function ImportarPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
-        {/* Header y Instrucciones en Fila */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
-          {/* Título Izquierdo */}
-          <div className="lg:col-span-2">
+        {/* Grid Principal: 2 columnas x 2 filas */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 auto-rows-max lg:auto-rows-max">
+          {/* Fila 1, Columna 1: Título y Subtítulo */}
+          <div>
             <h1 className="text-4xl font-bold text-slate-900 mb-2">Importación de Datos</h1>
             <p className="text-lg text-slate-600">Gestiona la carga masiva de información a tu sistema.</p>
           </div>
 
-          {/* Instrucciones Derecho - Con altura limitada y expand */}
-          <div className="lg:col-span-1">
+          {/* Fila 1-2, Columna 2: Instrucciones (rowspan 2) */}
+          <div className="lg:row-span-2">
             <Card className="bg-white/95 backdrop-blur h-full flex flex-col">
               <CardHeader>
                 <CardTitle className="text-xl font-bold text-slate-900">Instrucciones Rápidas</CardTitle>
@@ -270,11 +270,9 @@ export default function ImportarPage() {
               </div>
             </Card>
           </div>
-        </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
-          {/* Tarjetas de Importación - Lado Izquierdo */}
-          <div className="lg:col-span-2 space-y-4">
+          {/* Fila 2, Columna 1: Tarjetas de Importación */}
+          <div className="space-y-4">
             <h2 className="text-2xl font-bold text-slate-900 mb-6">Selecciona el tipo de importación</h2>
             <div className="grid gap-4">
               {/* Importar Ingredientes */}
@@ -354,8 +352,6 @@ export default function ImportarPage() {
             </div>
           </div>
         </div>
-
-        {/* Sección de Importación Detallada */}
       </div>
       {/* Diálogo de confirmación */}
       <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
