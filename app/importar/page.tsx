@@ -30,6 +30,7 @@ export default function ImportarPage() {
   const [totalRows, setTotalRows] = useState(0)
   const [restaurantes, setRestaurantes] = useState<any[]>([])
   const [selectedRestaurante, setSelectedRestaurante] = useState<string>("")
+  const [expandInstrucciones, setExpandInstrucciones] = useState(false)
   const { toast } = useToast()
 
   // URL del archivo de ejemplo
@@ -204,9 +205,71 @@ export default function ImportarPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
-        <div className="mb-12">
-          <h1 className="text-4xl font-bold text-slate-900 mb-2">Importación de Datos</h1>
-          <p className="text-lg text-slate-600">Gestiona la carga masiva de información a tu sistema.</p>
+        {/* Header y Instrucciones en Fila */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
+          {/* Título Izquierdo */}
+          <div className="lg:col-span-2">
+            <h1 className="text-4xl font-bold text-slate-900 mb-2">Importación de Datos</h1>
+            <p className="text-lg text-slate-600">Gestiona la carga masiva de información a tu sistema.</p>
+          </div>
+
+          {/* Instrucciones Derecho - Con altura limitada y expand */}
+          <div className="lg:col-span-1">
+            <Card className="bg-white/95 backdrop-blur h-full flex flex-col">
+              <CardHeader>
+                <CardTitle className="text-xl font-bold text-slate-900">Instrucciones Rápidas</CardTitle>
+              </CardHeader>
+              <CardContent className={`space-y-6 text-sm flex-1 overflow-hidden transition-all duration-300 ${expandInstrucciones ? 'max-h-none' : 'max-h-64'}`}>
+                <div>
+                  <h3 className="font-semibold text-slate-900 mb-2">📋 Formato del Archivo</h3>
+                  <p className="text-slate-600 mb-2">El archivo Excel debe contener las siguientes columnas:</p>
+                  <ul className="list-disc list-inside space-y-1 text-slate-600 text-xs">
+                    <li>Clave Innsist</li>
+                    <li>Clave Rapsodia</li>
+                    <li>Descripción del artículo</li>
+                    <li>Categoria</li>
+                    <li>Ingrediente</li>
+                    <li>Tipo</li>
+                    <li>Metrica</li>
+                    <li>Cantidad</li>
+                    <li>Metrica Convertida</li>
+                    <li>Conversion</li>
+                    <li>GR/ML/PZA</li>
+                    <li>Precio</li>
+                    <li>Unitario</li>
+                  </ul>
+                </div>
+
+                <div className="pt-4 border-t border-slate-200">
+                  <h3 className="font-semibold text-slate-900 mb-2">✓ Requerimientos</h3>
+                  <ul className="list-disc list-inside space-y-1 text-slate-600 text-xs">
+                    <li>Primera fila con nombres de columnas</li>
+                    <li>Descripción del artículo es obligatoria</li>
+                    <li>Valores numéricos con punto o coma</li>
+                  </ul>
+                </div>
+
+                <div className="pt-4 border-t border-slate-200">
+                  <h3 className="font-semibold text-slate-900 mb-2">📝 Proceso</h3>
+                  <ol className="list-decimal list-inside space-y-1 text-slate-600 text-xs">
+                    <li>Selecciona tipo de importación</li>
+                    <li>Sube archivo o proporciona URL</li>
+                    <li>Revisa la vista previa</li>
+                    <li>Confirma la importación</li>
+                  </ol>
+                </div>
+              </CardContent>
+              <div className="px-6 py-4 border-t border-slate-200">
+                <Button
+                  variant="ghost"
+                  onClick={() => setExpandInstrucciones(!expandInstrucciones)}
+                  className="w-full text-sm font-medium text-slate-600 hover:text-slate-900"
+                >
+                  {expandInstrucciones ? '↑ Ver menos' : '↓ Ver más'}
+                </Button>
+              </div>
+            </Card>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
@@ -290,76 +353,9 @@ export default function ImportarPage() {
               </Link>
             </div>
           </div>
-
-          {/* Instrucciones - Lado Derecho */}
-          <div className="lg:col-span-1">
-            <Card className="sticky top-4 bg-white/95 backdrop-blur">
-              <CardHeader>
-                <CardTitle className="text-xl font-bold text-slate-900">Instrucciones Rápidas</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6 text-sm">
-                <div>
-                  <h3 className="font-semibold text-slate-900 mb-2">📋 Formato del Archivo</h3>
-                  <p className="text-slate-600 mb-2">El archivo Excel debe contener las siguientes columnas:</p>
-                  <ul className="list-disc list-inside space-y-1 text-slate-600 text-xs">
-                    <li>Clave Innsist</li>
-                    <li>Clave Rapsodia</li>
-                    <li>Descripción del artículo</li>
-                    <li>Categoria</li>
-                    <li>Ingrediente</li>
-                    <li>Tipo</li>
-                    <li>Metrica</li>
-                    <li>Cantidad</li>
-                    <li>Metrica Convertida</li>
-                    <li>Conversion</li>
-                    <li>GR/ML/PZA</li>
-                    <li>Precio</li>
-                    <li>Unitario</li>
-                  </ul>
-                </div>
-
-                <div className="pt-4 border-t border-slate-200">
-                  <h3 className="font-semibold text-slate-900 mb-2">✓ Requerimientos</h3>
-                  <ul className="list-disc list-inside space-y-1 text-slate-600 text-xs">
-                    <li>Primera fila con nombres de columnas</li>
-                    <li>Descripción del artículo es obligatoria</li>
-                    <li>Valores numéricos con punto o coma</li>
-                  </ul>
-                </div>
-
-                <div className="pt-4 border-t border-slate-200">
-                  <h3 className="font-semibold text-slate-900 mb-2">📝 Proceso</h3>
-                  <ol className="list-decimal list-inside space-y-1 text-slate-600 text-xs">
-                    <li>Selecciona tipo de importación</li>
-                    <li>Sube archivo o proporciona URL</li>
-                    <li>Revisa la vista previa</li>
-                    <li>Confirma la importación</li>
-                  </ol>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
         </div>
-        <div className="space-y-6">
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Ayuda</CardTitle>
-            </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              <p>
-                Si tienes problemas con la importación, asegúrate de que tu archivo siga el formato correcto. Puedes
-                descargar el archivo de ejemplo para ver la estructura esperada.
-              </p>
-              <div className="mt-4">
-                <Button variant="outline" onClick={downloadExampleFile} className="w-full bg-transparent">
-                  <FileSpreadsheet className="mr-2 h-4 w-4" />
-                  Descargar Plantilla
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        {/* Sección de Importación Detallada */}
       </div>
       {/* Diálogo de confirmación */}
       <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
