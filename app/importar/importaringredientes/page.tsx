@@ -61,15 +61,30 @@ export default function ImportarIngredientesPage() {
         throw new Error("El archivo no contiene datos")
       }
 
+      // Validación: Deduplicar registros por codigorapsodia y articulo
+      const seenCombinations = new Set<string>()
+      const dataDeduplicated = jsonDataTemp.filter((row: any) => {
+        const codigorapsodia = row.codigorapsodia || row.Codigorapsodia || row.CodigoRapsodia || ""
+        const articulo = row.articulo || row.Articulo || row.ARTICULO || ""
+        const key = `${codigorapsodia}|${articulo}`
+
+        if (seenCombinations.has(key)) {
+          return false // Filtrar registros duplicados
+        }
+
+        seenCombinations.add(key)
+        return true // Mantener el primer registro
+      })
+
       const columns = Object.keys(jsonDataTemp[0])
       setColumnas(columns)
-      setPreviewData(jsonDataTemp.slice(0, 50))
-      setJsonData(jsonDataTemp)
+      setPreviewData(dataDeduplicated)
+      setJsonData(dataDeduplicated)
       setScrollPosition(0)
 
       toast({
         title: "Éxito",
-        description: `Se cargaron ${jsonDataTemp.length} filas del archivo`,
+        description: `Se cargaron ${dataDeduplicated.length} filas del archivo (${jsonDataTemp.length - dataDeduplicated.length} duplicados removidos)`,
       })
     } catch (error: any) {
       toast({
