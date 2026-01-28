@@ -276,7 +276,7 @@ export default function ImportarPage() {
             <h2 className="text-2xl font-bold text-slate-900 mb-6">Selecciona el tipo de importación</h2>
             <div className="grid gap-4">
               {/* Importar Ingredientes */}
-              <Link href="#">
+              <Link href="/importar/importaringredientes">
                 <Card className="group relative h-full overflow-hidden cursor-pointer transition-all duration-300 hover:shadow-xl hover:scale-105 border-2 border-transparent hover:border-blue-500">
                   <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-blue-600/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                   <CardHeader className="relative pb-2">
