@@ -202,90 +202,147 @@ export default function ImportarPage() {
   }
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-4">
-      <h1 className="text-3xl font-bold mb-8">Opciones de Importación y Análisis</h1>
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card className="flex flex-col items-center text-center p-6">
-          <CardHeader>
-            <FileSpreadsheet className="h-12 w-12 text-primary mb-4" />
-            <CardTitle className="text-xl font-semibold">Importar Excel</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground mb-4">
-              Importa datos de ingredientes desde un archivo Excel a la base de datos.
-            </p>
-            <Link href="/importar/excel-correcto">
-              <Button>Ir a Importar</Button>
-            </Link>
-          </CardContent>
-        </Card>
-
-        <Card className="flex flex-col items-center text-center p-6">
-          <CardHeader>
-            <BarChart2 className="h-12 w-12 text-primary mb-4" />
-            <CardTitle className="text-xl font-semibold">Análisis de Excel</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground mb-4">
-              Analiza la estructura y el contenido de un archivo Excel antes de importarlo.
-            </p>
-            <Link href="/importar/analisis-excel">
-              <Button>Ir a Análisis</Button>
-            </Link>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="flex flex-col gap-6 p-4 md:p-6 mt-12">
-        <h1 className="text-3xl font-bold">Importación de Datos</h1>
-        <p className="text-lg text-muted-foreground">Gestiona la carga masiva de información a tu sistema.</p>
-
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          <Link href="/importar/excel-correcto">
-            <Card className="h-full hover:shadow-lg transition-shadow">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-lg font-medium">Importar desde Excel</CardTitle>
-                <Upload className="h-6 w-6 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  Carga masivamente ingredientes, platillos u otros datos desde un archivo Excel.
-                </p>
-              </CardContent>
-            </Card>
-          </Link>
-
-          <Link href="/importar/analisis-excel">
-            <Card className="h-full hover:shadow-lg transition-shadow">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-lg font-medium">Análisis de Importación</CardTitle>
-                <BarChart2 className="h-6 w-6 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  Revisa los resultados detallados de tus importaciones anteriores, incluyendo errores y advertencias.
-                </p>
-              </CardContent>
-            </Card>
-          </Link>
-
-          <Link href="#">
-            <Card className="h-full hover:shadow-lg transition-shadow opacity-50 cursor-not-allowed">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-lg font-medium">Importar desde CSV (Próximamente)</CardTitle>
-                <FileText className="h-6 w-6 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  Carga datos desde archivos CSV. Esta funcionalidad estará disponible pronto.
-                </p>
-              </CardContent>
-            </Card>
-          </Link>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4 md:p-8">
+      <div className="max-w-7xl mx-auto">
+        <div className="mb-12">
+          <h1 className="text-4xl font-bold text-slate-900 mb-2">Importación de Datos</h1>
+          <p className="text-lg text-slate-600">Gestiona la carga masiva de información a tu sistema.</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="md:col-span-2 space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
+          {/* Tarjetas de Importación - Lado Izquierdo */}
+          <div className="lg:col-span-2 space-y-4">
+            <h2 className="text-2xl font-bold text-slate-900 mb-6">Selecciona el tipo de importación</h2>
+            <div className="grid gap-4">
+              {/* Importar Ingredientes */}
+              <Link href="#">
+                <Card className="group relative h-full overflow-hidden cursor-pointer transition-all duration-300 hover:shadow-xl hover:scale-105 border-2 border-transparent hover:border-blue-500">
+                  <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-blue-600/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                  <CardHeader className="relative pb-2">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <CardTitle className="text-xl font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
+                          Importar Ingredientes
+                        </CardTitle>
+                        <p className="text-sm text-slate-600 mt-2">
+                          Carga masivamente ingredientes desde un archivo Excel a tu inventario
+                        </p>
+                      </div>
+                      <div className="p-2 bg-blue-100 rounded-lg group-hover:bg-blue-200 transition-colors">
+                        <FileSpreadsheet className="h-6 w-6 text-blue-600" />
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-xs text-slate-500">Haz clic para continuar →</p>
+                  </CardContent>
+                </Card>
+              </Link>
+
+              {/* Importar Recetas */}
+              <Link href="#">
+                <Card className="group relative h-full overflow-hidden cursor-pointer transition-all duration-300 hover:shadow-xl hover:scale-105 border-2 border-transparent hover:border-green-500">
+                  <div className="absolute inset-0 bg-gradient-to-br from-green-500/10 to-green-600/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                  <CardHeader className="relative pb-2">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <CardTitle className="text-xl font-bold text-slate-900 group-hover:text-green-600 transition-colors">
+                          Importar Recetas
+                        </CardTitle>
+                        <p className="text-sm text-slate-600 mt-2">
+                          Carga platillos y recetas desde un archivo Excel con sus ingredientes
+                        </p>
+                      </div>
+                      <div className="p-2 bg-green-100 rounded-lg group-hover:bg-green-200 transition-colors">
+                        <Upload className="h-6 w-6 text-green-600" />
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-xs text-slate-500">Haz clic para continuar →</p>
+                  </CardContent>
+                </Card>
+              </Link>
+
+              {/* Importar Subrecetas */}
+              <Link href="#">
+                <Card className="group relative h-full overflow-hidden cursor-pointer transition-all duration-300 hover:shadow-xl hover:scale-105 border-2 border-transparent hover:border-purple-500">
+                  <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-purple-600/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                  <CardHeader className="relative pb-2">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <CardTitle className="text-xl font-bold text-slate-900 group-hover:text-purple-600 transition-colors">
+                          Importar Subrecetas
+                        </CardTitle>
+                        <p className="text-sm text-slate-600 mt-2">
+                          Carga subrecetas y preparaciones desde un archivo Excel
+                        </p>
+                      </div>
+                      <div className="p-2 bg-purple-100 rounded-lg group-hover:bg-purple-200 transition-colors">
+                        <BarChart2 className="h-6 w-6 text-purple-600" />
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-xs text-slate-500">Haz clic para continuar →</p>
+                  </CardContent>
+                </Card>
+              </Link>
+            </div>
+          </div>
+
+          {/* Instrucciones - Lado Derecho */}
+          <div className="lg:col-span-1">
+            <Card className="sticky top-4 bg-white/95 backdrop-blur">
+              <CardHeader>
+                <CardTitle className="text-xl font-bold text-slate-900">Instrucciones Rápidas</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6 text-sm">
+                <div>
+                  <h3 className="font-semibold text-slate-900 mb-2">📋 Formato del Archivo</h3>
+                  <p className="text-slate-600 mb-2">El archivo Excel debe contener las siguientes columnas:</p>
+                  <ul className="list-disc list-inside space-y-1 text-slate-600 text-xs">
+                    <li>Clave Innsist</li>
+                    <li>Clave Rapsodia</li>
+                    <li>Descripción del artículo</li>
+                    <li>Categoria</li>
+                    <li>Ingrediente</li>
+                    <li>Tipo</li>
+                    <li>Metrica</li>
+                    <li>Cantidad</li>
+                    <li>Metrica Convertida</li>
+                    <li>Conversion</li>
+                    <li>GR/ML/PZA</li>
+                    <li>Precio</li>
+                    <li>Unitario</li>
+                  </ul>
+                </div>
+
+                <div className="pt-4 border-t border-slate-200">
+                  <h3 className="font-semibold text-slate-900 mb-2">✓ Requerimientos</h3>
+                  <ul className="list-disc list-inside space-y-1 text-slate-600 text-xs">
+                    <li>Primera fila con nombres de columnas</li>
+                    <li>Descripción del artículo es obligatoria</li>
+                    <li>Valores numéricos con punto o coma</li>
+                  </ul>
+                </div>
+
+                <div className="pt-4 border-t border-slate-200">
+                  <h3 className="font-semibold text-slate-900 mb-2">📝 Proceso</h3>
+                  <ol className="list-decimal list-inside space-y-1 text-slate-600 text-xs">
+                    <li>Selecciona tipo de importación</li>
+                    <li>Sube archivo o proporciona URL</li>
+                    <li>Revisa la vista previa</li>
+                    <li>Confirma la importación</li>
+                  </ol>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+        {/* Sección de Importación Detallada */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="space-y-6">
             {/* Selector de Restaurante */}
             <Card>
               <CardHeader>
@@ -448,106 +505,104 @@ export default function ImportarPage() {
               </Card>
             )}
           </div>
-
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Instrucciones</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4 text-sm">
-                <div>
-                  <h3 className="font-medium mb-1">Formato del Archivo</h3>
-                  <p className="text-muted-foreground">El archivo Excel debe contener las siguientes columnas:</p>
-                  <ul className="list-disc list-inside mt-2 space-y-1 text-muted-foreground">
-                    <li>Clave Innsist</li>
-                    <li>Clave Rapsodia</li>
-                    <li>Descripción del artículo</li>
-                    <li>Categoria</li>
-                    <li>Ingrediente</li>
-                    <li>Tipo</li>
-                    <li>Metrica</li>
-                    <li>Cantidad</li>
-                    <li>Metrica Convertida</li>
-                    <li>Conversion</li>
-                    <li>GR/ML/PZA</li>
-                    <li>Precio</li>
-                    <li>Unitario</li>
-                  </ul>
-                </div>
-
-                <div>
-                  <h3 className="font-medium mb-1">Requerimientos</h3>
-                  <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                    <li>La primera fila debe contener los nombres de las columnas</li>
-                    <li>La columna "Descripción del artículo" es obligatoria</li>
-                    <li>Los valores numéricos pueden usar punto o coma como separador decimal</li>
-                  </ul>
-                </div>
-
-                <div>
-                  <h3 className="font-medium mb-1">Proceso</h3>
-                  <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
-                    <li>Selecciona un restaurante</li>
-                    <li>Sube tu archivo Excel o proporciona una URL</li>
-                    <li>Revisa la vista previa de los datos</li>
-                    <li>Confirma la importación</li>
-                  </ol>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Ayuda</CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm text-muted-foreground">
-                <p>
-                  Si tienes problemas con la importación, asegúrate de que tu archivo siga el formato correcto. Puedes
-                  descargar el archivo de ejemplo para ver la estructura esperada.
-                </p>
-                <div className="mt-4">
-                  <Button variant="outline" onClick={downloadExampleFile} className="w-full bg-transparent">
-                    <FileSpreadsheet className="mr-2 h-4 w-4" />
-                    Descargar Plantilla
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
         </div>
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Instrucciones</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 text-sm">
+              <div>
+                <h3 className="font-medium mb-1">Formato del Archivo</h3>
+                <p className="text-muted-foreground">El archivo Excel debe contener las siguientes columnas:</p>
+                <ul className="list-disc list-inside mt-2 space-y-1 text-muted-foreground">
+                  <li>Clave Innsist</li>
+                  <li>Clave Rapsodia</li>
+                  <li>Descripción del artículo</li>
+                  <li>Categoria</li>
+                  <li>Ingrediente</li>
+                  <li>Tipo</li>
+                  <li>Metrica</li>
+                  <li>Cantidad</li>
+                  <li>Metrica Convertida</li>
+                  <li>Conversion</li>
+                  <li>GR/ML/PZA</li>
+                  <li>Precio</li>
+                  <li>Unitario</li>
+                </ul>
+              </div>
 
-        {/* Diálogo de confirmación */}
-        <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5 text-yellow-500" />
-                Confirmar Importación
-              </DialogTitle>
-              {/* Reemplazamos DialogDescription con un div para evitar anidación de <p> */}
-              <div className="text-sm text-muted-foreground">
-                <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
-                  <div className="text-sm text-yellow-800">
-                    <strong>
-                      Estás a punto de importar {totalRows} ingredientes al restaurante{" "}
-                      {restaurantes.find((r) => r.id === selectedRestaurante)?.nombre}
-                    </strong>
-                  </div>
-                  <div className="text-xs text-yellow-700 mt-1">
-                    Este proceso puede tardar varios minutos dependiendo de la cantidad de datos.
-                  </div>
+              <div>
+                <h3 className="font-medium mb-1">Requerimientos</h3>
+                <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+                  <li>La primera fila debe contener los nombres de las columnas</li>
+                  <li>La columna "Descripción del artículo" es obligatoria</li>
+                  <li>Los valores numéricos pueden usar punto o coma como separador decimal</li>
+                </ul>
+              </div>
+
+              <div>
+                <h3 className="font-medium mb-1">Proceso</h3>
+                <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+                  <li>Selecciona un restaurante</li>
+                  <li>Sube tu archivo Excel o proporciona una URL</li>
+                  <li>Revisa la vista previa de los datos</li>
+                  <li>Confirma la importación</li>
+                </ol>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Ayuda</CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">
+              <p>
+                Si tienes problemas con la importación, asegúrate de que tu archivo siga el formato correcto. Puedes
+                descargar el archivo de ejemplo para ver la estructura esperada.
+              </p>
+              <div className="mt-4">
+                <Button variant="outline" onClick={downloadExampleFile} className="w-full bg-transparent">
+                  <FileSpreadsheet className="mr-2 h-4 w-4" />
+                  Descargar Plantilla
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+      {/* Diálogo de confirmación */}
+      <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-yellow-500" />
+              Confirmar Importación
+            </DialogTitle>
+            {/* Reemplazamos DialogDescription con un div para evitar anidación de <p> */}
+            <div className="text-sm text-muted-foreground">
+              <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
+                <div className="text-sm text-yellow-800">
+                  <strong>
+                    Estás a punto de importar {totalRows} ingredientes al restaurante{" "}
+                    {restaurantes.find((r) => r.id === selectedRestaurante)?.nombre}
+                  </strong>
+                </div>
+                <div className="text-xs text-yellow-700 mt-1">
+                  Este proceso puede tardar varios minutos dependiendo de la cantidad de datos.
                 </div>
               </div>
-            </DialogHeader>
-            <DialogFooter className="flex gap-2">
-              <Button variant="outline" onClick={() => setShowConfirmDialog(false)}>
-                Cancelar
-              </Button>
-              <Button onClick={confirmImport}>Confirmar Importación</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </div>
+            </div>
+          </DialogHeader>
+          <DialogFooter className="flex gap-2">
+            <Button variant="outline" onClick={() => setShowConfirmDialog(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={confirmImport}>Confirmar Importación</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
