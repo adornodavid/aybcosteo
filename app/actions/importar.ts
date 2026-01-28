@@ -204,7 +204,7 @@ export async function limpiarCargaIngredientes() {
     const { error } = await supabase
       .from("cargaingredientes")
       .delete()
-      .neq("id", "00000000-0000-0000-0000-000000000000")
+      .gt("id", 0)
 
     if (error) {
       throw new Error(error.message)
