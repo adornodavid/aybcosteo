@@ -7,8 +7,18 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { FileSpreadsheet, Download, Upload, ChevronLeft, ChevronRight } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import * as XLSX from "xlsx"
-import { importarIngredientesAction } from "@/app/actions/importar"
+import { importarIngredientesAction, verificarYObtenerConteo, limpiarCargaIngredientes } from "@/app/actions/importar"
 
 export default function ImportarIngredientesPage() {
   const [file, setFile] = useState<File | null>(null)
@@ -18,6 +28,8 @@ export default function ImportarIngredientesPage() {
   const [scrollPosition, setScrollPosition] = useState(0)
   const [jsonData, setJsonData] = useState<any[]>([])
   const [loadingImport, setLoadingImport] = useState(false)
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false)
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false)
   const tableContainerRef = useRef<HTMLDivElement>(null)
   const { toast } = useToast()
 
@@ -111,15 +123,23 @@ export default function ImportarIngredientesPage() {
       return
     }
 
+    // Verificar si existen datos en la tabla
+    const verificacion = await verificarYObtenerConteo()
+    if (verificacion.hasData) {
+      setShowConfirmDialog(true)
+    } else {
+      // Si no hay datos, proceder directamente con la importación
+      await realizarImportacion()
+    }
+  }
+
+  const realizarImportacion = async () => {
     try {
       setLoadingImport(true)
       const resultado = await importarIngredientesAction(jsonData)
 
       if (resultado.success) {
-        toast({
-          title: "Éxito",
-          description: resultado.message,
-        })
+        setShowSuccessDialog(true)
         // Limpiar los datos después de importar exitosamente
         setFile(null)
         setPreviewData([])
@@ -136,6 +156,33 @@ export default function ImportarIngredientesPage() {
       toast({
         title: "Error",
         description: error.message || "Error al cargar la información",
+        variant: "destructive",
+      })
+    } finally {
+      setLoadingImport(false)
+    }
+  }
+
+  const handleAceptarLimpieza = async () => {
+    setShowConfirmDialog(false)
+    try {
+      setLoadingImport(true)
+      // Limpiar la tabla
+      const limpiezaResult = await limpiarCargaIngredientes()
+      if (limpiezaResult.success) {
+        // Proceder con la importación
+        await realizarImportacion()
+      } else {
+        toast({
+          title: "Error",
+          description: limpiezaResult.message,
+          variant: "destructive",
+        })
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Error al limpiar los datos anteriores",
         variant: "destructive",
       })
     } finally {
@@ -257,6 +304,9 @@ export default function ImportarIngredientesPage() {
                   <table className="w-full border-collapse">
                     <thead className="sticky top-0 bg-slate-900 text-white z-10">
                       <tr>
+                        <th className="px-4 py-3 text-left text-xs font-semibold whitespace-nowrap w-12">
+                          #
+                        </th>
                         {columnas.map((col) => (
                           <th
                             key={col}
@@ -275,6 +325,9 @@ export default function ImportarIngredientesPage() {
                             rowIndex % 2 === 0 ? "bg-slate-50" : "bg-white"
                           } hover:bg-blue-50 transition-colors`}
                         >
+                          <td className="px-4 py-3 text-sm text-slate-700 whitespace-nowrap font-semibold text-slate-500 w-12">
+                            {rowIndex + 1}
+                          </td>
                           {columnas.map((col) => (
                             <td
                               key={`${rowIndex}-${col}`}
@@ -311,6 +364,42 @@ export default function ImportarIngredientesPage() {
             </CardContent>
           </Card>
         )}
+
+        {/* Modal de Confirmación */}
+        <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Datos Existentes Detectados</AlertDialogTitle>
+              <AlertDialogDescription>
+                Ya existe información previamente cargada en el sistema. ¿Deseas reemplazarla con los nuevos datos? 
+                Se eliminarán todos los registros anteriores.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={handleAceptarLimpieza} className="bg-green-600 hover:bg-green-700">
+                Aceptar y Continuar
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Modal de Éxito */}
+        <AlertDialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>¡Éxito!</AlertDialogTitle>
+              <AlertDialogDescription>
+                La información ha sido generada exitosamente. Los datos han sido cargados en el sistema.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogAction onClick={() => setShowSuccessDialog(false)} className="bg-blue-600 hover:bg-blue-700">
+                Aceptar
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   )

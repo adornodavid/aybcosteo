@@ -127,3 +127,98 @@ export async function importarIngredientesAction(datos: any[]) {
     }
   }
 }
+
+export async function verificarYObtenerConteo() {
+  try {
+    const cookieStore = await cookies()
+
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return cookieStore.getAll()
+          },
+          setAll(cookiesToSet) {
+            try {
+              cookiesToSet.forEach(({ name, value, options }) =>
+                cookieStore.set(name, value, options)
+              )
+            } catch {
+              // Ignorar errores de cookies en server actions
+            }
+          },
+        },
+      }
+    )
+
+    const { count, error } = await supabase
+      .from("cargaingredientes")
+      .select("*", { count: "exact", head: true })
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    return {
+      success: true,
+      hasData: count && count > 0,
+      count: count || 0,
+    }
+  } catch (error: any) {
+    console.error("[v0] Error en verificarYObtenerConteo:", error)
+    return {
+      success: false,
+      hasData: false,
+      count: 0,
+    }
+  }
+}
+
+export async function limpiarCargaIngredientes() {
+  try {
+    const cookieStore = await cookies()
+
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return cookieStore.getAll()
+          },
+          setAll(cookiesToSet) {
+            try {
+              cookiesToSet.forEach(({ name, value, options }) =>
+                cookieStore.set(name, value, options)
+              )
+            } catch {
+              // Ignorar errores de cookies en server actions
+            }
+          },
+        },
+      }
+    )
+
+    const { error } = await supabase
+      .from("cargaingredientes")
+      .delete()
+      .neq("id", "00000000-0000-0000-0000-000000000000")
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    return {
+      success: true,
+      message: "Datos eliminados correctamente",
+    }
+  } catch (error: any) {
+    console.error("[v0] Error en limpiarCargaIngredientes:", error)
+    return {
+      success: false,
+      message: error.message || "Error al eliminar los datos",
+    }
+  }
+}
