@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { FileSpreadsheet, Download, Upload, ChevronLeft, ChevronRight } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import * as XLSX from "xlsx"
+import { importarIngredientesAction } from "@/app/actions/importar"
 
 export default function ImportarIngredientesPage() {
   const [file, setFile] = useState<File | null>(null)
@@ -15,6 +16,8 @@ export default function ImportarIngredientesPage() {
   const [columnas, setColumnas] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [scrollPosition, setScrollPosition] = useState(0)
+  const [jsonData, setJsonData] = useState<any[]>([])
+  const [loadingImport, setLoadingImport] = useState(false)
   const tableContainerRef = useRef<HTMLDivElement>(null)
   const { toast } = useToast()
 
@@ -52,20 +55,21 @@ export default function ImportarIngredientesPage() {
       const workbook = XLSX.read(arrayBuffer, { type: "array" })
       const firstSheetName = workbook.SheetNames[0]
       const worksheet = workbook.Sheets[firstSheetName]
-      const jsonData = XLSX.utils.sheet_to_json(worksheet)
+      const jsonDataTemp = XLSX.utils.sheet_to_json(worksheet, { defval: "" })
 
-      if (jsonData.length === 0) {
+      if (jsonDataTemp.length === 0) {
         throw new Error("El archivo no contiene datos")
       }
 
-      const columns = Object.keys(jsonData[0])
+      const columns = Object.keys(jsonDataTemp[0])
       setColumnas(columns)
-      setPreviewData(jsonData.slice(0, 50))
+      setPreviewData(jsonDataTemp.slice(0, 50))
+      setJsonData(jsonDataTemp)
       setScrollPosition(0)
 
       toast({
         title: "Éxito",
-        description: `Se cargaron ${jsonData.length} filas del archivo`,
+        description: `Se cargaron ${jsonDataTemp.length} filas del archivo`,
       })
     } catch (error: any) {
       toast({
@@ -80,6 +84,48 @@ export default function ImportarIngredientesPage() {
 
   const downloadTemplate = () => {
     window.open(EXAMPLE_FILE_URL, "_blank")
+  }
+
+  const handleCargarInformacion = async () => {
+    if (jsonData.length === 0) {
+      toast({
+        title: "Error",
+        description: "No hay datos para cargar. Primero carga un archivo Excel.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      setLoadingImport(true)
+      const resultado = await importarIngredientesAction(jsonData)
+
+      if (resultado.success) {
+        toast({
+          title: "Éxito",
+          description: resultado.message,
+        })
+        // Limpiar los datos después de importar exitosamente
+        setFile(null)
+        setPreviewData([])
+        setColumnas([])
+        setJsonData([])
+      } else {
+        toast({
+          title: "Error",
+          description: resultado.message,
+          variant: "destructive",
+        })
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Error al cargar la información",
+        variant: "destructive",
+      })
+    } finally {
+      setLoadingImport(false)
+    }
   }
 
   const handleScroll = (direction: "left" | "right") => {
@@ -239,8 +285,12 @@ export default function ImportarIngredientesPage() {
 
               {/* Botón Cargar Información */}
               <div className="flex justify-end pt-4 border-t border-slate-200">
-                <Button className="bg-green-600 hover:bg-green-700 text-white px-8">
-                  Cargar Información
+                <Button
+                  onClick={handleCargarInformacion}
+                  disabled={loadingImport || jsonData.length === 0}
+                  className="bg-green-600 hover:bg-green-700 text-white px-8"
+                >
+                  {loadingImport ? "Cargando..." : "Cargar Información"}
                 </Button>
               </div>
             </CardContent>
