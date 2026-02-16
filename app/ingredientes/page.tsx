@@ -19,6 +19,7 @@ import {
   buscarIngredientes,
   eliminarIngrediente,
 } from "@/app/actions/ingredientes-actions"
+import { getSession } from "@/app/actions/session-actions-with-expiration"
 
 interface Hotel {
   id: number
@@ -92,12 +93,21 @@ export default function IngredientesPage() {
         throw new Error("Variables de entorno de Supabase no configuradas")
       }
 
-      // Cargar hoteles
+      // Obtener sesión del usuario
+      const session = await getSession()
+      const user = session?.user
+
+      // Cargar hoteles con filtrado por rol
       console.log("Cargando hoteles...")
-      const hotelesResult = await obtenerHoteles()
+      const hotelesResult = await obtenerHoteles(user?.RolId, user?.HotelId)
       if (hotelesResult.success) {
         setHoteles(hotelesResult.data)
         console.log("Hoteles cargados:", hotelesResult.data.length)
+        
+        // Si solo hay un hotel (usuario con rol 5 o 6), seleccionarlo automáticamente
+        if (hotelesResult.data.length === 1) {
+          setDdlHoteles(hotelesResult.data[0].id.toString())
+        }
       } else {
         console.error("Error cargando hoteles:", hotelesResult.error)
         setError(`Error cargando hoteles: ${hotelesResult.error}`)

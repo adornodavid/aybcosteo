@@ -34,6 +34,7 @@ import {
   obtenerDetallesPlatilloTooltip,
   obtenerDetallesRecetaTooltip,
 } from "@/app/actions/dashboard-actions"
+import { getSession } from "@/app/actions/session-actions-with-expiration"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -316,10 +317,17 @@ export default function MargenesUtilidadPage() {
   // Cargar hoteles al inicializar
   useEffect(() => {
     async function loadHoteles() {
-      const hotelesData = await obtenerHotelesPorRol()
+      const session = await getSession()
+      const user = session?.user
+      
+      const hotelesData = await obtenerHotelesPorRol(user?.RolId, user?.HotelId)
       if (hotelesData.success) {
         setHoteles(hotelesData.data)
-        if (hotelesData.data.length > 0) {
+        
+        // Si solo hay un hotel (usuario con rol 5 o 6), seleccionarlo automáticamente
+        if (hotelesData.data.length === 1) {
+          setHotelSeleccionado(hotelesData.data[0].id.toString())
+        } else if (hotelesData.data.length > 0) {
           setHotelSeleccionado(hotelesData.data[0].id.toString())
         }
       }
