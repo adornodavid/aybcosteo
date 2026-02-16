@@ -471,18 +471,39 @@ export async function obtenerIngredientesDisminucionPrecio(mes: number, año: nu
 }
 
 // Nueva función para obtener hoteles filtrados por rol
-export async function obtenerHotelesPorRol() {
+export async function obtenerHotelesPorRol(rolId?: number, hotelId?: number) {
   try {
     const supabase = createSupabaseServerClient()
 
-    const { data, error } = await supabase.from("hoteles").select("id, nombre").eq("activo", true).order("nombre")
+    // Lógica de filtrado por rol
+    // Si rolId es 1, 2, 3 o 4: mostrar todos los hoteles
+    // Si rolId es 5 o 6: mostrar solo el hotel asignado al usuario
+    if (rolId && hotelId && ![1, 2, 3, 4].includes(rolId)) {
+      // Filtrar por el hotel del usuario
+      const { data, error } = await supabase
+        .from("hoteles")
+        .select("id, nombre")
+        .eq("activo", true)
+        .eq("id", hotelId)
+        .order("nombre")
 
-    if (error) {
-      console.error("Error obteniendo hoteles:", error)
-      return { success: false, data: [] }
+      if (error) {
+        console.error("Error obteniendo hotel específico:", error)
+        return { success: false, data: [] }
+      }
+
+      return { success: true, data: data || [] }
+    } else {
+      // Mostrar todos los hoteles
+      const { data, error } = await supabase.from("hoteles").select("id, nombre").eq("activo", true).order("nombre")
+
+      if (error) {
+        console.error("Error obteniendo hoteles:", error)
+        return { success: false, data: [] }
+      }
+
+      return { success: true, data: data || [] }
     }
-
-    return { success: true, data: data || [] }
   } catch (error) {
     console.error("Error en obtenerHotelesPorRol:", error)
     return { success: false, data: [] }

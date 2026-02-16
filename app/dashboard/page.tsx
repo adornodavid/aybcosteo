@@ -455,18 +455,31 @@ export default function DashboardPage() {
         // Cargar datos para las nuevas secciones
         await cargarDatosDashboard()
 
-        // Cargar hoteles para el gráfico
-        const hotelesData = await obtenerHotelesPorRol()
+        // Cargar hoteles para el gráfico con filtrado por rol
+        const hotelesData = await obtenerHotelesPorRol(user.RolId, user.HotelId)
         if (hotelesData.success) {
           setHoteles(hotelesData.data)
 
-          // Si el usuario tiene un hotel específico, seleccionarlo automáticamente
-          if (user.HotelId && user.HotelId > 0) {
-            const hotelUsuario = hotelesData.data.find((h) => h.id === user.HotelId)
-            if (hotelUsuario) {
-              setHotelSeleccionado(hotelUsuario.id.toString())
-              // Cargar restaurantes del hotel del usuario
-              const restaurantesData = await obtenerRestaurantesPorHotel(user.HotelId)
+          // Si el usuario tiene un hotel específico o rol restringido, seleccionarlo automáticamente
+          if (hotelesData.data.length > 0) {
+            // Si solo hay un hotel (usuario con rol 5 o 6), seleccionarlo automáticamente
+            if (hotelesData.data.length === 1) {
+              setHotelSeleccionado(hotelesData.data[0].id.toString())
+            } else if (user.HotelId && user.HotelId > 0) {
+              // Si hay múltiples hoteles pero el usuario tiene uno asignado, seleccionarlo
+              const hotelUsuario = hotelesData.data.find((h) => h.id === user.HotelId)
+              if (hotelUsuario) {
+                setHotelSeleccionado(hotelUsuario.id.toString())
+              }
+            }
+
+            // Cargar restaurantes del hotel seleccionado
+            const hotelIdParaRestaurantes = hotelesData.data.length === 1 
+              ? hotelesData.data[0].id 
+              : (user.HotelId && user.HotelId > 0 ? user.HotelId : null)
+
+            if (hotelIdParaRestaurantes) {
+              const restaurantesData = await obtenerRestaurantesPorHotel(hotelIdParaRestaurantes)
               if (restaurantesData.success) {
                 // Agregar opción "Todos" al inicio
                 const restaurantesConTodos = [{ id: -1, nombre: "Todos" }, ...restaurantesData.data]
