@@ -191,6 +191,7 @@ export default function RecetasPage() {
 
       setHoteles(fetchedHoteles)
       setDdlHotelReceta(defaultSelectedValue) // Aplicar el valor por defecto
+      console.log("[v0] Hotel seleccionado por defecto:", defaultSelectedValue, "Hoteles cargados:", fetchedHoteles)
     } catch (error: any) {
       console.error("Error cargando hoteles:", error)
       setError(`Error al cargar hoteles: ${error.message}`)
