@@ -656,15 +656,17 @@ export default function MenusPage() {
           <h1 className="text-3xl font-bold">Menús</h1>
           <p className="text-lg text-gray-500">Gestión completa de Menus</p>
         </div>
-        <Button
-          type="button"
-          onClick={() => router.push("/menus/nuevo")}
-          style={{ backgroundColor: "#5d8f72", color: "white" }}
-          id="btnMenuNuevo"
-          name="btnMenuNuevo"
-        >
-          <Utensils className="mr-2 h-4 w-4" /> Nuevo Menú
-        </Button>
+        {sessionRolId && [1, 2, 3, 4].includes(sessionRolId) && (
+          <Button
+            type="button"
+            onClick={() => router.push("/menus/nuevo")}
+            style={{ backgroundColor: "#5d8f72", color: "white" }}
+            id="btnMenuNuevo"
+            name="btnMenuNuevo"
+          >
+            <Utensils className="mr-2 h-4 w-4" /> Nuevo Menú
+          </Button>
+        )}
       </div>
 
       {/* Resumen de estadísticas */}
@@ -845,22 +847,26 @@ export default function MenusPage() {
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            title="Agregar platillos"
-                            onClick={() => router.push(`/menus/${menu.id}/agregar`)}
-                          >
-                             <HandPlatter className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            title="Editar"
-                            onClick={() => handleOpenEditDialog(menu.id)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
+                          {sessionRolId && [1, 2, 3, 4].includes(sessionRolId) && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              title="Agregar platillos"
+                              onClick={() => router.push(`/menus/${menu.id}/agregar`)}
+                            >
+                               <HandPlatter className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {sessionRolId && [1, 2, 3, 4].includes(sessionRolId) && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              title="Editar"
+                              onClick={() => handleOpenEditDialog(menu.id)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                          )}
                           <Button
                             size="icon"
                             variant="ghost"
