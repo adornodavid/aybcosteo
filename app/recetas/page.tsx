@@ -122,13 +122,6 @@ export default function RecetasPage() {
     }
   }, [sesion])
 
-  // Asegurar que siempre haya un hotel seleccionado cuando se carguen los hoteles
-  useEffect(() => {
-    if (hoteles.length > 0 && !ddlHotelReceta) {
-      setDdlHotelReceta(hoteles[0].id.toString())
-    }
-  }, [hoteles])
-
   const cargarSesion = async () => {
     try {
       const datosSession = await getSession()
