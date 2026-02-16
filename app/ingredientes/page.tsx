@@ -19,7 +19,7 @@ import {
   buscarIngredientes,
   eliminarIngrediente,
 } from "@/app/actions/ingredientes-actions"
-import { getSession } from "@/app/actions/session-actions-with-expiration"
+import { useAuth } from "@/contexts/auth-context"
 
 interface Hotel {
   id: number
@@ -70,6 +70,7 @@ export default function IngredientesPage() {
   const [error, setError] = useState<string | null>(null)
   const { toast } = useToast()
   const router = useRouter()
+  const { user } = useAuth()
 
   // Estados para los filtros
   const [txtCodigo, setTxtCodigo] = useState("")
@@ -80,8 +81,10 @@ export default function IngredientesPage() {
   const itemsPerPage = 20
 
   useEffect(() => {
-    cargarDatosIniciales()
-  }, [])
+    if (user) {
+      cargarDatosIniciales()
+    }
+  }, [user])
 
   const cargarDatosIniciales = async () => {
     setLoading(true)
@@ -93,17 +96,13 @@ export default function IngredientesPage() {
         throw new Error("Variables de entorno de Supabase no configuradas")
       }
 
-      // Obtener sesión del usuario
-      const session = await getSession()
-      
-      // Validar sesión
-      if (!session || !session.SesionActiva) {
-        router.push("/login")
+      // Validar que tenemos el usuario del contexto
+      if (!user) {
         return
       }
 
-      const rolId = Number.parseInt(session.RolId?.toString() || "0", 10)
-      const hotelIdSesion = Number.parseInt(session.HotelId?.toString() || "0", 10)
+      const rolId = Number.parseInt(user.RolId?.toString() || "0", 10)
+      const hotelIdSesion = Number.parseInt(user.HotelId?.toString() || "0", 10)
 
       // Determinar qué hoteles cargar según el rol
       let auxHotelid: number
