@@ -304,11 +304,12 @@ export default function MenusPage() {
         return
       }
       setSessionRolId(rolId)
-      setSessionHotelId(session.HotelId || null)
+      const hotelIdValue = session.HotelId ? String(session.HotelId) : null
+      setSessionHotelId(hotelIdValue)
 
-      await cargarHoteles(rolId, session.HotelId || null)
+      await cargarHoteles(rolId, hotelIdValue)
 
-      const initialHotelId = rolId === 1 || rolId === 2 || rolId === 3 || rolId === 4 ? "-1" : session.HotelId || "-1"
+      const initialHotelId = rolId === 1 || rolId === 2 || rolId === 3 || rolId === 4 ? "-1" : (hotelIdValue || "-1")
       const initialRestauranteId = "-1"
       const initialStatus = "true"
       const initialName = ""
