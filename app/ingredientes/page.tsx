@@ -19,7 +19,7 @@ import {
   buscarIngredientes,
   eliminarIngrediente,
 } from "@/app/actions/ingredientes-actions"
-import { getSession } from "@/app/actions/session-actions-with-expiration"
+import { useAuth } from "@/contexts/auth-context"
 
 interface Hotel {
   id: number
@@ -70,6 +70,7 @@ export default function IngredientesPage() {
   const [error, setError] = useState<string | null>(null)
   const { toast } = useToast()
   const router = useRouter()
+  const { user, isLoading: authLoading } = useAuth()
 
   // Estados para los filtros
   const [txtCodigo, setTxtCodigo] = useState("")
@@ -80,8 +81,10 @@ export default function IngredientesPage() {
   const itemsPerPage = 20
 
   useEffect(() => {
-    cargarDatosIniciales()
-  }, [])
+    if (!authLoading && user) {
+      cargarDatosIniciales()
+    }
+  }, [authLoading, user])
 
   const cargarDatosIniciales = async () => {
     setLoading(true)
@@ -93,20 +96,19 @@ export default function IngredientesPage() {
         throw new Error("Variables de entorno de Supabase no configuradas")
       }
 
-      // Obtener sesión del usuario
-      const session = await getSession()
-      const user = session?.user
-
       // Cargar hoteles con filtrado por rol
-      console.log("Cargando hoteles...")
+      console.log("[v0] Usuario RolId:", user?.RolId, "HotelId:", user?.HotelId)
       const hotelesResult = await obtenerHoteles(user?.RolId, user?.HotelId)
+      console.log("[v0] Hoteles resultado:", hotelesResult)
+      
       if (hotelesResult.success) {
         setHoteles(hotelesResult.data)
-        console.log("Hoteles cargados:", hotelesResult.data.length)
+        console.log("[v0] Hoteles cargados:", hotelesResult.data.length)
         
         // Si solo hay un hotel (usuario con rol 5 o 6), seleccionarlo automáticamente
         if (hotelesResult.data.length === 1) {
           setDdlHoteles(hotelesResult.data[0].id.toString())
+          console.log("[v0] Hotel seleccionado automáticamente:", hotelesResult.data[0].nombre)
         }
       } else {
         console.error("Error cargando hoteles:", hotelesResult.error)
