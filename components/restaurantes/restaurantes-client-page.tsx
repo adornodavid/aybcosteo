@@ -190,28 +190,29 @@ export default function RestaurantesClientPage({
             if (e.key === "Enter") handleSearch()
           }}
         />
-        <Select 
-          onValueChange={setSelectedHotelId} 
-          value={selectedHotelId}
-          disabled={userSession ? ![1, 2, 3, 4].includes(userSession.rol_id) : false}
-        >
-          <SelectTrigger id="ddlHotel">
-            <SelectValue placeholder="Hotel" />
-          </SelectTrigger>
-          <SelectContent>
-            {userSession && [1, 2, 3, 4].includes(userSession.rol_id) && (
-              <SelectItem value="0">Todos los hoteles</SelectItem>
-            )}
-            {initialHotelOptions
-              .filter((option) => option.value !== "0")
-              .map((option) => (
+        <div>
+          <label htmlFor="ddlHotel" className="text-sm font-medium block mb-2">
+            Hotel
+          </label>
+          <Select 
+            name="ddlHotel"
+            onValueChange={setSelectedHotelId} 
+            value={selectedHotelId}
+            disabled={userSession ? ![1, 2, 3, 4].includes(userSession.rol_id) : false}
+          >
+            <SelectTrigger id="ddlHotel">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {initialHotelOptions.map((option) => (
                 <SelectItem key={option.value} value={option.value}>
                   {option.label}
                 </SelectItem>
               ))}
-          </SelectContent>
-        </Select>
-        <Button className="bg-[#4a4a4a] text-white hover:bg-[#333333]" id="btnRestaurantesBuscar" onClick={handleSearch}>
+            </SelectContent>
+          </Select>
+        </div>
+        <Button className="bg-[#4a4a4a] text-white hover:bg-[#333333] mt-7" id="btnRestaurantesBuscar" onClick={handleSearch}>
           {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
           Buscar
         </Button>
