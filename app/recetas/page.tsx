@@ -85,6 +85,7 @@ export default function RecetasPage() {
   const [loading, setLoading] = useState(true)
   const [searching, setSearching] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [userRolId, setUserRolId] = useState<number>(0)
 
   // Estados de datos
   const [hoteles, setHoteles] = useState<Hotel[]>([])
@@ -151,6 +152,9 @@ export default function RecetasPage() {
 
       const rolId = Number.parseInt(sesion.RolId?.toString() || "0", 10)
       const hotelIdSesion = Number.parseInt(sesion.HotelId?.toString() || "0", 10)
+      
+      // Guardar el rolId para validaciones de UI
+      setUserRolId(rolId)
 
       let auxHotelid: number
       if (![1, 2, 3, 4].includes(rolId)) {
@@ -551,9 +555,13 @@ export default function RecetasPage() {
 
             <div className="flex-1 min-w-[200px]">
               <Label htmlFor="ddlHotelReceta">Hotel</Label>
-              <Select value={ddlHotelReceta} onValueChange={setDdlHotelReceta}>
+              <Select 
+                value={ddlHotelReceta} 
+                onValueChange={setDdlHotelReceta}
+                disabled={![1, 2, 3, 4].includes(userRolId)}
+              >
                 <SelectTrigger id="ddlHotelReceta" name="ddlHotelReceta">
-                  <SelectValue placeholder="Seleccione un hotel" />
+                  <SelectValue placeholder={[1, 2, 3, 4].includes(userRolId) ? "Seleccione un hotel" : undefined} />
                 </SelectTrigger>
                 <SelectContent>
                   {hoteles.map((hotel) => (
