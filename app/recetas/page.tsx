@@ -122,6 +122,13 @@ export default function RecetasPage() {
     }
   }, [sesion])
 
+  // Asegurar que siempre haya un hotel seleccionado cuando se carguen los hoteles
+  useEffect(() => {
+    if (hoteles.length > 0 && !ddlHotelReceta) {
+      setDdlHotelReceta(hoteles[0].id.toString())
+    }
+  }, [hoteles])
+
   const cargarSesion = async () => {
     try {
       const datosSession = await getSession()
@@ -196,7 +203,7 @@ export default function RecetasPage() {
       console.error("Error cargando hoteles:", error)
       setError(`Error al cargar hoteles: ${error.message}`)
       setHoteles([])
-      setDdlHotelReceta("-1") // Fallback a "Todos" en caso de error
+      setDdlHotelReceta("") // Fallback a vacío en caso de error
     }
   }
 
