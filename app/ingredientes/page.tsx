@@ -71,6 +71,7 @@ export default function IngredientesPage() {
   const { toast } = useToast()
   const router = useRouter()
   const { user } = useAuth()
+  const [userRolId, setUserRolId] = useState<number>(0)
 
   // Estados para los filtros
   const [txtCodigo, setTxtCodigo] = useState("")
@@ -103,6 +104,9 @@ export default function IngredientesPage() {
 
       const rolId = Number.parseInt(user.RolId?.toString() || "0", 10)
       const hotelIdSesion = Number.parseInt(user.HotelId?.toString() || "0", 10)
+      
+      // Guardar el rolId en el estado para usarlo en la UI
+      setUserRolId(rolId)
 
       // Determinar qué hoteles cargar según el rol
       let auxHotelid: number
@@ -154,9 +158,15 @@ export default function IngredientesPage() {
         console.error("Error cargando categorías:", categoriasResult.error)
       }
 
-      // Cargar ingredientes iniciales
+      // Cargar ingredientes iniciales con filtro de hotel si es rol 5 o 6
       console.log("Cargando ingredientes...")
-      await ejecutarBusqueda(1)
+      if (![1, 2, 3, 4].includes(rolId) && defaultSelectedValue) {
+        // Roles 5 y 6: cargar con filtro de hotel
+        await ejecutarBusquedaInicial(1, Number.parseInt(defaultSelectedValue))
+      } else {
+        // Roles 1-4: cargar todos
+        await ejecutarBusqueda(1)
+      }
     } catch (error: any) {
       console.error("Error cargando datos iniciales:", error)
       setError(`Error de conexión: ${error.message}`)
@@ -167,6 +177,40 @@ export default function IngredientesPage() {
       })
     } finally {
       setLoading(false)
+    }
+  }
+
+  const ejecutarBusquedaInicial = async (page = 1, hotelIdFiltro?: number) => {
+    setSearching(true)
+    try {
+      const filtros = {
+        codigo: txtCodigo,
+        nombre: txtNombre,
+        hotelId: hotelIdFiltro,
+        categoriaId: ddlCategorias ? Number.parseInt(ddlCategorias) : undefined,
+        page,
+        limit: itemsPerPage,
+      }
+
+      const result = await buscarIngredientes(filtros)
+      if (result.success) {
+        setIngredientes(result.data)
+        setTotalCount(result.count)
+        setCurrentPage(page)
+        setTotalPages(Math.ceil(result.count / itemsPerPage))
+      } else {
+        setError(`Error en búsqueda: ${result.error}`)
+      }
+    } catch (error: any) {
+      console.error("Error en búsqueda:", error)
+      setError(`Error en búsqueda: ${error.message}`)
+      toast({
+        title: "Error",
+        description: "Error al buscar ingredientes",
+        variant: "destructive",
+      })
+    } finally {
+      setSearching(false)
     }
   }
 
@@ -408,9 +452,10 @@ export default function IngredientesPage() {
               <select
                 value={ddlHoteles}
                 onChange={(e) => setDdlHoteles(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                disabled={![1, 2, 3, 4].includes(userRolId)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
               >
-                <option value="">Todos los hoteles</option>
+                {[1, 2, 3, 4].includes(userRolId) && <option value="">Todos los hoteles</option>}
                 {hoteles.map((hotel) => (
                   <option key={hotel.id} value={hotel.id.toString()}>
                     {hotel.nombre}
