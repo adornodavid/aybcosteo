@@ -556,6 +556,7 @@ export default function RecetasPage() {
 
             <div className="flex-1 min-w-[200px]">
               <Label htmlFor="ddlHotelReceta">Hotel</Label>
+              {console.log("[v0] ddlHotelReceta:", ddlHotelReceta, "hoteles:", hoteles)}
               <Select 
                 value={ddlHotelReceta} 
                 onValueChange={setDdlHotelReceta}
