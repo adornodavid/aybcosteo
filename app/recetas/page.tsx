@@ -497,21 +497,23 @@ export default function RecetasPage() {
           <h1 className="text-3xl font-bold">Sub-Recetas</h1>
           <p className="text-lg text-muted-foreground">Gestión de Sub-Recetas</p>
         </div>
-        <Button
-          id="btnRecetaNuevo"
-          name="btnRecetaNuevo"
-          type="button"
-          onClick={btnRecetaNuevo}
-          style={{
-            backgroundColor: "#5d8f72",
-            color: "white",
-            border: "none",
-          }}
-          className="hover:bg-[#44785a] transition-opacity"
-        >
-          <BookOpen className="h-4 w-4 mr-2" />
-          Nueva Sub-Receta
-        </Button>
+        {sesion && [1, 2, 3, 4].includes(Number.parseInt(sesion.RolId?.toString() || "0", 10)) && (
+          <Button
+            id="btnRecetaNuevo"
+            name="btnRecetaNuevo"
+            type="button"
+            onClick={btnRecetaNuevo}
+            style={{
+              backgroundColor: "#5d8f72",
+              color: "white",
+              border: "none",
+            }}
+            className="hover:bg-[#44785a] transition-opacity"
+          >
+            <BookOpen className="h-4 w-4 mr-2" />
+            Nueva Sub-Receta
+          </Button>
+        )}
       </div>
 
       {/* Estadísticas */}
@@ -645,13 +647,15 @@ export default function RecetasPage() {
                         <Button size="sm" variant="outline" onClick={() => handleViewRecetaDetails(receta.folio)}>
                           <Eye className="h-3 w-3" />
                         </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => router.push(`/recetas/${receta.folio}/editar`)}
-                        >
-                          <Edit className="h-3 w-3" />
-                        </Button>
+                        {sesion && [1, 2, 3, 4].includes(Number.parseInt(sesion.RolId?.toString() || "0", 10)) && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => router.push(`/recetas/${receta.folio}/editar`)}
+                          >
+                            <Edit className="h-3 w-3" />
+                          </Button>
+                        )}
                         <Button
                           size="sm"
                           variant="outline"
