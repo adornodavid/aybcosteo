@@ -34,7 +34,7 @@ import {
   obtenerDetallesPlatilloTooltip,
   obtenerDetallesRecetaTooltip,
 } from "@/app/actions/dashboard-actions"
-import { getSession } from "@/app/actions/session-actions-with-expiration"
+import { useAuth } from "@/contexts/auth-context"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -177,6 +177,7 @@ const ITEMS_PER_PAGE = 20
 const todosMesesDelAño = mesesDelAño
 
 export default function MargenesUtilidadPage() {
+  const { user } = useAuth()
   const [menuOptions, setMenuOptions] = useState<MenuOption[]>([])
   const [selectedMenuId, setSelectedMenuId] = useState<string>("-1")
   const [platilloSearchTerm, setPlatilloSearchTerm] = useState<string>("")
@@ -317,10 +318,12 @@ export default function MargenesUtilidadPage() {
   // Cargar hoteles al inicializar
   useEffect(() => {
     async function loadHoteles() {
-      const session = await getSession()
-      const user = session?.user
+      if (!user) return
       
-      const hotelesData = await obtenerHotelesPorRol(user?.RolId, user?.HotelId)
+      const rolId = Number.parseInt(user.RolId?.toString() || "0", 10)
+      const hotelIdSesion = Number.parseInt(user.HotelId?.toString() || "0", 10)
+      
+      const hotelesData = await obtenerHotelesPorRol(rolId, hotelIdSesion)
       if (hotelesData.success) {
         setHoteles(hotelesData.data)
         
@@ -333,7 +336,7 @@ export default function MargenesUtilidadPage() {
       }
     }
     loadHoteles()
-  }, [])
+  }, [user])
 
   // Cargar datos de variación de costos cuando cambien los filtros
   useEffect(() => {
