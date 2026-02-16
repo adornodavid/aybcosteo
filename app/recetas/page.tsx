@@ -559,7 +559,7 @@ export default function RecetasPage() {
               <Select 
                 value={ddlHotelReceta} 
                 onValueChange={setDdlHotelReceta}
-                
+                disabled={![1, 2, 3, 4].includes(userRolId)}
               >
                 <SelectTrigger id="ddlHotelReceta" name="ddlHotelReceta">
                   <SelectValue />
