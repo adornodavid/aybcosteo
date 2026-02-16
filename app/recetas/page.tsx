@@ -164,16 +164,17 @@ export default function RecetasPage() {
       }
 
       let fetchedHoteles: Hotel[] = []
-      let defaultSelectedValue = "-1" // Valor por defecto para el ddl
+      let defaultSelectedValue = ""
 
       if (auxHotelid === -1) {
-        // Si auxHotelid es -1, obtener todos los hoteles y agregar "Todos"
+        // Si auxHotelid es -1, obtener todos los hoteles sin agregar opción "Todos"
         const { data, error } = await supabase.from("hoteles").select("id, nombre").order("nombre", { ascending: true })
 
         if (error) throw error
 
-        fetchedHoteles = [{ id: -1, nombre: "Todos" }, ...(data || [])]
-        defaultSelectedValue = "-1" // Seleccionar "Todos"
+        fetchedHoteles = data || []
+        // Seleccionar el primer hotel del listado si existe
+        defaultSelectedValue = fetchedHoteles.length > 0 ? fetchedHoteles[0].id.toString() : ""
       } else {
         // Si auxHotelid tiene un valor específico, filtrar por ese hotel
         const { data, error } = await supabase
@@ -185,8 +186,8 @@ export default function RecetasPage() {
         if (error) throw error
 
         fetchedHoteles = data || []
-        // Si se encontró el hotel, seleccionarlo, de lo contrario, volver a "Todos"
-        defaultSelectedValue = fetchedHoteles.length > 0 ? auxHotelid.toString() : "-1"
+        // Seleccionar el hotel encontrado
+        defaultSelectedValue = fetchedHoteles.length > 0 ? fetchedHoteles[0].id.toString() : ""
       }
 
       setHoteles(fetchedHoteles)
@@ -382,7 +383,7 @@ export default function RecetasPage() {
 
   const btnRecetaBuscar = async () => {
     setCurrentPage(1) // Resetear a la primera página al buscar
-    const hotelFilterId = ddlHotelReceta !== "-1" ? Number.parseInt(ddlHotelReceta, 10) : -1
+    const hotelFilterId = ddlHotelReceta ? Number.parseInt(ddlHotelReceta, 10) : -1
     await ejecutarBusqueda(txtRecetaNombre, hotelFilterId, ddlEstatusReceta, 1)
   }
 
@@ -391,7 +392,7 @@ export default function RecetasPage() {
     if (currentPage > 1) {
       const nuevaPagina = currentPage - 1
       setCurrentPage(nuevaPagina)
-      const hotelFilterId = ddlHotelReceta !== "-1" ? Number.parseInt(ddlHotelReceta, 10) : -1
+      const hotelFilterId = ddlHotelReceta ? Number.parseInt(ddlHotelReceta, 10) : -1
       await ejecutarBusqueda(txtRecetaNombre, hotelFilterId, ddlEstatusReceta, nuevaPagina)
     }
   }
@@ -400,14 +401,14 @@ export default function RecetasPage() {
     if (currentPage < totalPages) {
       const nuevaPagina = currentPage + 1
       setCurrentPage(nuevaPagina)
-      const hotelFilterId = ddlHotelReceta !== "-1" ? Number.parseInt(ddlHotelReceta, 10) : -1
+      const hotelFilterId = ddlHotelReceta ? Number.parseInt(ddlHotelReceta, 10) : -1
       await ejecutarBusqueda(txtRecetaNombre, hotelFilterId, ddlEstatusReceta, nuevaPagina)
     }
   }
 
   const clearPlatillosBusqueda = () => {
     setTxtRecetaNombre("")
-    setDdlHotelReceta("-1") // Restablecer a "Todos"
+    setDdlHotelReceta(hoteles.length > 0 ? hoteles[0].id.toString() : "") // Restablecer al primer hotel
     setDdlEstatusReceta("true") // Restablecer a "Activo"
     setCurrentPage(1)
     cargarRecetasIniciales() // Recargar con filtros por defecto
@@ -426,7 +427,7 @@ export default function RecetasPage() {
 
       toast.success(`Receta ${estadoActual ? "inactivada" : "activada"} correctamente`)
       // Recargar la página actual con los filtros actuales
-      const hotelFilterId = ddlHotelReceta !== "-1" ? Number.parseInt(ddlHotelReceta, 10) : -1
+      const hotelFilterId = ddlHotelReceta ? Number.parseInt(ddlHotelReceta, 10) : -1
       await ejecutarBusqueda(txtRecetaNombre, hotelFilterId, ddlEstatusReceta, currentPage)
     } catch (error) {
       console.error("Error cambiando estado:", error)
@@ -561,7 +562,7 @@ export default function RecetasPage() {
                 disabled={![1, 2, 3, 4].includes(userRolId)}
               >
                 <SelectTrigger id="ddlHotelReceta" name="ddlHotelReceta">
-                  <SelectValue placeholder={[1, 2, 3, 4].includes(userRolId) ? "Seleccione un hotel" : (hoteles.find(h => h.id.toString() === ddlHotelReceta)?.nombre || "")} />
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   {hoteles.map((hotel) => (
