@@ -561,7 +561,7 @@ export default function RecetasPage() {
                 disabled={![1, 2, 3, 4].includes(userRolId)}
               >
                 <SelectTrigger id="ddlHotelReceta" name="ddlHotelReceta">
-                  <SelectValue placeholder={[1, 2, 3, 4].includes(userRolId) ? "Seleccione un hotel" : (hoteles.find(h => h.id.toString() === ddlHotelReceta)?.nombre || "")} />
+                  <SelectValue placeholder={[1, 2, 3, 4].includes(userRolId) ? "Seleccione un hotel" : ""} />
                 </SelectTrigger>
                 <SelectContent>
                   {hoteles.map((hotel) => (
