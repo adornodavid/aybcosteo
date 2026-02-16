@@ -1137,7 +1137,7 @@ export default function NuevaRecetaPage() {
                     disabled={etapa1Bloqueada || ![1, 2, 3, 4].includes(userRolId)}
                   >
                     <SelectTrigger id="ddlHotel">
-                      <SelectValue placeholder={[1, 2, 3, 4].includes(userRolId) ? "Seleccionar hotel" : ""} />
+                      <SelectValue placeholder={[1, 2, 3, 4].includes(userRolId) ? "Seleccionar hotel" : undefined} />
                     </SelectTrigger>
                     <SelectContent>
                       {hoteles.map((hotel) => (
