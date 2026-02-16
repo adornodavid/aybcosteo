@@ -12,7 +12,7 @@ import { Dialog, DialogTrigger } from "@/components/ui/dialog"
 import { RestauranteForm } from "@/components/restaurantes/restaurante-form"
 import { useToast } from "@/hooks/use-toast"
 import {
-  obtenerRestaurantesFiltrados,
+  obtenerRestaurantesFiltrados,<SelectValue placeholder="Seleccione un hotel" />
   obtenerRestaurantePorId,
   actualizarEstadoRestaurante,
 } from "@/app/actions/restaurantes-actions"
