@@ -868,18 +868,20 @@ export default function MenusPage() {
                               <Edit className="h-4 w-4" />
                             </Button>
                           )}
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            title={menu.activo ? "Inactivar" : "Activar"}
-                            onClick={() => handleStatusToggle(menu.id, menu.activo)}
-                          >
-                            {menu.activo ? (
-                              <PowerOff className="h-4 w-4" />
-                            ) : (
-                              <Power className="h-4 w-4" />
-                            )}
-                          </Button>
+                          {sessionRolId && [1, 2, 3, 4].includes(sessionRolId) && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              title={menu.activo ? "Inactivar" : "Activar"}
+                              onClick={() => handleStatusToggle(menu.id, menu.activo)}
+                            >
+                              {menu.activo ? (
+                                <PowerOff className="h-4 w-4" />
+                              ) : (
+                                <Power className="h-4 w-4" />
+                              )}
+                            </Button>
+                          )}
                         </div>
                       </td>
                     </tr>

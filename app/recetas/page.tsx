@@ -656,17 +656,19 @@ export default function RecetasPage() {
                             <Edit className="h-3 w-3" />
                           </Button>
                         )}
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => toggleEstadoReceta(receta.folio, receta.activo)}
-                        >
-                          {receta.activo ? (
-                            <PowerOff className="h-3 w-3 text-red-500" />
-                          ) : (
-                            <Power className="h-3 w-3 text-green-500" />
-                          )}
-                        </Button>
+                        {sesion && [1, 2, 3, 4].includes(Number.parseInt(sesion.RolId?.toString() || "0", 10)) && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => toggleEstadoReceta(receta.folio, receta.activo)}
+                          >
+                            {receta.activo ? (
+                              <PowerOff className="h-3 w-3 text-red-500" />
+                            ) : (
+                              <Power className="h-3 w-3 text-green-500" />
+                            )}
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

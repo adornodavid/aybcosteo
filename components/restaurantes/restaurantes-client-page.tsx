@@ -276,18 +276,20 @@ export default function RestaurantesClientPage({
                         <Edit className="h-4 w-4" />
                       </Button>
                     )}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleToggleStatus(restaurante.Folio, restaurante.Estatus)}
-                      title={restaurante.Estatus ? "Inactivar" : "Activar"}
-                    >
-                      {restaurante.Estatus ? (
-                        <ToggleLeft className="h-4 w-4 text-red-500" />
-                      ) : (
-                        <ToggleRight className="h-4 w-4 text-green-500" />
-                      )}
-                    </Button>
+                    {userSession && [1, 2, 3, 4].includes(userSession.rol_id) && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleToggleStatus(restaurante.Folio, restaurante.Estatus)}
+                        title={restaurante.Estatus ? "Inactivar" : "Activar"}
+                      >
+                        {restaurante.Estatus ? (
+                          <ToggleLeft className="h-4 w-4 text-red-500" />
+                        ) : (
+                          <ToggleRight className="h-4 w-4 text-green-500" />
+                        )}
+                      </Button>
+                    )}
                   </TableCell>
                 </TableRow>
               ))
