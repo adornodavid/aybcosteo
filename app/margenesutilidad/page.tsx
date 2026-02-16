@@ -34,7 +34,7 @@ import {
   obtenerDetallesPlatilloTooltip,
   obtenerDetallesRecetaTooltip,
 } from "@/app/actions/dashboard-actions"
-import { useAuth } from "@/contexts/auth-context"
+import { getSession } from "@/app/actions/session-actions-with-expiration"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -177,7 +177,6 @@ const ITEMS_PER_PAGE = 20
 const todosMesesDelAño = mesesDelAño
 
 export default function MargenesUtilidadPage() {
-  const { user, isLoading: authLoading } = useAuth()
   const [menuOptions, setMenuOptions] = useState<MenuOption[]>([])
   const [selectedMenuId, setSelectedMenuId] = useState<string>("-1")
   const [platilloSearchTerm, setPlatilloSearchTerm] = useState<string>("")
@@ -318,26 +317,23 @@ export default function MargenesUtilidadPage() {
   // Cargar hoteles al inicializar
   useEffect(() => {
     async function loadHoteles() {
-      if (authLoading || !user) return
+      const session = await getSession()
+      const user = session?.user
       
-      console.log("[v0] Usuario margenesutilidad RolId:", user.RolId, "HotelId:", user.HotelId)
-      const hotelesData = await obtenerHotelesPorRol(user.RolId, user.HotelId)
-      console.log("[v0] Hoteles resultado margenesutilidad:", hotelesData)
-      
+      const hotelesData = await obtenerHotelesPorRol(user?.RolId, user?.HotelId)
       if (hotelesData.success) {
         setHoteles(hotelesData.data)
         
         // Si solo hay un hotel (usuario con rol 5 o 6), seleccionarlo automáticamente
         if (hotelesData.data.length === 1) {
           setHotelSeleccionado(hotelesData.data[0].id.toString())
-          console.log("[v0] Hotel seleccionado automáticamente:", hotelesData.data[0].nombre)
         } else if (hotelesData.data.length > 0) {
           setHotelSeleccionado(hotelesData.data[0].id.toString())
         }
       }
     }
     loadHoteles()
-  }, [authLoading, user])
+  }, [])
 
   // Cargar datos de variación de costos cuando cambien los filtros
   useEffect(() => {

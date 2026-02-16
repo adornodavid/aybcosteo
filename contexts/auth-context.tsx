@@ -3,11 +3,11 @@
 import type React from "react"
 import { createContext, useContext, useEffect, useState } from "react"
 import { useRouter, usePathname } from "next/navigation"
-import { obtenerVariablesSesion } from "@/app/actions/session-actions-with-expiration"
-import type { SessionData } from "@/app/actions/session-actions-with-expiration"
+import { getSession } from "@/app/actions/session-actions"
+import type { DatosSesion } from "@/lib/types-sistema-costeo"
 
 interface AuthContextType {
-  user: SessionData | null
+  user: DatosSesion | null
   isLoading: boolean
   selectedHotel: number | null
   setSelectedHotel: (hotelId: number | null) => void
@@ -17,7 +17,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<SessionData | null>(null)
+  const [user, setUser] = useState<DatosSesion | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [selectedHotel, setSelectedHotel] = useState<number | null>(null)
   const router = useRouter()
@@ -28,16 +28,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const sessionData = await obtenerVariablesSesion()
+        const session = await getSession()
 
-        if (sessionData && sessionData.SesionActiva) {
-          setUser(sessionData)
-          setSelectedHotel(sessionData.HotelId || null)
+        if (session) {
+          setUser(session)
+          setSelectedHotel(session.HotelId || null)
         } else if (!publicRoutes.includes(pathname)) {
           router.push("/login")
         }
       } catch (error) {
-        console.error("[v0] Error obteniendo variables de sesión:", error)
+        console.error("Error checking auth:", error)
         if (!publicRoutes.includes(pathname)) {
           router.push("/login")
         }

@@ -19,7 +19,7 @@ import {
   buscarIngredientes,
   eliminarIngrediente,
 } from "@/app/actions/ingredientes-actions"
-import { useAuth } from "@/contexts/auth-context"
+import { getSession } from "@/app/actions/session-actions-with-expiration"
 
 interface Hotel {
   id: number
@@ -70,7 +70,6 @@ export default function IngredientesPage() {
   const [error, setError] = useState<string | null>(null)
   const { toast } = useToast()
   const router = useRouter()
-  const { user, isLoading: authLoading } = useAuth()
 
   // Estados para los filtros
   const [txtCodigo, setTxtCodigo] = useState("")
@@ -81,10 +80,8 @@ export default function IngredientesPage() {
   const itemsPerPage = 20
 
   useEffect(() => {
-    if (!authLoading && user) {
-      cargarDatosIniciales()
-    }
-  }, [authLoading, user])
+    cargarDatosIniciales()
+  }, [])
 
   const cargarDatosIniciales = async () => {
     setLoading(true)
@@ -96,24 +93,57 @@ export default function IngredientesPage() {
         throw new Error("Variables de entorno de Supabase no configuradas")
       }
 
-      // Cargar hoteles con filtrado por rol
-      console.log("[v0] Usuario RolId:", user?.RolId, "HotelId:", user?.HotelId)
-      const hotelesResult = await obtenerHoteles(user?.RolId, user?.HotelId)
-      console.log("[v0] Hoteles resultado:", hotelesResult)
+      // Obtener sesión del usuario
+      const session = await getSession()
       
-      if (hotelesResult.success) {
-        setHoteles(hotelesResult.data)
-        console.log("[v0] Hoteles cargados:", hotelesResult.data.length)
-        
-        // Si solo hay un hotel (usuario con rol 5 o 6), seleccionarlo automáticamente
-        if (hotelesResult.data.length === 1) {
-          setDdlHoteles(hotelesResult.data[0].id.toString())
-          console.log("[v0] Hotel seleccionado automáticamente:", hotelesResult.data[0].nombre)
+      // Validar sesión
+      if (!session || !session.SesionActiva) {
+        router.push("/login")
+        return
+      }
+
+      const rolId = Number.parseInt(session.RolId?.toString() || "0", 10)
+      const hotelIdSesion = Number.parseInt(session.HotelId?.toString() || "0", 10)
+
+      // Determinar qué hoteles cargar según el rol
+      let auxHotelid: number
+      if (![1, 2, 3, 4].includes(rolId)) {
+        // Roles 5 y 6: solo su hotel
+        auxHotelid = hotelIdSesion
+      } else {
+        // Roles 1-4: todos los hoteles
+        auxHotelid = -1
+      }
+
+      // Cargar hoteles según el rol
+      console.log("Cargando hoteles...")
+      let fetchedHoteles: Hotel[] = []
+      let defaultSelectedValue = ""
+
+      if (auxHotelid === -1) {
+        // Obtener todos los hoteles
+        const hotelesResult = await obtenerHoteles(undefined, undefined)
+        if (hotelesResult.success) {
+          fetchedHoteles = hotelesResult.data
+          defaultSelectedValue = "" // "Todos los hoteles"
+        } else {
+          console.error("Error cargando hoteles:", hotelesResult.error)
+          setError(`Error cargando hoteles: ${hotelesResult.error}`)
         }
       } else {
-        console.error("Error cargando hoteles:", hotelesResult.error)
-        setError(`Error cargando hoteles: ${hotelesResult.error}`)
+        // Obtener solo el hotel del usuario
+        const hotelesResult = await obtenerHoteles(rolId, hotelIdSesion)
+        if (hotelesResult.success && hotelesResult.data.length > 0) {
+          fetchedHoteles = hotelesResult.data
+          defaultSelectedValue = fetchedHoteles[0].id.toString()
+        } else {
+          console.error("Error cargando hotel del usuario:", hotelesResult.error)
+          setError(`Error cargando hotel: ${hotelesResult.error}`)
+        }
       }
+
+      setHoteles(fetchedHoteles)
+      setDdlHoteles(defaultSelectedValue)
 
       // Cargar categorías
       console.log("Cargando categorías...")
