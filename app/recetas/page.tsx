@@ -194,7 +194,7 @@ export default function RecetasPage() {
 
         fetchedHoteles = data || []
         // Seleccionar el hotel encontrado
-        defaultSelectedValue = fetchedHoteles.length > 0 ? fetchedHoteles[1].id.toString() : ""
+        defaultSelectedValue = fetchedHoteles.length > 0 ? fetchedHoteles[0].id.toString() : ""
       }
 
       setHoteles(fetchedHoteles)
