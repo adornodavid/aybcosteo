@@ -165,11 +165,13 @@ export default function RestaurantesClientPage({
     <div className="flex flex-col gap-4 p-4 md:p-6">
       <div className="flex flex-col md:flex-row items-center justify-between gap-4">
         <h1 className="text-2xl font-bold">Gestión de Restaurantes</h1>
-        <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+        {userSession && [1, 2, 3, 4].includes(userSession.rol_id) && (
           <DialogTrigger asChild>
             <Button className="bg-[#5d8f72] hover:bg-[#44785a] text-white" onClick={() => setEditingRestaurante(null)}>Crear Nuevo Restaurante</Button>
           </DialogTrigger>
-          <RestauranteForm
+        )}
+        <RestauranteForm
             isOpen={isModalOpen}
             onClose={handleModalClose}
             initialData={editingRestaurante}
@@ -269,9 +271,11 @@ export default function RestaurantesClientPage({
                   <TableCell>{restaurante.Direccion}</TableCell>
                   <TableCell>{restaurante.Estatus ? "Activo" : "Inactivo"}</TableCell>
                   <TableCell className="flex items-center justify-center gap-2">
-                    <Button variant="ghost" size="icon" onClick={() => handleEdit(restaurante.Folio)} title="Editar">
-                      <Edit className="h-4 w-4" />
-                    </Button>
+                    {userSession && [1, 2, 3, 4].includes(userSession.rol_id) && (
+                      <Button variant="ghost" size="icon" onClick={() => handleEdit(restaurante.Folio)} title="Editar">
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                    )}
                     <Button
                       variant="ghost"
                       size="icon"
