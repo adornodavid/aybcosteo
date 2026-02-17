@@ -86,7 +86,7 @@ export default function RecetasPage() {
   const [searching, setSearching] = useState(false)
   const [error, setError] = useState<string | null>(null)
   
-  const esAdmin = sesion && [1, 2, 3, 4].includes(Number.parseInt(sesion.RolId?.toString() || "0", 10))
+  //const esAdmin = sesion && [1, 2, 3, 4].includes(Number.parseInt(sesion.RolId?.toString() || "0", 10))
 
   // Estados de datos
   const [hoteles, setHoteles] = useState<Hotel[]>([])
