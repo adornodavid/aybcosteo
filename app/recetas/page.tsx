@@ -175,7 +175,7 @@ export default function RecetasPage() {
 
       setHoteles(data || [])
       console.log("[v0] cargarHoteles - Después de setHoteles")
-      console.log("[v0] cargarHoteles - Hoteles")
+      console.log("[v0] cargarHoteles", Hoteles)
       
       // Establecer valor por defecto
       if (data && data.length > 0) {
