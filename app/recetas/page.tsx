@@ -150,23 +150,49 @@ export default function RecetasPage() {
 
   const cargarHoteles = async () => {
     try {
-      if (!sesion) return
+      console.log("[v0] cargarHoteles - Inicio, sesion:", sesion)
+      if (!sesion) {
+        console.log("[v0] cargarHoteles - No hay sesión, retornando")
+        return
+      }
 
       const rolId = Number.parseInt(sesion.RolId?.toString() || "0", 10)
       const hotelIdSesion = Number.parseInt(sesion.HotelId?.toString() || "0", 10)
+      console.log("[v0] cargarHoteles - rolId:", rolId, "hotelIdSesion:", hotelIdSesion)
 
       let query = supabase.from("hoteles").select("id, nombre").order("nombre", { ascending: true })
 
       // Si el rol no es admin, filtrar por el hotel del usuario
       if (![1, 2, 3, 4].includes(rolId)) {
         query = query.eq("id", hotelIdSesion)
+        console.log("[v0] cargarHoteles - No es admin, filtrando por hotel:", hotelIdSesion)
       }
+
+      const { data, error } = await query
+      console.log("[v0] cargarHoteles - Data recibida:", data)
+
+      if (error) throw error
+
+      setHoteles(data || [])
+      console.log("[v0] cargarHoteles - Después de setHoteles")
+      
+      // Establecer valor por defecto
+      if (data && data.length > 0) {
+        console.log("[v0] cargarHoteles - Estableciendo hotel por defecto:", data[0].id.toString())
+        setDdlHotelReceta(data[0].id.toString())
+      }
+    } catch (error: any) {
+      console.error("Error cargando hoteles:", error)
+      setError(`Error al cargar hoteles: ${error.message}`)
+      setHoteles([])
+    }
+  }
 
       const { data, error } = await query
 
       if (error) throw error
 
-      setHoteles(data)
+      setHoteles(data || [])
 
       console.log("hotel",hoteles)
       
