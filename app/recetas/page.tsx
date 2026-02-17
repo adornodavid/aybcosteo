@@ -574,7 +574,7 @@ export default function RecetasPage() {
                 onValueChange={setDdlHotelReceta}
               >
                 <SelectTrigger id="ddlHotelReceta" name="ddlHotelReceta">
-                  <SelectValue placeholder="Seleccione el Hotel" />
+                  <SelectValue placeholder="Todos los Hoteles" />
                 </SelectTrigger>
                 <SelectContent>
                   {hoteles.map((hotel) => (
