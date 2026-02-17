@@ -127,7 +127,7 @@ export default function RecetasPage() {
   // Sincronizar hotel seleccionado cuando los hoteles se cargan
   useEffect(() => {
     if (hoteles.length > 0 && ddlHotelReceta === "-1") {
-      console.log("[v0] useEffect hoteles - Estableciendo primer hotel:", hoteles[0].id.toString())
+      console.log("[v0] useEffect hoteles - Estableciendo primer hotel111111111111:", hoteles[0].id.toString())
       setDdlHotelReceta(hoteles[0].id.toString())
     }
   }, [hoteles])
