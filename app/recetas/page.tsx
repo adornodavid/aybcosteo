@@ -408,9 +408,9 @@ export default function RecetasPage() {
 
   const clearPlatillosBusqueda = () => {
     setTxtRecetaNombre("")
-    setDdlHotelReceta(hoteles.length > 0 ? hoteles[0].id.toString() : "") // Restablecer al primer hotel
     setDdlEstatusReceta("true") // Restablecer a "Activo"
     setCurrentPage(1)
+    cargarHoteles() // Recargar hoteles para restablecer el valor correcto
     cargarRecetasIniciales() // Recargar con filtros por defecto
   }
 
@@ -556,7 +556,6 @@ export default function RecetasPage() {
 
             <div className="flex-1 min-w-[200px]">
               <Label htmlFor="ddlHotelReceta">Hotel</Label>
-              {console.log("[v0] ddlHotelReceta:", ddlHotelReceta, "hoteles:", hoteles)}
               <Select 
                 value={ddlHotelReceta} 
                 onValueChange={setDdlHotelReceta}
