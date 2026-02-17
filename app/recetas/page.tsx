@@ -132,21 +132,24 @@ export default function RecetasPage() {
         const rolId = Number.parseInt(sesion.RolId?.toString() || "0", 10)
         const hotelIdSesion = Number.parseInt(sesion.HotelId?.toString() || "0", 10)
 
-        // Obtener todos los hoteles
-        const { data, error } = await supabase.from("hoteles").select("id, nombre").order("nombre", { ascending: true })
+        let query = supabase.from("hoteles").select("id, nombre").order("nombre", { ascending: true })
+
+        // Si el rol es 5 o 6, filtrar solo por el hotel del usuario
+        if (![1, 2, 3, 4].includes(rolId)) {
+          query = query.eq("id", hotelIdSesion)
+        }
+
+        const { data, error } = await query
         if (error) throw error
 
         const listaHoteles = data || []
         
-        // Agregar "Todos los hoteles" como primera opción con valor según el rol
-        const valorTodosLosHoteles = [1, 2, 3, 4].includes(rolId) ? -1 : hotelIdSesion
-        const hotelesConTodos = [
-          { id: valorTodosLosHoteles, nombre: "Todos los hoteles" },
-          ...listaHoteles
-        ]
+        setHoteles(listaHoteles)
         
-        setHoteles(hotelesConTodos)
-        setDdlHotelReceta(valorTodosLosHoteles.toString())
+        // Establecer el primer hotel como seleccionado por defecto
+        if (listaHoteles.length > 0) {
+          setDdlHotelReceta(listaHoteles[0].id.toString())
+        }
       } catch (err: any) {
         console.error("Error cargando hoteles:", err)
         setError(`Error al cargar hoteles: ${err.message}`)
