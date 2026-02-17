@@ -94,7 +94,10 @@ export default function RecetasPage() {
 
   // Estados de filtros
   const [txtRecetaNombre, setTxtRecetaNombre] = useState("")
-  const [ddlHotelReceta, setDdlHotelReceta] = useState("") // Valor por defecto vacío
+  const [ddlHotelReceta, setDdlHotelReceta] = useState(() => {
+    console.log("[v0] Inicializando ddlHotelReceta con valor vacío")
+    return ""
+  }) // Valor por defecto vacío
   const [ddlEstatusReceta, setDdlEstatusReceta] = useState("true") // Valor por defecto "Activo"
 
   // Estados de paginación
@@ -190,8 +193,10 @@ export default function RecetasPage() {
         defaultSelectedValue = fetchedHoteles.length > 0 ? fetchedHoteles[0].id.toString() : ""
       }
 
+      console.log("[v0] cargarHoteles - Estableciendo hotel:", defaultSelectedValue, "Hoteles:", fetchedHoteles)
       setHoteles(fetchedHoteles)
       setDdlHotelReceta(defaultSelectedValue) // Aplicar el valor por defecto
+      console.log("[v0] cargarHoteles - Después de setDdlHotelReceta")
     } catch (error: any) {
       console.error("Error cargando hoteles:", error)
       setError(`Error al cargar hoteles: ${error.message}`)
