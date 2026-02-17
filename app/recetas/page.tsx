@@ -188,27 +188,6 @@ export default function RecetasPage() {
     }
   }
 
-      const { data, error } = await query
-
-      if (error) throw error
-
-      setHoteles(data || [])
-
-      console.log("hotel",hoteles)
-      
-      // Establecer valor por defecto
-      if (data && data.length > 0) {
-        setDdlHotelReceta(data[0].id.toString())
-      }
-      
-      
-    } catch (error: any) {
-      console.error("Error cargando hoteles:", error)
-      setError(`Error al cargar hoteles: ${error.message}`)
-      setHoteles([])
-    }
-  }
-
   const cargarEstadisticas = async () => {
     try {
       const { count, error } = await supabase.from("recetas").select("*", { count: "exact", head: true })
