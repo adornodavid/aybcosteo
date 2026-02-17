@@ -554,7 +554,7 @@ export default function RecetasPage() {
             <div className="flex-1 min-w-[200px]">
               <Label htmlFor="ddlHotelReceta">Hotel</Label>
               <Select 
-                value={ddlHotelReceta} 
+                
                 onValueChange={setDdlHotelReceta}
                 disabled={!esAdmin}
               >
