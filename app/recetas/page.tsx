@@ -118,9 +118,10 @@ export default function RecetasPage() {
   // Cargar datos iniciales cuando la sesión esté lista
   useEffect(() => {
     if (sesion) {
-      cargarHoteles()
+      
       cargarEstadisticas()
       cargarRecetasIniciales()
+      cargarHoteles()
     }
   }, [sesion])
 
