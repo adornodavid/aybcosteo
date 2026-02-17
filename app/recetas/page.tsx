@@ -132,21 +132,21 @@ export default function RecetasPage() {
         const rolId = Number.parseInt(sesion.RolId?.toString() || "0", 10)
         const hotelIdSesion = Number.parseInt(sesion.HotelId?.toString() || "0", 10)
 
-        let query = supabase.from("hoteles").select("id, nombre").order("nombre", { ascending: true })
-
-        if (![1, 2, 3, 4].includes(rolId)) {
-          query = query.eq("id", hotelIdSesion)
-        }
-
-        const { data, error } = await query
+        // Obtener todos los hoteles
+        const { data, error } = await supabase.from("hoteles").select("id, nombre").order("nombre", { ascending: true })
         if (error) throw error
 
         const listaHoteles = data || []
-        setHoteles(listaHoteles)
-
-        if (listaHoteles.length > 0) {
-          setDdlHotelReceta(listaHoteles[0].id.toString())
-        }
+        
+        // Agregar "Todos los hoteles" como primera opción con valor según el rol
+        const valorTodosLosHoteles = [1, 2, 3, 4].includes(rolId) ? -1 : hotelIdSesion
+        const hotelesConTodos = [
+          { id: valorTodosLosHoteles, nombre: "Todos los hoteles" },
+          ...listaHoteles
+        ]
+        
+        setHoteles(hotelesConTodos)
+        setDdlHotelReceta(valorTodosLosHoteles.toString())
       } catch (err: any) {
         console.error("Error cargando hoteles:", err)
         setError(`Error al cargar hoteles: ${err.message}`)
@@ -569,7 +569,6 @@ export default function RecetasPage() {
               <Select 
                 value={ddlHotelReceta} 
                 onValueChange={setDdlHotelReceta}
-                disabled={!esAdmin}
               >
                 <SelectTrigger id="ddlHotelReceta" name="ddlHotelReceta">
                   <SelectValue />
