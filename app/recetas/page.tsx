@@ -166,7 +166,7 @@ export default function RecetasPage() {
 
       if (error) throw error
 
-      setHoteles(data)
+      setHoteles(data || [])
 
       console.log("hotel",hoteles)
       
