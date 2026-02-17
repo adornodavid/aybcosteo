@@ -171,6 +171,7 @@ export default function RecetasPage() {
       // Establecer valor por defecto
       if (data && data.length > 0) {
         setDdlHotelReceta(data[0].id.toString())
+        console.log("hotel",DdlHotelReceta)
       }
     } catch (error: any) {
       console.error("Error cargando hoteles:", error)
