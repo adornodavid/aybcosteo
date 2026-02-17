@@ -586,24 +586,6 @@ export default function RecetasPage() {
               </Select>
             </div>
 
-            <div className="flex-1 min-w-[200px]">
-              <Label htmlFor="ddlHotelesReceta">Hoteles</Label>
-              <Select 
-                value={ddlHotelesReceta} 
-                onValueChange={setDdlHotelesReceta}
-              >
-                <SelectTrigger id="ddlHotelesReceta" name="ddlHotelesReceta">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {hoteles.map((hotel) => (
-                    <SelectItem key={hotel.id} value={hotel.id.toString()}>
-                      {hotel.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
 
             <div className="flex-1 min-w-[150px]">
               <Label htmlFor="ddlEstatusReceta">Estatus</Label>
