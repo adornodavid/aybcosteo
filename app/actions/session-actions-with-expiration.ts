@@ -41,6 +41,19 @@ export async function crearSesionConExpiracion(userData: {
   cookies().set("ExpiresAt", expirationTime.toISOString(), { expires: expirationTime, httpOnly: true, secure: true })
 }
 
+// Función para obtener la sesión en formato compatible
+export async function getSession() {
+  const sessionData = await obtenerVariablesSesion()
+  
+  if (!sessionData.SesionActiva) {
+    return null
+  }
+  
+  return {
+    user: sessionData
+  }
+}
+
 // Función para obtener las variables de sesión
 export async function obtenerVariablesSesion(): Promise<SessionData> {
   try {

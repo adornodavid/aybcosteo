@@ -304,11 +304,12 @@ export default function MenusPage() {
         return
       }
       setSessionRolId(rolId)
-      setSessionHotelId(session.HotelId || null)
+      const hotelIdValue = session.HotelId ? String(session.HotelId) : null
+      setSessionHotelId(hotelIdValue)
 
-      await cargarHoteles(rolId, session.HotelId || null)
+      await cargarHoteles(rolId, hotelIdValue)
 
-      const initialHotelId = rolId === 1 || rolId === 2 || rolId === 3 || rolId === 4 ? "-1" : session.HotelId || "-1"
+      const initialHotelId = rolId === 1 || rolId === 2 || rolId === 3 || rolId === 4 ? "-1" : (hotelIdValue || "-1")
       const initialRestauranteId = "-1"
       const initialStatus = "true"
       const initialName = ""
@@ -656,15 +657,17 @@ export default function MenusPage() {
           <h1 className="text-3xl font-bold">Menús</h1>
           <p className="text-lg text-gray-500">Gestión completa de Menus</p>
         </div>
-        <Button
-          type="button"
-          onClick={() => router.push("/menus/nuevo")}
-          style={{ backgroundColor: "#5d8f72", color: "white" }}
-          id="btnMenuNuevo"
-          name="btnMenuNuevo"
-        >
-          <Utensils className="mr-2 h-4 w-4" /> Nuevo Menú
-        </Button>
+        {sessionRolId && [1, 2, 3, 4].includes(sessionRolId) && (
+          <Button
+            type="button"
+            onClick={() => router.push("/menus/nuevo")}
+            style={{ backgroundColor: "#5d8f72", color: "white" }}
+            id="btnMenuNuevo"
+            name="btnMenuNuevo"
+          >
+            <Utensils className="mr-2 h-4 w-4" /> Nuevo Menú
+          </Button>
+        )}
       </div>
 
       {/* Resumen de estadísticas */}
@@ -845,34 +848,40 @@ export default function MenusPage() {
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            title="Agregar platillos"
-                            onClick={() => router.push(`/menus/${menu.id}/agregar`)}
-                          >
-                             <HandPlatter className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            title="Editar"
-                            onClick={() => handleOpenEditDialog(menu.id)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            title={menu.activo ? "Inactivar" : "Activar"}
-                            onClick={() => handleStatusToggle(menu.id, menu.activo)}
-                          >
-                            {menu.activo ? (
-                              <PowerOff className="h-4 w-4" />
-                            ) : (
-                              <Power className="h-4 w-4" />
-                            )}
-                          </Button>
+                          {sessionRolId && [1, 2, 3, 4].includes(sessionRolId) && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              title="Agregar platillos"
+                              onClick={() => router.push(`/menus/${menu.id}/agregar`)}
+                            >
+                               <HandPlatter className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {sessionRolId && [1, 2, 3, 4].includes(sessionRolId) && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              title="Editar"
+                              onClick={() => handleOpenEditDialog(menu.id)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {sessionRolId && [1, 2, 3, 4].includes(sessionRolId) && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              title={menu.activo ? "Inactivar" : "Activar"}
+                              onClick={() => handleStatusToggle(menu.id, menu.activo)}
+                            >
+                              {menu.activo ? (
+                                <PowerOff className="h-4 w-4" />
+                              ) : (
+                                <Power className="h-4 w-4" />
+                              )}
+                            </Button>
+                          )}
                         </div>
                       </td>
                     </tr>

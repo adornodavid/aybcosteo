@@ -165,11 +165,13 @@ export default function RestaurantesClientPage({
     <div className="flex flex-col gap-4 p-4 md:p-6">
       <div className="flex flex-col md:flex-row items-center justify-between gap-4">
         <h1 className="text-2xl font-bold">Gestión de Restaurantes</h1>
-        <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+        {userSession && [1, 2, 3, 4].includes(userSession.rol_id) && (
           <DialogTrigger asChild>
             <Button className="bg-[#5d8f72] hover:bg-[#44785a] text-white" onClick={() => setEditingRestaurante(null)}>Crear Nuevo Restaurante</Button>
           </DialogTrigger>
-          <RestauranteForm
+        )}
+        <RestauranteForm
             isOpen={isModalOpen}
             onClose={handleModalClose}
             initialData={editingRestaurante}
@@ -178,7 +180,7 @@ export default function RestaurantesClientPage({
         </Dialog>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Input
           id="txtRestauranteNombre"
           placeholder="Buscar por nombre..."
@@ -188,31 +190,29 @@ export default function RestaurantesClientPage({
             if (e.key === "Enter") handleSearch()
           }}
         />
-        <Select onValueChange={setSelectedHotelId} value={selectedHotelId}>
-          <SelectTrigger id="ddlHotel">
-            <SelectValue placeholder="Filtrar por Hotel" />
-          </SelectTrigger>
-          <SelectContent>
-            {initialHotelOptions.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select onValueChange={setSelectedRestauranteId} value={selectedRestauranteId}>
-          <SelectTrigger id="ddlRestaurante">
-            <SelectValue placeholder="Filtrar por Restaurante" />
-          </SelectTrigger>
-          <SelectContent>
-            {initialRestauranteOptions.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Button  className="bg-[#4a4a4a] text-white hover:bg-[#333333]" id="btnRestaurantesBuscar" onClick={handleSearch}>
+        <div>
+          <label htmlFor="ddlHotel" className="text-sm font-medium block mb-2">
+            Hotel
+          </label>
+          <Select 
+            name="ddlHotel"
+            onValueChange={setSelectedHotelId} 
+            value={selectedHotelId}
+            disabled={userSession ? ![1, 2, 3, 4].includes(userSession.rol_id) : false}
+          >
+            <SelectTrigger id="ddlHotel">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {initialHotelOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <Button className="bg-[#4a4a4a] text-white hover:bg-[#333333] mt-7" id="btnRestaurantesBuscar" onClick={handleSearch}>
           {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
           Buscar
         </Button>
@@ -269,21 +269,25 @@ export default function RestaurantesClientPage({
                   <TableCell>{restaurante.Direccion}</TableCell>
                   <TableCell>{restaurante.Estatus ? "Activo" : "Inactivo"}</TableCell>
                   <TableCell className="flex items-center justify-center gap-2">
-                    <Button variant="ghost" size="icon" onClick={() => handleEdit(restaurante.Folio)} title="Editar">
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleToggleStatus(restaurante.Folio, restaurante.Estatus)}
-                      title={restaurante.Estatus ? "Inactivar" : "Activar"}
-                    >
-                      {restaurante.Estatus ? (
-                        <ToggleLeft className="h-4 w-4 text-red-500" />
-                      ) : (
-                        <ToggleRight className="h-4 w-4 text-green-500" />
-                      )}
-                    </Button>
+                    {userSession && [1, 2, 3, 4].includes(userSession.rol_id) && (
+                      <Button variant="ghost" size="icon" onClick={() => handleEdit(restaurante.Folio)} title="Editar">
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                    )}
+                    {userSession && [1, 2, 3, 4].includes(userSession.rol_id) && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleToggleStatus(restaurante.Folio, restaurante.Estatus)}
+                        title={restaurante.Estatus ? "Inactivar" : "Activar"}
+                      >
+                        {restaurante.Estatus ? (
+                          <ToggleLeft className="h-4 w-4 text-red-500" />
+                        ) : (
+                          <ToggleRight className="h-4 w-4 text-green-500" />
+                        )}
+                      </Button>
+                    )}
                   </TableCell>
                 </TableRow>
               ))

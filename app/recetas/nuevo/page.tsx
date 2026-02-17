@@ -88,6 +88,7 @@ export default function NuevaRecetaPage() {
   const [sesion, setSesion] = useState<SessionData | null>(null)
   const [loading, setLoading] = useState(true)
   const [showLoadingAnimation, setShowLoadingAnimation] = useState(false)
+  const [userRolId, setUserRolId] = useState<number>(0)
 
   // Estados para AlertDialog de errores
   const [showErrorDialog, setShowErrorDialog] = useState(false)
@@ -303,6 +304,9 @@ export default function NuevaRecetaPage() {
     try {
       const rolId = Number.parseInt(sessionData.RolId || "0", 10)
       const hotelIdSesion = Number.parseInt(sessionData.HotelId || "0", 10)
+      
+      // Guardar el rolId para validaciones de UI
+      setUserRolId(rolId)
 
       let auxHotelid: number
 
@@ -1126,9 +1130,14 @@ export default function NuevaRecetaPage() {
                 </div>
                 <div>
                   <Label htmlFor="ddlHotel">Hotel</Label>
-                  <Select name="ddlHotel" value={ddlHotel} onValueChange={setDdlHotel} disabled={etapa1Bloqueada}>
+                  <Select 
+                    name="ddlHotel" 
+                    value={ddlHotel} 
+                    onValueChange={setDdlHotel} 
+                    disabled={etapa1Bloqueada || ![1, 2, 3, 4].includes(userRolId)}
+                  >
                     <SelectTrigger id="ddlHotel">
-                      <SelectValue placeholder="Seleccionar hotel" />
+                      <SelectValue placeholder={[1, 2, 3, 4].includes(userRolId) ? "Seleccionar hotel" : undefined} />
                     </SelectTrigger>
                     <SelectContent>
                       {hoteles.map((hotel) => (

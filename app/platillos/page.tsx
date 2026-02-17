@@ -614,12 +614,14 @@ export default function PlatillosPage() {
           <h1 className="text-3xl font-bold tracking-tight">Recetas</h1>
           <p className="text-muted-foreground">Gestión completa de Recetas</p>
         </div>
-        <Link href="/platillos/nuevo" passHref>
-          <Button id="btnPlatilloNuevo" name="btnPlatilloNuevo" className="bg-[#5d8f72] hover:bg-[#44785a] text-white">
-            <PlusCircle className="mr-2 h-4 w-4" />
-            Crear Nueva Receta
-          </Button>
-        </Link>
+        {user && [1, 2, 3, 4].includes(Number.parseInt(user.RolId?.toString() || "0", 10)) && (
+          <Link href="/platillos/nuevo" passHref>
+            <Button id="btnPlatilloNuevo" name="btnPlatilloNuevo" className="bg-[#5d8f72] hover:bg-[#44785a] text-white">
+              <PlusCircle className="mr-2 h-4 w-4" />
+              Crear Nueva Receta
+            </Button>
+          </Link>
+        )}
       </div>
 
       {/* 2. Estadísticas */}
@@ -841,26 +843,30 @@ export default function PlatillosPage() {
                               <Eye className="h-4 w-4" />
                             )}
                           </Button>
-                          <Link
-                            href={`/platillos/editar?getPlatilloId=${p.PlatilloId}&getMenuNombre=${p.MenuNombre}`}
-                            passHref
-                          >
-                            <Button variant="ghost" size="icon" title="Editar">
-                              <Edit className="h-4 w-4" />
+                          {user && [1, 2, 3, 4].includes(Number.parseInt(user.RolId?.toString() || "0", 10)) && (
+                            <Link
+                              href={`/platillos/editar?getPlatilloId=${p.PlatilloId}&getMenuNombre=${p.MenuNombre}`}
+                              passHref
+                            >
+                              <Button variant="ghost" size="icon" title="Editar">
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            </Link>
+                          )}
+                          {user && [1, 2, 3, 4].includes(Number.parseInt(user.RolId?.toString() || "0", 10)) && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title={p.PlatilloActivo ? "Inactivar" : "Activar"}
+                              onClick={() => handleToggleStatusClick(p.PlatilloId, p.PlatilloActivo)}
+                            >
+                              {p.PlatilloActivo ? (
+                                <ToggleRight className="h-4 w-4 text-red-500" />
+                              ) : (
+                                <ToggleLeft className="h-4 w-4 text-green-500" />
+                              )}
                             </Button>
-                          </Link>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            title={p.PlatilloActivo ? "Inactivar" : "Activar"}
-                            onClick={() => handleToggleStatusClick(p.PlatilloId, p.PlatilloActivo)}
-                          >
-                            {p.PlatilloActivo ? (
-                              <ToggleRight className="h-4 w-4 text-red-500" />
-                            ) : (
-                              <ToggleLeft className="h-4 w-4 text-green-500" />
-                            )}
-                          </Button>
+                          )}
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
                               {/*

@@ -85,6 +85,8 @@ export default function RecetasPage() {
   const [loading, setLoading] = useState(true)
   const [searching, setSearching] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  
+  //const esAdmin = sesion && [1, 2, 3, 4].includes(Number.parseInt(sesion.RolId?.toString() || "0", 10))
 
   // Estados de datos
   const [hoteles, setHoteles] = useState<Hotel[]>([])
@@ -93,7 +95,8 @@ export default function RecetasPage() {
 
   // Estados de filtros
   const [txtRecetaNombre, setTxtRecetaNombre] = useState("")
-  const [ddlHotelReceta, setDdlHotelReceta] = useState("-1") // Valor por defecto para "Todos"
+  const [ddlHotelReceta, setDdlHotelReceta] = useState("-1")
+  const [ddlHotelesReceta, setDdlHotelesReceta] = useState("")
   const [ddlEstatusReceta, setDdlEstatusReceta] = useState("true") // Valor por defecto "Activo"
 
   // Estados de paginación
@@ -115,10 +118,46 @@ export default function RecetasPage() {
   // Cargar datos iniciales cuando la sesión esté lista
   useEffect(() => {
     if (sesion) {
-      cargarHoteles()
       cargarEstadisticas()
       cargarRecetasIniciales()
     }
+  }, [sesion])
+
+  // Cargar hoteles después de que la sesión esté lista
+  useEffect(() => {
+    const inicializarHoteles = async () => {
+      if (!sesion) return
+
+      try {
+        const rolId = Number.parseInt(sesion.RolId?.toString() || "0", 10)
+        const hotelIdSesion = Number.parseInt(sesion.HotelId?.toString() || "0", 10)
+
+        let query = supabase.from("hoteles").select("id, nombre").order("nombre", { ascending: true })
+
+        // Si el rol es 5 o 6, filtrar solo por el hotel del usuario
+        if (![1, 2, 3, 4].includes(rolId)) {
+          query = query.eq("id", hotelIdSesion)
+        }
+
+        const { data, error } = await query
+        if (error) throw error
+
+        const listaHoteles = data || []
+        
+        setHoteles(listaHoteles)
+        
+        // Establecer el primer hotel como seleccionado por defecto
+        if (listaHoteles.length > 0) {
+          setDdlHotelReceta(listaHoteles[0].id.toString())
+        }
+      } catch (err: any) {
+        console.error("Error cargando hoteles:", err)
+        setError(`Error al cargar hoteles: ${err.message}`)
+        setHoteles([])
+      }
+    }
+
+    inicializarHoteles()
   }, [sesion])
 
   const cargarSesion = async () => {
@@ -152,46 +191,25 @@ export default function RecetasPage() {
       const rolId = Number.parseInt(sesion.RolId?.toString() || "0", 10)
       const hotelIdSesion = Number.parseInt(sesion.HotelId?.toString() || "0", 10)
 
-      let auxHotelid: number
+      let query = supabase.from("hoteles").select("id, nombre").order("nombre", { ascending: true })
+
       if (![1, 2, 3, 4].includes(rolId)) {
-        auxHotelid = hotelIdSesion
-      } else {
-        auxHotelid = -1
+        query = query.eq("id", hotelIdSesion)
       }
 
-      let fetchedHoteles: Hotel[] = []
-      let defaultSelectedValue = "-1" // Valor por defecto para el ddl
+      const { data, error } = await query
+      if (error) throw error
 
-      if (auxHotelid === -1) {
-        // Si auxHotelid es -1, obtener todos los hoteles y agregar "Todos"
-        const { data, error } = await supabase.from("hoteles").select("id, nombre").order("nombre", { ascending: true })
+      const listaHoteles = data || []
+      setHoteles(listaHoteles)
 
-        if (error) throw error
-
-        fetchedHoteles = [{ id: -1, nombre: "Todos" }, ...(data || [])]
-        defaultSelectedValue = "-1" // Seleccionar "Todos"
-      } else {
-        // Si auxHotelid tiene un valor específico, filtrar por ese hotel
-        const { data, error } = await supabase
-          .from("hoteles")
-          .select("id, nombre")
-          .eq("id", auxHotelid)
-          .order("nombre", { ascending: true })
-
-        if (error) throw error
-
-        fetchedHoteles = data || []
-        // Si se encontró el hotel, seleccionarlo, de lo contrario, volver a "Todos"
-        defaultSelectedValue = fetchedHoteles.length > 0 ? auxHotelid.toString() : "-1"
+      if (listaHoteles.length > 0) {
+        setDdlHotelReceta(listaHoteles[0].id.toString())
       }
-
-      setHoteles(fetchedHoteles)
-      setDdlHotelReceta(defaultSelectedValue) // Aplicar el valor por defecto
     } catch (error: any) {
       console.error("Error cargando hoteles:", error)
       setError(`Error al cargar hoteles: ${error.message}`)
       setHoteles([])
-      setDdlHotelReceta("-1") // Fallback a "Todos" en caso de error
     }
   }
 
@@ -378,7 +396,7 @@ export default function RecetasPage() {
 
   const btnRecetaBuscar = async () => {
     setCurrentPage(1) // Resetear a la primera página al buscar
-    const hotelFilterId = ddlHotelReceta !== "-1" ? Number.parseInt(ddlHotelReceta, 10) : -1
+    const hotelFilterId = ddlHotelReceta ? Number.parseInt(ddlHotelReceta, 10) : -1
     await ejecutarBusqueda(txtRecetaNombre, hotelFilterId, ddlEstatusReceta, 1)
   }
 
@@ -387,7 +405,7 @@ export default function RecetasPage() {
     if (currentPage > 1) {
       const nuevaPagina = currentPage - 1
       setCurrentPage(nuevaPagina)
-      const hotelFilterId = ddlHotelReceta !== "-1" ? Number.parseInt(ddlHotelReceta, 10) : -1
+      const hotelFilterId = ddlHotelReceta ? Number.parseInt(ddlHotelReceta, 10) : -1
       await ejecutarBusqueda(txtRecetaNombre, hotelFilterId, ddlEstatusReceta, nuevaPagina)
     }
   }
@@ -396,16 +414,16 @@ export default function RecetasPage() {
     if (currentPage < totalPages) {
       const nuevaPagina = currentPage + 1
       setCurrentPage(nuevaPagina)
-      const hotelFilterId = ddlHotelReceta !== "-1" ? Number.parseInt(ddlHotelReceta, 10) : -1
+      const hotelFilterId = ddlHotelReceta ? Number.parseInt(ddlHotelReceta, 10) : -1
       await ejecutarBusqueda(txtRecetaNombre, hotelFilterId, ddlEstatusReceta, nuevaPagina)
     }
   }
 
   const clearPlatillosBusqueda = () => {
     setTxtRecetaNombre("")
-    setDdlHotelReceta("-1") // Restablecer a "Todos"
     setDdlEstatusReceta("true") // Restablecer a "Activo"
     setCurrentPage(1)
+    cargarHoteles() // Recargar hoteles para restablecer el valor correcto
     cargarRecetasIniciales() // Recargar con filtros por defecto
   }
 
@@ -422,7 +440,7 @@ export default function RecetasPage() {
 
       toast.success(`Receta ${estadoActual ? "inactivada" : "activada"} correctamente`)
       // Recargar la página actual con los filtros actuales
-      const hotelFilterId = ddlHotelReceta !== "-1" ? Number.parseInt(ddlHotelReceta, 10) : -1
+      const hotelFilterId = ddlHotelReceta ? Number.parseInt(ddlHotelReceta, 10) : -1
       await ejecutarBusqueda(txtRecetaNombre, hotelFilterId, ddlEstatusReceta, currentPage)
     } catch (error) {
       console.error("Error cambiando estado:", error)
@@ -497,21 +515,23 @@ export default function RecetasPage() {
           <h1 className="text-3xl font-bold">Sub-Recetas</h1>
           <p className="text-lg text-muted-foreground">Gestión de Sub-Recetas</p>
         </div>
-        <Button
-          id="btnRecetaNuevo"
-          name="btnRecetaNuevo"
-          type="button"
-          onClick={btnRecetaNuevo}
-          style={{
-            backgroundColor: "#5d8f72",
-            color: "white",
-            border: "none",
-          }}
-          className="hover:bg-[#44785a] transition-opacity"
-        >
-          <BookOpen className="h-4 w-4 mr-2" />
-          Nueva Sub-Receta
-        </Button>
+        {sesion && [1, 2, 3, 4].includes(Number.parseInt(sesion.RolId?.toString() || "0", 10)) && (
+          <Button
+            id="btnRecetaNuevo"
+            name="btnRecetaNuevo"
+            type="button"
+            onClick={btnRecetaNuevo}
+            style={{
+              backgroundColor: "#5d8f72",
+              color: "white",
+              border: "none",
+            }}
+            className="hover:bg-[#44785a] transition-opacity"
+          >
+            <BookOpen className="h-4 w-4 mr-2" />
+            Nueva Sub-Receta
+          </Button>
+        )}
       </div>
 
       {/* Estadísticas */}
@@ -549,9 +569,12 @@ export default function RecetasPage() {
 
             <div className="flex-1 min-w-[200px]">
               <Label htmlFor="ddlHotelReceta">Hotel</Label>
-              <Select value={ddlHotelReceta} onValueChange={setDdlHotelReceta}>
+              <Select 
+                value={ddlHotelReceta} 
+                onValueChange={setDdlHotelReceta}
+              >
                 <SelectTrigger id="ddlHotelReceta" name="ddlHotelReceta">
-                  <SelectValue placeholder="Seleccione un hotel" />
+                  <SelectValue placeholder="Todos los Hoteles" />
                 </SelectTrigger>
                 <SelectContent>
                   {hoteles.map((hotel) => (
@@ -562,6 +585,7 @@ export default function RecetasPage() {
                 </SelectContent>
               </Select>
             </div>
+
 
             <div className="flex-1 min-w-[150px]">
               <Label htmlFor="ddlEstatusReceta">Estatus</Label>
@@ -645,24 +669,28 @@ export default function RecetasPage() {
                         <Button size="sm" variant="outline" onClick={() => handleViewRecetaDetails(receta.folio)}>
                           <Eye className="h-3 w-3" />
                         </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => router.push(`/recetas/${receta.folio}/editar`)}
-                        >
-                          <Edit className="h-3 w-3" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => toggleEstadoReceta(receta.folio, receta.activo)}
-                        >
-                          {receta.activo ? (
-                            <PowerOff className="h-3 w-3 text-red-500" />
-                          ) : (
-                            <Power className="h-3 w-3 text-green-500" />
-                          )}
-                        </Button>
+                        {sesion && [1, 2, 3, 4].includes(Number.parseInt(sesion.RolId?.toString() || "0", 10)) && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => router.push(`/recetas/${receta.folio}/editar`)}
+                          >
+                            <Edit className="h-3 w-3" />
+                          </Button>
+                        )}
+                        {sesion && [1, 2, 3, 4].includes(Number.parseInt(sesion.RolId?.toString() || "0", 10)) && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => toggleEstadoReceta(receta.folio, receta.activo)}
+                          >
+                            {receta.activo ? (
+                              <PowerOff className="h-3 w-3 text-red-500" />
+                            ) : (
+                              <Power className="h-3 w-3 text-green-500" />
+                            )}
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

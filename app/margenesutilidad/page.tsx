@@ -34,6 +34,7 @@ import {
   obtenerDetallesPlatilloTooltip,
   obtenerDetallesRecetaTooltip,
 } from "@/app/actions/dashboard-actions"
+import { useAuth } from "@/contexts/auth-context"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -176,6 +177,7 @@ const ITEMS_PER_PAGE = 20
 const todosMesesDelAño = mesesDelAño
 
 export default function MargenesUtilidadPage() {
+  const { user } = useAuth()
   const [menuOptions, setMenuOptions] = useState<MenuOption[]>([])
   const [selectedMenuId, setSelectedMenuId] = useState<string>("-1")
   const [platilloSearchTerm, setPlatilloSearchTerm] = useState<string>("")
@@ -316,16 +318,25 @@ export default function MargenesUtilidadPage() {
   // Cargar hoteles al inicializar
   useEffect(() => {
     async function loadHoteles() {
-      const hotelesData = await obtenerHotelesPorRol()
+      if (!user) return
+      
+      const rolId = Number.parseInt(user.RolId?.toString() || "0", 10)
+      const hotelIdSesion = Number.parseInt(user.HotelId?.toString() || "0", 10)
+      
+      const hotelesData = await obtenerHotelesPorRol(rolId, hotelIdSesion)
       if (hotelesData.success) {
         setHoteles(hotelesData.data)
-        if (hotelesData.data.length > 0) {
+        
+        // Si solo hay un hotel (usuario con rol 5 o 6), seleccionarlo automáticamente
+        if (hotelesData.data.length === 1) {
+          setHotelSeleccionado(hotelesData.data[0].id.toString())
+        } else if (hotelesData.data.length > 0) {
           setHotelSeleccionado(hotelesData.data[0].id.toString())
         }
       }
     }
     loadHoteles()
-  }, [])
+  }, [user])
 
   // Cargar datos de variación de costos cuando cambien los filtros
   useEffect(() => {

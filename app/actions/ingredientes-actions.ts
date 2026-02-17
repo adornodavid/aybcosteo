@@ -156,7 +156,7 @@ export async function obtenerCategorias() {
   }
 }
 
-export async function obtenerHoteles() {
+export async function obtenerHoteles(rolId?: number, hotelId?: number) {
   try {
     // Verificar que las variables de entorno estén disponibles
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -164,18 +164,39 @@ export async function obtenerHoteles() {
       return { success: false, data: [], error: "Configuración de Supabase faltante" }
     }
 
-    const { data, error } = await supabaseAdmin // Usando supabaseAdmin
-      .from("hoteles")
-      .select("id, nombre")
-      .eq("activo", true)
-      .order("nombre", { ascending: true })
+    // Lógica de filtrado por rol
+    // Si rolId es 1, 2, 3 o 4: mostrar todos los hoteles
+    // Si rolId es 5 o 6: mostrar solo el hotel asignado al usuario
+    if (rolId && hotelId && ![1, 2, 3, 4].includes(rolId)) {
+      // Filtrar por el hotel del usuario
+      const { data, error } = await supabaseAdmin
+        .from("hoteles")
+        .select("id, nombre")
+        .eq("activo", true)
+        .eq("id", hotelId)
+        .order("nombre", { ascending: true })
 
-    if (error) {
-      console.error("Error en query hoteles:", error)
-      return { success: false, data: [], error: error.message }
+      if (error) {
+        console.error("Error en query hotel específico:", error)
+        return { success: false, data: [], error: error.message }
+      }
+
+      return { success: true, data: data || [] }
+    } else {
+      // Mostrar todos los hoteles
+      const { data, error } = await supabaseAdmin
+        .from("hoteles")
+        .select("id, nombre")
+        .eq("activo", true)
+        .order("nombre", { ascending: true })
+
+      if (error) {
+        console.error("Error en query hoteles:", error)
+        return { success: false, data: [], error: error.message }
+      }
+
+      return { success: true, data: data || [] }
     }
-
-    return { success: true, data: data || [] }
   } catch (error: any) {
     console.error("Error obteniendo hoteles:", error)
     return { success: false, data: [], error: error.message || "Error desconocido" }
