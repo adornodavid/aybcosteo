@@ -98,6 +98,7 @@ export default function RecetasPage() {
     console.log("[v0] Inicializando ddlHotelReceta con valor vacío")
     return ""
   }) // Valor por defecto vacío
+  const [ddlHotelesReceta, setDdlHotelesReceta] = useState("")
   const [ddlEstatusReceta, setDdlEstatusReceta] = useState("true") // Valor por defecto "Activo"
 
   // Estados de paginación
@@ -567,6 +568,26 @@ export default function RecetasPage() {
                 disabled={![1, 2, 3, 4].includes(userRolId)}
               >
                 <SelectTrigger id="ddlHotelReceta" name="ddlHotelReceta">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {hoteles.map((hotel) => (
+                    <SelectItem key={hotel.id} value={hotel.id.toString()}>
+                      {hotel.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex-1 min-w-[200px]">
+              <Label htmlFor="ddlHotelesReceta">Hoteles</Label>
+              <Select 
+                value={ddlHotelesReceta} 
+                onValueChange={setDdlHotelesReceta}
+                disabled={![1, 2, 3, 4].includes(userRolId)}
+              >
+                <SelectTrigger id="ddlHotelesReceta" name="ddlHotelesReceta">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
