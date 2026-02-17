@@ -85,7 +85,8 @@ export default function RecetasPage() {
   const [loading, setLoading] = useState(true)
   const [searching, setSearching] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [userRolId, setUserRolId] = useState<number>(0)
+  
+  const esAdmin = sesion && [1, 2, 3, 4].includes(Number.parseInt(sesion.RolId?.toString() || "0", 10))
 
   // Estados de datos
   const [hoteles, setHoteles] = useState<Hotel[]>([])
@@ -94,10 +95,7 @@ export default function RecetasPage() {
 
   // Estados de filtros
   const [txtRecetaNombre, setTxtRecetaNombre] = useState("")
-  const [ddlHotelReceta, setDdlHotelReceta] = useState(() => {
-    console.log("[v0] Inicializando ddlHotelReceta con valor vacío")
-    return ""
-  }) // Valor por defecto vacío
+  const [ddlHotelReceta, setDdlHotelReceta] = useState("-1")
   const [ddlHotelesReceta, setDdlHotelesReceta] = useState("")
   const [ddlEstatusReceta, setDdlEstatusReceta] = useState("true") // Valor por defecto "Activo"
 
@@ -156,53 +154,28 @@ export default function RecetasPage() {
 
       const rolId = Number.parseInt(sesion.RolId?.toString() || "0", 10)
       const hotelIdSesion = Number.parseInt(sesion.HotelId?.toString() || "0", 10)
-      
-      // Guardar el rolId para validaciones de UI
-      setUserRolId(rolId)
 
-      let auxHotelid: number
+      let query = supabase.from("hoteles").select("id, nombre").order("nombre", { ascending: true })
+
+      // Si el rol no es admin, filtrar por el hotel del usuario
       if (![1, 2, 3, 4].includes(rolId)) {
-        auxHotelid = hotelIdSesion
-      } else {
-        auxHotelid = -1
+        query = query.eq("id", hotelIdSesion)
       }
 
-      let fetchedHoteles: Hotel[] = []
-      let defaultSelectedValue = ""
+      const { data, error } = await query
 
-      if (auxHotelid === -1) {
-        // Si auxHotelid es -1, obtener todos los hoteles sin agregar opción "Todos"
-        const { data, error } = await supabase.from("hoteles").select("id, nombre").order("nombre", { ascending: true })
+      if (error) throw error
 
-        if (error) throw error
-
-        fetchedHoteles = data || []
-        // Seleccionar el primer hotel del listado si existe
-        defaultSelectedValue = fetchedHoteles.length > 0 ? fetchedHoteles[0].id.toString() : ""
-      } else {
-        // Si auxHotelid tiene un valor específico, filtrar por ese hotel
-        const { data, error } = await supabase
-          .from("hoteles")
-          .select("id, nombre")
-          .eq("id", auxHotelid)
-          .order("nombre", { ascending: true })
-
-        if (error) throw error
-
-        fetchedHoteles = data || []
-        // Seleccionar el hotel encontrado
-        defaultSelectedValue = fetchedHoteles.length > 0 ? fetchedHoteles[0].id.toString() : ""
+      setHoteles(data || [])
+      
+      // Establecer valor por defecto
+      if (data && data.length > 0) {
+        setDdlHotelReceta(data[0].id.toString())
       }
-
-      console.log("[v0] cargarHoteles - Estableciendo hotel:", defaultSelectedValue, "Hoteles:", fetchedHoteles)
-      setHoteles(fetchedHoteles)
-      setDdlHotelReceta(defaultSelectedValue) // Aplicar el valor por defecto
-      console.log("[v0] cargarHoteles - Después de setDdlHotelReceta")
     } catch (error: any) {
       console.error("Error cargando hoteles:", error)
       setError(`Error al cargar hoteles: ${error.message}`)
       setHoteles([])
-      setDdlHotelReceta("") // Fallback a vacío en caso de error
     }
   }
 
@@ -565,7 +538,7 @@ export default function RecetasPage() {
               <Select 
                 value={ddlHotelReceta} 
                 onValueChange={setDdlHotelReceta}
-                disabled={![1, 2, 3, 4].includes(userRolId)}
+                disabled={!esAdmin}
               >
                 <SelectTrigger id="ddlHotelReceta" name="ddlHotelReceta">
                   <SelectValue />
