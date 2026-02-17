@@ -124,6 +124,14 @@ export default function RecetasPage() {
     }
   }, [sesion])
 
+  // Sincronizar hotel seleccionado cuando los hoteles se cargan
+  useEffect(() => {
+    if (hoteles.length > 0 && ddlHotelReceta === "-1") {
+      console.log("[v0] useEffect hoteles - Estableciendo primer hotel:", hoteles[0].id.toString())
+      setDdlHotelReceta(hoteles[0].id.toString())
+    }
+  }, [hoteles])
+
   const cargarSesion = async () => {
     try {
       const datosSession = await getSession()
