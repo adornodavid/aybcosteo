@@ -69,6 +69,7 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
   const [showEditPriceDialog, setShowEditPriceDialog] = useState(false)
   const [platilloToEdit, setPlatilloToEdit] = useState<MenuPlatillo | null>(null)
   const [editPrecioVenta, setEditPrecioVenta] = useState<string>("")
+  const [ivaRate, setIvaRate] = useState<number>(1.16)
 
   const fetchNombreMenu = useCallback(async () => {
     const res = await obtenerNombreMenu(menuId)
@@ -80,6 +81,32 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
         description: res.error || "Error al cargar el nombre del menú.",
         variant: "destructive",
       })
+    }
+
+    // Obtener restauranteid del menú y luego hotelid del restaurante para determinar la tasa de IVA
+    try {
+      const supabase = createClient()
+      const { data: menuData } = await supabase
+        .from("menus")
+        .select("restauranteid")
+        .eq("id", menuId)
+        .single()
+
+      if (menuData?.restauranteid) {
+        const { data: restauranteData } = await supabase
+          .from("restaurantes")
+          .select("hotelid")
+          .eq("id", menuData.restauranteid)
+          .single()
+
+        if (restauranteData?.hotelid === 14) {
+          setIvaRate(1.08)
+        } else {
+          setIvaRate(1.16)
+        }
+      }
+    } catch {
+      setIvaRate(1.16)
     }
   }, [menuId, toast])
 
@@ -494,7 +521,7 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
                         </Button>
                       </div>
                       <p className="text-gray-600 text-xs">
-                        Con IVA: ${((platillo.precioventa ?? 0) * 1.16).toFixed(2)}
+                        Con IVA: ${((platillo.precioventa ?? 0) * ivaRate).toFixed(2)}
                       </p>
                     </div>
                   </CardContent>
@@ -820,7 +847,7 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
                 id="txtPrecioConIva"
                 name="txtPrecioConIva"
                 type="number"
-                value={editPrecioVenta ? (Number.parseFloat(editPrecioVenta) * 1.16).toFixed(2) : ""}
+                value={editPrecioVenta ? (Number.parseFloat(editPrecioVenta) * ivaRate).toFixed(2) : ""}
                 className="col-span-3"
                 disabled
                 readOnly
