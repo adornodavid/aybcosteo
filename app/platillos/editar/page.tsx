@@ -958,6 +958,15 @@ export default function EditarPlatilloPage() {
       return
     }
 
+    const precioConIVAValidacion = Number(precioConIVA)
+    if (precioConIVAValidacion < (precioSugeridoPlatillo || 0)) {
+      setErrorMessage(
+        `El precio con IVA no puede ser menor al precio mínimo sugerido ($${(precioSugeridoPlatillo || 0).toFixed(2)}).`,
+      )
+      setShowErrorDialog(true)
+      return
+    }
+
     setIsSubmitting(true)
     setShowAnimation(true)
 

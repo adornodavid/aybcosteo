@@ -588,9 +588,9 @@ export default function NuevoPlatilloPage() {
     const precioConIVANum = Number(precioConIVA)
     const costoPorcentualNum = Number(costoPorcentual)
 
-    if (precioVentaNum < (precioSugeridoPlatillo || 0)) {
+    if (precioConIVANum < (precioSugeridoPlatillo || 0)) {
       setErrorMessage(
-        `El precio de venta no puede ser menor al precio mínimo sugerido ($${(precioSugeridoPlatillo || 0).toFixed(2)}).`,
+        `El precio con IVA no puede ser menor al precio mínimo sugerido ($${(precioSugeridoPlatillo || 0).toFixed(2)}).`,
       )
       setShowErrorDialog(true)
       return

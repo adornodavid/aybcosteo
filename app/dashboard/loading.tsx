@@ -1,16 +1,11 @@
-export default function DashboardLoading() {
+export default function Loading() {
   return (
-    <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
-      <div className="animate-pulse">
-        <div className="h-8 bg-gray-200 rounded w-1/3 mb-6"></div>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-32 bg-gray-200 rounded"></div>
-          ))}
-        </div>
-        <div className="h-96 bg-gray-200 rounded mb-6"></div>
-        <div className="h-64 bg-gray-200 rounded"></div>
-      </div>
+    <div className="flex flex-col items-center justify-center min-h-screen">
+      <img
+        src="https://nxtrsibnomdqmzcrwedc.supabase.co/storage/v1/object/public/imagenes/AnimationGif/CargarPage.gif"
+        alt="Cargando..."
+        className="w-40 h-40 object-contain"
+      />
     </div>
   )
 }

@@ -1,10 +1,11 @@
-import { Loader2 } from "lucide-react"
-
 export default function Loading() {
   return (
-    <div className="flex items-center justify-center min-h-screen">
-      <Loader2 className="h-10 w-10 animate-spin text-primary" />
-      <span className="ml-2 text-lg text-muted-foreground">Cargando ingredientes...</span>
+    <div className="flex flex-col items-center justify-center min-h-screen">
+      <img
+        src="https://nxtrsibnomdqmzcrwedc.supabase.co/storage/v1/object/public/imagenes/AnimationGif/CargarPage.gif"
+        alt="Cargando..."
+        className="w-40 h-40 object-contain"
+      />
     </div>
   )
 }
