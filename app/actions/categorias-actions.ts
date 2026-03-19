@@ -3,13 +3,14 @@
 import { createClient } from "@supabase/supabase-js"
 import { revalidatePath } from "next/cache"
 
-// Inicializar el cliente Supabase con la clave de servicio para operaciones de administrador
-const supabaseAdmin = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+function getSupabaseAdmin() {
+  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+}
 
 // Función para obtener todas las categorías de 'categoriaingredientes'
 export async function obtenerCategorias() {
   try {
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await getSupabaseAdmin()
       .from("categoriaingredientes")
       .select("*") // Seleccionar todas las columnas como solicitaste
       .order("descripcion")
@@ -34,7 +35,7 @@ export async function crearCategoria(prevState: any, formData: FormData) {
       return { success: false, error: "La descripción de la categoría es requerida." }
     }
 
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await getSupabaseAdmin()
       .from("categoriaingredientes")
       .insert({ descripcion: descripcion.trim(), activo: true }) // Asumiendo 'activo' existe y se inicializa en true
       .select()
@@ -62,7 +63,7 @@ export async function actualizarCategoria(id: number, prevState: any, formData: 
       return { success: false, error: "La descripción de la categoría es requerida." }
     }
 
-    const { error } = await supabaseAdmin
+    const { error } = await getSupabaseAdmin()
       .from("categoriaingredientes")
       .update({ descripcion: descripcion.trim() })
       .eq("id", id)
@@ -84,7 +85,7 @@ export async function actualizarCategoria(id: number, prevState: any, formData: 
 export async function eliminarCategoria(id: number) {
   try {
     // Asumiendo que 'activo' es una columna para un borrado lógico
-    const { error } = await supabaseAdmin.from("categoriaingredientes").update({ activo: false }).eq("id", id)
+    const { error } = await getSupabaseAdmin().from("categoriaingredientes").update({ activo: false }).eq("id", id)
 
     if (error) {
       console.error("Error al eliminar categoría:", error)
