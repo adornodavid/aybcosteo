@@ -381,6 +381,60 @@ export async function registrarPlatilloBasico(formData: FormData) {
   }
 }
 
+export async function actualizarPlatilloBasico(platilloId: number, formData: FormData) {
+  const supabase = createServerSupabaseClient()
+  const nombre = formData.get("nombre") as string
+  const descripcion = formData.get("descripcion") as string
+  const instruccionespreparacion = formData.get("instruccionespreparacion") as string
+  const tiempopreparacion = formData.get("tiempopreparacion") as string
+  const imagen = formData.get("imagen") as File | null
+
+  let imgUrl: string | null = null
+  if (imagen && imagen.size > 0) {
+    try {
+      const fileExt = imagen.name.split(".").pop()
+      const fileName = `${uuidv4()}.${fileExt}`
+      const filePath = `Platillos/${fileName}`
+      const { error: uploadError } = await supabase.storage.from("imagenes").upload(filePath, imagen)
+      if (uploadError) throw new Error(`Error al subir imagen: ${uploadError.message}`)
+
+      const { data: urlData } = supabase.storage.from("imagenes").getPublicUrl(filePath)
+      imgUrl = urlData.publicUrl
+    } catch (uploadError: any) {
+      console.error("Error al subir imagen:", uploadError)
+      return { success: false, error: `Error al subir imagen: ${uploadError.message}` }
+    }
+  }
+
+  try {
+    const updatePayload: any = {
+      nombre,
+      descripcion,
+      instruccionespreparacion: instruccionespreparacion || null,
+      tiempopreparacion: tiempopreparacion ? Number(tiempopreparacion) : null,
+    }
+    if (imgUrl) updatePayload.imgurl = imgUrl
+
+    const { error: updateError } = await supabase
+      .from("platillos")
+      .update(updatePayload)
+      .eq("id", platilloId)
+
+    if (updateError) throw updateError
+
+    return { success: true, imgUrl }
+  } catch (e: any) {
+    console.error("Error en actualizarPlatilloBasico:", e)
+    if (imgUrl) {
+      const filePath = imgUrl.split("/imagenes/")[1]
+      if (filePath) {
+        await supabase.storage.from("imagenes").remove([filePath])
+      }
+    }
+    return { success: false, error: e.message }
+  }
+}
+
 export async function agregarIngrediente(
   platilloId: number,
   ingredienteId: number,

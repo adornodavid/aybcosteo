@@ -4,12 +4,12 @@
   Imports
 ================================================== */
 import type React from "react"
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { toast } from "sonner"
 import Image from "next/image"
-import { v4 as uuidv4 } from "uuid" // Importar uuidv4
+import { v4 as uuidv4 } from "uuid"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -17,6 +17,8 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Textarea } from "@/components/ui/textarea"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Badge } from "@/components/ui/badge"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,10 +30,10 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Loader2, ArrowLeft, PlusCircle, Trash2, XCircle, HelpCircle } from "lucide-react"
-import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip" // Import TooltipProvider
+import { Loader2, ArrowLeft, PlusCircle, Trash2, XCircle, HelpCircle, Info } from "lucide-react"
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip"
 
-import { deleteImage } from "@/app/actions/recetas-image-actions" // Mantener deleteImage
+import { deleteImage } from "@/app/actions/recetas-image-actions"
 import {
   getPlatilloTotalCost,
   searchIngredientes as searchPlatilloIngredientes,
@@ -58,6 +60,8 @@ interface IngredientePlatillo {
   cantidad: number
   ingredientecostoparcial: number
   unidad: string
+  costounitario: number
+  costoUnitarioEfectivo: number
 }
 
 interface RecetaPlatillo {
@@ -66,6 +70,7 @@ interface RecetaPlatillo {
   nombre: string
   recetacostoparcial: number
   cantidad: number
+  costoUnitarioEfectivo: number
 }
 
 interface DropdownItem {
@@ -91,16 +96,24 @@ interface UnidadMedidaItem {
   calculoconversion: number
 }
 
+interface MenuAsociado {
+  menuid: number
+  nombre: string
+  precioventa: number | null
+  precioconiva: number | null
+}
+
 export default function EditarPlatilloPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const platilloId = searchParams.get("getPlatilloId")
-  //const menuId = searchParams.get("getMenuId") // Obtener menuId de los parámetros
   const menuNombre = searchParams.get("getMenuNombre")
 
-  const [currentStep, setCurrentStep] = useState(1)
+  const [activeTab, setActiveTab] = useState("informacion")
   const [platilloData, setPlatilloData] = useState<PlatilloData | null>(null)
+  const [savedPlatilloData, setSavedPlatilloData] = useState<PlatilloData | null>(null)
   const [menuId, setMenuId] = useState<number | null>(null)
+  const [menusAsociados, setMenusAsociados] = useState<MenuAsociado[]>([])
   const [loading, setLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showAnimation, setShowAnimation] = useState(false)
@@ -109,10 +122,17 @@ export default function EditarPlatilloPage() {
   const [showErrorDialog, setShowErrorDialog] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
 
+  // Estado para modal de éxito
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false)
+
+  // Modal de aviso: precio se propaga a multiples menús
+  const [showMultiMenuDialog, setShowMultiMenuDialog] = useState(false)
+  const [multiMenuCount, setMultiMenuCount] = useState(0)
+
   // Estados para manejo de imagen
-  const [imageUrl, setImageUrl] = useState<string | null>(null) // URL de la imagen guardada en DB
-  const [imagenPreview, setImagenPreview] = useState<string | null>(null) // URL para previsualización local
-  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null) // Archivo de imagen seleccionado
+  const [imageUrl, setImageUrl] = useState<string | null>(null)
+  const [imagenPreview, setImagenPreview] = useState<string | null>(null)
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null)
 
   const [ingredientesPlatillo, setIngredientesPlatillo] = useState<IngredientePlatillo[]>([])
   const [ingredientesDropdown, setIngredientesDropdown] = useState<DropdownItem[]>([])
@@ -146,19 +166,22 @@ export default function EditarPlatilloPage() {
   const [costoAdministrativoPlatillo, setCostoAdministrativoPlatillo] = useState<number | null>(null)
   const [precioSugeridoPlatillo, setPrecioSugeridoPlatillo] = useState<number | null>(null)
 
-  // Nuevos estados para los inputs adicionales
   const [precioVenta, setPrecioVenta] = useState<string>("")
   const [costoPorcentual, setCostoPorcentual] = useState<string>("")
   const [precioConIVA, setPrecioConIVA] = useState<string>("")
 
-  const canAdvanceToStep2 = useMemo(() => {
-    return platilloData?.nombre && platilloData?.descripcion
-  }, [platilloData])
+  // Track if tab data has been loaded
+  const [ingredientesLoaded, setIngredientesLoaded] = useState(false)
+  const [costosLoaded, setCostosLoaded] = useState(false)
 
-  const canFinalizePlatillo = useMemo(() => {
-    return ingredientesPlatillo.length >= 2
-  }, [ingredientesPlatillo])
+  const formatCurrency = (amount: number | null) =>
+    new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(amount || 0)
 
+  /* ==================================================
+    Data Loading
+  ================================================== */
+
+  // Load platillo basic data on mount
   useEffect(() => {
     const fetchPlatilloData = async () => {
       if (!platilloId) {
@@ -186,12 +209,11 @@ export default function EditarPlatilloPage() {
 
         if (data) {
           setPlatilloData(data)
-          setImageUrl(data.imgurl) // Establecer la URL de la imagen guardada
-          setImagenPreview(data.imgurl) // También establecer la previsualización inicial
+          setSavedPlatilloData(data)
+          setImageUrl(data.imgurl)
+          setImagenPreview(data.imgurl)
         }
 
-        console.log("nombre", menuNombre)
-        // Obtener el menuId basándose en el nombre del menú si se proporciona
         if (menuNombre) {
           const { data: menuData, error: menuError } = await supabase
             .from("menus")
@@ -204,10 +226,8 @@ export default function EditarPlatilloPage() {
             toast.error("Error al obtener información del menú.")
           } else if (menuData) {
             setMenuId(menuData.id)
-            console.log("MenuId obtenido:", menuData.id)
           }
         } else {
-          // Si no se proporciona menuNombre, intentar obtener el primer menú asociado al platillo
           const { data: platilloMenuData, error: platilloMenuError } = await supabase
             .from("platillosxmenu")
             .select(`
@@ -222,8 +242,29 @@ export default function EditarPlatilloPage() {
             console.error("Error al obtener menú asociado al platillo:", platilloMenuError)
           } else if (platilloMenuData) {
             setMenuId(platilloMenuData.menuid)
-            console.log("MenuId obtenido desde platillosxmenu:", platilloMenuData.menuid)
           }
+        }
+
+        // Load associated menus for the info panel
+        const { data: menusData, error: menusError } = await supabase
+          .from("platillosxmenu")
+          .select(`
+            menuid,
+            precioventa,
+            precioconiva,
+            menus!inner(nombre)
+          `)
+          .eq("platilloid", platilloId)
+
+        if (!menusError && menusData) {
+          setMenusAsociados(
+            menusData.map((m: any) => ({
+              menuid: m.menuid,
+              nombre: m.menus.nombre,
+              precioventa: m.precioventa,
+              precioconiva: m.precioconiva,
+            })),
+          )
         }
       } catch (error) {
         console.error("Error inesperado al cargar receta:", error)
@@ -237,183 +278,176 @@ export default function EditarPlatilloPage() {
     fetchPlatilloData()
   }, [platilloId, menuNombre, router])
 
-  useEffect(() => {
-    const loadStep2Data = async () => {
-      if (!platilloId || currentStep !== 2) return
+  // Load ingredientes/recetas data when tab is selected
+  const loadIngredientesData = useCallback(async () => {
+    if (!platilloId || ingredientesLoaded) return
 
-      setLoading(true)
-      try {
-        const { data: hotelData, error: hotelError } = await supabase
-          .from("platillosxmenu")
-          .select(
-            `
-            menus!inner(
-              restaurantes!inner(
-                hoteles!inner(id)
-              )
+    setLoading(true)
+    try {
+      const { data: hotelData, error: hotelError } = await supabase
+        .from("platillosxmenu")
+        .select(`
+          menus!inner(
+            restaurantes!inner(
+              hoteles!inner(id)
             )
-          `,
           )
-          .eq("platilloid", platilloId)
-          .limit(1)
-          .single()
+        `)
+        .eq("platilloid", platilloId)
+        .limit(1)
+        .single()
 
-        let hotelIdForDropdowns: number | null = null
-        if (hotelError) {
-          console.error("Error al obtener HotelId para dropdowns:", hotelError)
-          toast.error("Error al cargar datos de hotel para dropdowns.")
-        } else if (hotelData) {
-          hotelIdForDropdowns = hotelData.menus.restaurantes.hoteles.id
-        }
+      let hotelIdForDropdowns: number | null = null
+      if (hotelError) {
+        console.error("Error al obtener HotelId para dropdowns:", hotelError)
+        toast.error("Error al cargar datos de hotel para dropdowns.")
+      } else if (hotelData) {
+        hotelIdForDropdowns = hotelData.menus.restaurantes.hoteles.id
+      }
 
-        const { data: unidadesData, error: unidadesError } = await supabase
-          .from("tipounidadmedida")
-          .select("id, descripcion, calculoconversion")
-          .order("descripcion")
+      const { data: unidadesData, error: unidadesError } = await supabase
+        .from("tipounidadmedida")
+        .select("id, descripcion, calculoconversion")
+        .order("descripcion")
 
-        if (unidadesError) {
-          console.error("Error al cargar unidades de medida dropdown:", unidadesError)
-          toast.error("Error al cargar unidades de medida.")
-        } else {
-          setUnidadesMedidaDropdown(unidadesData || [])
-        }
+      if (unidadesError) {
+        console.error("Error al cargar unidades de medida dropdown:", unidadesError)
+        toast.error("Error al cargar unidades de medida.")
+      } else {
+        setUnidadesMedidaDropdown(unidadesData || [])
+      }
 
-        if (hotelIdForDropdowns !== null) {
-          const recetasData = await getRecetasForDropdown(hotelIdForDropdowns)
-          setRecetasDropdown(recetasData)
-        }
+      if (hotelIdForDropdowns !== null) {
+        const recetasData = await getRecetasForDropdown(hotelIdForDropdowns)
+        setRecetasDropdown(recetasData)
+      }
 
-        const { data: existingIngredientes, error: ingXPlatilloError } = await supabase
-          .from("ingredientesxplatillo")
-          .select(
-            `
+      const { data: existingIngredientes, error: ingXPlatilloError } = await supabase
+        .from("ingredientesxplatillo")
+        .select(`
           id, cantidad, ingredientecostoparcial,
           ingredientes(id, nombre, tipounidadmedida(descripcion), codigo, costo)
-        `,
-          )
-          .eq("platilloid", platilloId)
+        `)
+        .eq("platilloid", platilloId)
 
-        if (ingXPlatilloError) {
-          console.error("Error al cargar ingredientes de la receta:", ingXPlatilloError)
-          toast.error("Error al cargar ingredientes de la receta.")
-        } else {
-          setIngredientesPlatillo(
-            (existingIngredientes || []).map((item: any) => ({
-              id: item.id,
-              ingredienteid: item.ingredientes.id,
-              nombre: item.ingredientes.nombre,
-              cantidad: item.cantidad,
-              ingredientecostoparcial: item.ingredientecostoparcial,
-              unidad: item.ingredientes?.tipounidadmedida?.descripcion,
-            })),
-          )
-        }
+      if (ingXPlatilloError) {
+        console.error("Error al cargar ingredientes de la receta:", ingXPlatilloError)
+        toast.error("Error al cargar ingredientes de la receta.")
+      } else {
+        setIngredientesPlatillo(
+          (existingIngredientes || []).map((item: any) => ({
+            id: item.id,
+            ingredienteid: item.ingredientes.id,
+            nombre: item.ingredientes.nombre,
+            cantidad: item.cantidad,
+            ingredientecostoparcial: item.ingredientecostoparcial,
+            unidad: item.ingredientes?.tipounidadmedida?.descripcion,
+            costounitario: item.ingredientes?.costo || 0,
+            costoUnitarioEfectivo:
+              item.cantidad && item.cantidad > 0 ? item.ingredientecostoparcial / item.cantidad : 0,
+          })),
+        )
+      }
 
-        const { data: existingRecetas, error: recXPlatilloError } = await supabase
-          .from("recetasxplatillo")
-          .select(
-            `
+      const { data: existingRecetas, error: recXPlatilloError } = await supabase
+        .from("recetasxplatillo")
+        .select(`
           id, recetacostoparcial, cantidad,
           recetas(id, nombre)
-        `,
-          )
-          .eq("platilloid", platilloId)
+        `)
+        .eq("platilloid", platilloId)
 
-        if (recXPlatilloError) {
-          console.error("Error al cargar sub-recetas de la receta:", recXPlatilloError)
-          toast.error("Error al cargar sub-recetas de la receta.")
-        } else {
-          setRecetasPlatillo(
-            (existingRecetas || []).map((item: any) => ({
-              id: item.id,
-              recetaid: item.recetas.id,
-              nombre: item.recetas.nombre,
-              recetacostoparcial: item.recetacostoparcial,
-              cantidad: item.cantidad,
-            })),
-          )
-        }
-      } catch (error) {
-        console.error("Error inesperado al cargar datos de la Etapa 2:", error)
-        toast.error("Error inesperado al cargar datos de la Etapa 2.")
-      } finally {
-        setLoading(false)
+      if (recXPlatilloError) {
+        console.error("Error al cargar sub-recetas de la receta:", recXPlatilloError)
+        toast.error("Error al cargar sub-recetas de la receta.")
+      } else {
+        setRecetasPlatillo(
+          (existingRecetas || []).map((item: any) => ({
+            id: item.id,
+            recetaid: item.recetas.id,
+            nombre: item.recetas.nombre,
+            recetacostoparcial: item.recetacostoparcial,
+            cantidad: item.cantidad,
+            costoUnitarioEfectivo:
+              item.cantidad && item.cantidad > 0 ? item.recetacostoparcial / item.cantidad : 0,
+          })),
+        )
       }
+
+      setIngredientesLoaded(true)
+    } catch (error) {
+      console.error("Error inesperado al cargar datos de ingredientes:", error)
+      toast.error("Error inesperado al cargar datos de ingredientes.")
+    } finally {
+      setLoading(false)
     }
+  }, [platilloId, ingredientesLoaded])
 
-    loadStep2Data()
-  }, [platilloId, currentStep])
+  // Load costos data when tab is selected
+  const loadCostosData = useCallback(async () => {
+    if (!platilloId || costosLoaded) return
 
+    setLoading(true)
+    try {
+      const { totalCost, costoAdministrativo, precioSugerido } = await getPlatilloTotalCost(Number(platilloId))
+      setTotalCostoPlatillo(totalCost)
+      setCostoAdministrativoPlatillo(costoAdministrativo)
+      setPrecioSugeridoPlatillo(precioSugerido)
+
+      const { data: platilloMenuData, error: platilloMenuError } = await supabase
+        .from("platillosxmenu")
+        .select("precioventa, precioconiva")
+        .eq("platilloid", platilloId)
+        .eq("menuid", menuId)
+        .limit(1)
+        .single()
+
+      if (!platilloMenuError && platilloMenuData) {
+        if (platilloMenuData.precioventa) {
+          const Costoporcentual = (costoAdministrativo / platilloMenuData.precioventa) * 100
+          setCostoPorcentual(Costoporcentual.toFixed(2))
+          setPrecioVenta(platilloMenuData.precioventa.toString())
+
+          const precioConIVACalculado = platilloMenuData.precioventa * 0.16 + platilloMenuData.precioventa
+          setPrecioConIVA(precioConIVACalculado.toFixed(2))
+        }
+        if (platilloMenuData.precioconiva) {
+          setPrecioConIVA(platilloMenuData.precioconiva.toString())
+        }
+      }
+
+      setCostosLoaded(true)
+    } catch (error) {
+      console.error("Error al cargar costos:", error)
+      toast.error("Error al cargar costos para el resumen.")
+    } finally {
+      setLoading(false)
+    }
+  }, [platilloId, menuId, costosLoaded])
+
+  // Handle tab change - load data on demand
   useEffect(() => {
-    const loadStep3Data = async () => {
-      if (!platilloId || currentStep !== 3) return
-
-      setLoading(true)
-      try {
-        const { totalCost, costoAdministrativo, precioSugerido } = await getPlatilloTotalCost(Number(platilloId))
-        setTotalCostoPlatillo(totalCost)
-        setCostoAdministrativoPlatillo(costoAdministrativo)
-        setPrecioSugeridoPlatillo(precioSugerido)
-
-        // Cargar precio de venta existente si existe
-        const { data: platilloMenuData, error: platilloMenuError } = await supabase
-          .from("platillosxmenu")
-          .select("precioventa, precioconiva")
-          .eq("platilloid", platilloId)
-          .eq("menuid", menuId)
-          .limit(1)
-          .single()
-
-        if (!platilloMenuError && platilloMenuData) {
-          if (platilloMenuData.precioventa) {
-            const Costoporcentual = (costoAdministrativo / platilloMenuData.precioventa) * 100
-            setCostoPorcentual(Costoporcentual.toFixed(2))
-            setPrecioVenta(platilloMenuData.precioventa.toString())
-            // Calcular automáticamente los otros valores
-
-            /*const costoPorcentualCalculado = calcularCostoPorcentual(
-              costoAdministrativo || 0,
-              platilloMenuData.precioventa,
-            )
-            */
-            console.log("wwwwa", menuId)
-            console.log("wa", platilloMenuData.precioventa)
-
-            const precioConIVACalculado = platilloMenuData.precioventa * 0.16 + platilloMenuData.precioventa
-            setPrecioConIVA(precioConIVACalculado.toFixed(2))
-            //const precioConIVACalculado = calcularPrecioConIVA(platilloMenuData.precioventa)
-            //setCostoPorcentual(costoPorcentualCalculado.toFixed(2))
-            //setPrecioConIVA(precioConIVACalculado.toFixed(2))
-          }
-          if (platilloMenuData.precioconiva) {
-            setPrecioConIVA(platilloMenuData.precioconiva.toString())
-          }
-        }
-      } catch (error) {
-        console.error("Error al cargar costos para la Etapa 3:", error)
-        toast.error("Error al cargar costos para el resumen.")
-      } finally {
-        setLoading(false)
-      }
+    if (activeTab === "ingredientes" || activeTab === "subrecetas") {
+      loadIngredientesData()
+    } else if (activeTab === "costos") {
+      loadIngredientesData() // Need ingredientes for final save
+      loadCostosData()
     }
+  }, [activeTab, loadIngredientesData, loadCostosData])
 
-    loadStep3Data()
-  }, [platilloId, currentStep])
-
+  // Debounced ingredient search
   useEffect(() => {
     const delayDebounceFn = setTimeout(async () => {
       if (platilloId && ingredienteSearchTerm.length >= 2) {
         const { data: hotelData, error: hotelError } = await supabase
           .from("platillosxmenu")
-          .select(
-            `
+          .select(`
             menus!inner(
               restaurantes!inner(
                 hoteles!inner(id)
               )
             )
-          `,
-          )
+          `)
           .eq("platilloid", platilloId)
           .limit(1)
           .single()
@@ -471,6 +505,10 @@ export default function EditarPlatilloPage() {
     }
   }, [selectedRecetaId, recetasDropdown])
 
+  /* ==================================================
+    Event Handlers
+  ================================================== */
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { id, value } = e.target
     setPlatilloData((prev) => (prev ? { ...prev, [id]: value } : null))
@@ -484,11 +522,7 @@ export default function EditarPlatilloPage() {
       const precioVentaNum = Number(value)
       const Costoporcentual = (costoAdministrativoPlatillo / precioVentaNum) * 100
       setCostoPorcentual(Costoporcentual.toFixed(2))
-      //const costoPorcentualCalculado = calcularCostoPorcentual(costoAdministrativoPlatillo, precioVentaNum)
-      //const precioConIVACalculado = calcularPrecioConIVA(precioVentaNum)
 
-      //setCostoPorcentual(costoPorcentualCalculado.toFixed(2))
-      //setPrecioConIVA(precioConIVACalculado.toFixed(2))
       const precioConIVACalculado = precioVentaNum * 0.16 + precioVentaNum
       setPrecioConIVA(precioConIVACalculado.toFixed(2))
     } else {
@@ -570,79 +604,66 @@ export default function EditarPlatilloPage() {
     }
   }
 
-  const handleNextStep = async () => {
-    if (currentStep === 1) {
-      if (!platilloData?.nombre || !platilloData?.descripcion) {
-        setErrorMessage("Favor de llenar la información faltante (Nombre y Descripción).")
-        setShowErrorDialog(true)
-        return
-      }
-
-      setIsSubmitting(true)
-      let finalImgUrl = platilloData.imgurl
-
-      try {
-        // Lógica de carga de imagen similar a registrarPlatilloBasico
-        if (selectedImageFile) {
-          const fileExt = selectedImageFile.name.split(".").pop()
-          const fileName = `${uuidv4()}.${fileExt}`
-          const filePath = `Platillos/${fileName}` // Usar la carpeta "Platillos"
-
-          const { error: uploadError } = await supabase.storage.from("imagenes").upload(filePath, selectedImageFile)
-          if (uploadError) {
-            throw new Error(`Error al subir imagen: ${uploadError.message}`)
-          }
-
-          const { data: urlData } = supabase.storage.from("imagenes").getPublicUrl(filePath)
-          finalImgUrl = urlData.publicUrl
-          toast.success("Nueva imagen subida correctamente.")
-        } else if (imagenPreview === null && platilloData.imgurl !== null) {
-          // Si la previsualización es nula y había una imagen original, significa que se eliminó
-          finalImgUrl = null
-        }
-
-        const { error: updateError } = await supabase
-          .from("platillos")
-          .update({
-            nombre: platilloData.nombre,
-            descripcion: platilloData.descripcion,
-            imgurl: finalImgUrl,
-            instruccionespreparacion: platilloData.instruccionespreparacion,
-            tiempopreparacion: platilloData.tiempopreparacion,
-          })
-          .eq("id", platilloId)
-
-        if (updateError) {
-          console.error("Error al actualizar receta:", updateError)
-          toast.error("Error al actualizar información de la receta.")
-          setIsSubmitting(false)
-          return
-        }
-
-        setImageUrl(finalImgUrl)
-        setPlatilloData((prev) => (prev ? { ...prev, imgurl: finalImgUrl } : null))
-        setSelectedImageFile(null)
-        setImagenPreview(finalImgUrl)
-
-        toast.success("Información básica de la receta actualizada correctamente.")
-        setCurrentStep(2)
-      } catch (error: any) {
-        console.error("Error inesperado al actualizar receta:", error)
-        toast.error("Error inesperado al actualizar receta: " + error.message)
-      } finally {
-        setIsSubmitting(false)
-      }
-    } else if (currentStep === 2) {
-      if (ingredientesPlatillo.length === 0 && recetasPlatillo.length === 0) {
-        toast.error("Debe registrar al menos 1 ingrediente o 1 sub-receta para pasar al resumen.")
-        return
-      }
-      setCurrentStep(3)
+  const handleUpdateBasicInfo = async () => {
+    if (!platilloData?.nombre || !platilloData?.descripcion) {
+      setErrorMessage("Favor de llenar la información faltante (Nombre y Descripción).")
+      setShowErrorDialog(true)
+      return
     }
-  }
 
-  const handlePreviousStep = () => {
-    setCurrentStep((prev) => Math.max(1, prev - 1))
+    setIsSubmitting(true)
+    let finalImgUrl = platilloData.imgurl
+
+    try {
+      if (selectedImageFile) {
+        const fileExt = selectedImageFile.name.split(".").pop()
+        const fileName = `${uuidv4()}.${fileExt}`
+        const filePath = `Platillos/${fileName}`
+
+        const { error: uploadError } = await supabase.storage.from("imagenes").upload(filePath, selectedImageFile)
+        if (uploadError) {
+          throw new Error(`Error al subir imagen: ${uploadError.message}`)
+        }
+
+        const { data: urlData } = supabase.storage.from("imagenes").getPublicUrl(filePath)
+        finalImgUrl = urlData.publicUrl
+        toast.success("Nueva imagen subida correctamente.")
+      } else if (imagenPreview === null && platilloData.imgurl !== null) {
+        finalImgUrl = null
+      }
+
+      const { error: updateError } = await supabase
+        .from("platillos")
+        .update({
+          nombre: platilloData.nombre,
+          descripcion: platilloData.descripcion,
+          imgurl: finalImgUrl,
+          instruccionespreparacion: platilloData.instruccionespreparacion,
+          tiempopreparacion: platilloData.tiempopreparacion,
+        })
+        .eq("id", platilloId)
+
+      if (updateError) {
+        console.error("Error al actualizar receta:", updateError)
+        toast.error("Error al actualizar información de la receta.")
+        setIsSubmitting(false)
+        return
+      }
+
+      setImageUrl(finalImgUrl)
+      setPlatilloData((prev) => (prev ? { ...prev, imgurl: finalImgUrl } : null))
+      setSavedPlatilloData((prev) => prev ? { ...prev, nombre: platilloData.nombre, descripcion: platilloData.descripcion, instruccionespreparacion: platilloData.instruccionespreparacion, tiempopreparacion: platilloData.tiempopreparacion, imgurl: finalImgUrl } : null)
+      setSelectedImageFile(null)
+      setImagenPreview(finalImgUrl)
+
+      setShowSuccessDialog(true)
+      setTimeout(() => setShowSuccessDialog(false), 2500)
+    } catch (error: any) {
+      console.error("Error inesperado al actualizar receta:", error)
+      toast.error("Error inesperado al actualizar receta: " + error.message)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const handleIngredienteSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -651,7 +672,7 @@ export default function EditarPlatilloPage() {
     const selectedIng =
       ingredientesDropdown.find((i) => i.id.toString() === selectedIngredienteId) ||
       filteredIngredientes.find((i) => i.id.toString() === selectedIngredienteId)
-    if (selectedIngredienteId && selectedIng && term !== `${selectedIng.codigo} - ${selected.nombre}`) {
+    if (selectedIngredienteId && selectedIng && term !== `${selectedIng.codigo} - ${selectedIng.nombre}`) {
       setSelectedIngredienteId("")
       setCostoIngrediente("")
       setSelectedUnidadMedidaId("")
@@ -698,6 +719,124 @@ export default function EditarPlatilloPage() {
     const value = e.target.value
     setSelectedRecetaCant(value)
     setSelectedRecetaCantidad(value)
+  }
+
+  // ===== Edicion inline de cantidad en tablas Ingredientes / Sub-Recetas =====
+  const [editingIngCantidad, setEditingIngCantidad] = useState<Record<number, string>>({})
+  const [editingRecCantidad, setEditingRecCantidad] = useState<Record<number, string>>({})
+
+  const handleIngredienteCantidadChange = (id: number, value: string) => {
+    setEditingIngCantidad((prev) => ({ ...prev, [id]: value }))
+    const num = Number.parseFloat(value)
+    if (!isNaN(num) && num > 0) {
+      setIngredientesPlatillo((prev) =>
+        prev.map((ing) =>
+          ing.id === id
+            ? { ...ing, cantidad: num, ingredientecostoparcial: num * ing.costoUnitarioEfectivo }
+            : ing,
+        ),
+      )
+    }
+  }
+
+  const handleIngredienteCantidadBlur = async (id: number) => {
+    const ing = ingredientesPlatillo.find((i) => i.id === id)
+    if (!ing) return
+
+    const draft = editingIngCantidad[id]
+    const num = draft !== undefined ? Number.parseFloat(draft) : ing.cantidad
+
+    if (isNaN(num) || num <= 0) {
+      toast.error("Cantidad inválida.")
+      setEditingIngCantidad((prev) => {
+        const { [id]: _omit, ...rest } = prev
+        return rest
+      })
+      return
+    }
+
+    const newParcial = num * ing.costoUnitarioEfectivo
+
+    const { error } = await supabase
+      .from("ingredientesxplatillo")
+      .update({
+        cantidad: num,
+        ingredientecostoparcial: newParcial,
+        fechamodificacion: new Date().toISOString(),
+      })
+      .eq("id", id)
+
+    if (error) {
+      console.error("Error al actualizar cantidad de ingrediente:", error)
+      toast.error("Error al actualizar cantidad: " + error.message)
+      return
+    }
+
+    setIngredientesPlatillo((prev) =>
+      prev.map((i) => (i.id === id ? { ...i, cantidad: num, ingredientecostoparcial: newParcial } : i)),
+    )
+    setEditingIngCantidad((prev) => {
+      const { [id]: _omit, ...rest } = prev
+      return rest
+    })
+    setCostosLoaded(false)
+  }
+
+  const handleRecetaCantidadChange = (id: number, value: string) => {
+    setEditingRecCantidad((prev) => ({ ...prev, [id]: value }))
+    const num = Number.parseFloat(value)
+    if (!isNaN(num) && num > 0) {
+      setRecetasPlatillo((prev) =>
+        prev.map((rec) =>
+          rec.id === id
+            ? { ...rec, cantidad: num, recetacostoparcial: num * rec.costoUnitarioEfectivo }
+            : rec,
+        ),
+      )
+    }
+  }
+
+  const handleRecetaCantidadBlur = async (id: number) => {
+    const rec = recetasPlatillo.find((r) => r.id === id)
+    if (!rec) return
+
+    const draft = editingRecCantidad[id]
+    const num = draft !== undefined ? Number.parseFloat(draft) : rec.cantidad
+
+    if (isNaN(num) || num <= 0) {
+      toast.error("Cantidad inválida.")
+      setEditingRecCantidad((prev) => {
+        const { [id]: _omit, ...rest } = prev
+        return rest
+      })
+      return
+    }
+
+    const newParcial = num * rec.costoUnitarioEfectivo
+
+    const { error } = await supabase
+      .from("recetasxplatillo")
+      .update({
+        cantidad: num,
+        recetacostoparcial: newParcial,
+        fechamodificacion: new Date().toISOString(),
+      })
+      .eq("id", id)
+
+    if (error) {
+      console.error("Error al actualizar cantidad de sub-receta:", error)
+      toast.error("Error al actualizar cantidad: " + error.message)
+      return
+    }
+
+    setRecetasPlatillo((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, cantidad: num, recetacostoparcial: newParcial } : r)),
+    )
+    setEditingRecCantidad((prev) => {
+      const { [id]: _omit, ...rest } = prev
+      return rest
+    })
+    setCostosLoaded(false)
   }
 
   const handleAddIngrediente = async () => {
@@ -752,12 +891,10 @@ export default function EditarPlatilloPage() {
           fechacreacion: new Date().toISOString(),
           fechamodificacion: new Date().toISOString(),
         })
-        .select(
-          `
-        id, cantidad, ingredientecostoparcial,
-        ingredientes(id, nombre, tipounidadmedida(descripcion))
-      `,
-        )
+        .select(`
+          id, cantidad, ingredientecostoparcial,
+          ingredientes(id, nombre, costo, tipounidadmedida(descripcion))
+        `)
         .single()
 
       if (error) {
@@ -776,6 +913,9 @@ export default function EditarPlatilloPage() {
             cantidad: data.cantidad,
             ingredientecostoparcial: data.ingredientecostoparcial,
             unidad: data.ingredientes?.tipounidadmedida?.descripcion,
+            costounitario: data.ingredientes?.costo || 0,
+            costoUnitarioEfectivo:
+              data.cantidad && data.cantidad > 0 ? data.ingredientecostoparcial / data.cantidad : 0,
           },
         ])
         toast.success("Ingrediente agregado correctamente.")
@@ -784,6 +924,8 @@ export default function EditarPlatilloPage() {
         setSelectedUnidadMedidaId("")
         setCostoIngrediente("")
         setIngredienteSearchTerm("")
+        // Reset costos so they reload with new data
+        setCostosLoaded(false)
       }
     } catch (error) {
       console.error("Error inesperado al agregar ingrediente:", error)
@@ -808,6 +950,7 @@ export default function EditarPlatilloPage() {
 
       setIngredientesPlatillo((prev) => prev.filter((ing) => ing.id !== ingredienteToDeletes))
       toast.success("Ingrediente eliminado correctamente.")
+      setCostosLoaded(false)
     } catch (error) {
       console.error("Error inesperado al eliminar ingrediente:", error)
       toast.error("Error inesperado al eliminar ingrediente.")
@@ -873,12 +1016,10 @@ export default function EditarPlatilloPage() {
           fechacreacion: new Date().toISOString(),
           fechamodificacion: new Date().toISOString(),
         })
-        .select(
-          `
+        .select(`
           id, recetacostoparcial, cantidad,
           recetas(id, nombre)
-        `,
-        )
+        `)
         .single()
 
       if (error) {
@@ -896,6 +1037,8 @@ export default function EditarPlatilloPage() {
             nombre: data.recetas.nombre,
             recetacostoparcial: data.recetacostoparcial,
             cantidad: data.cantidad,
+            costoUnitarioEfectivo:
+              data.cantidad && data.cantidad > 0 ? data.recetacostoparcial / data.cantidad : 0,
           },
         ])
         toast.success("Sub-Receta agregada correctamente.")
@@ -905,6 +1048,7 @@ export default function EditarPlatilloPage() {
         setSelectedRecetaCant("1")
         setSelectedRecetaUnidadBase("")
         setMaxRangeReceta(1)
+        setCostosLoaded(false)
       }
     } catch (error) {
       console.error("Error inesperado al agregar sub-receta:", error)
@@ -915,9 +1059,6 @@ export default function EditarPlatilloPage() {
   }
 
   const handleDeleteReceta = async (recetaToDeletes: number) => {
-
-     
-    console.log("receta", recetaToDeletes)
     if (recetaToDeletes === null) return
 
     setIsSubmitting(true)
@@ -932,6 +1073,7 @@ export default function EditarPlatilloPage() {
 
       setRecetasPlatillo((prev) => prev.filter((rec) => rec.id !== recetaToDeletes))
       toast.success("Sub-Receta eliminada correctamente.")
+      setCostosLoaded(false)
     } catch (error) {
       console.error("Error inesperado al eliminar sub-receta:", error)
       toast.error("Error inesperado al eliminar sub-receta.")
@@ -942,7 +1084,34 @@ export default function EditarPlatilloPage() {
     }
   }
 
-  const handleFinalUpdatePlatillo = async () => {
+  const handleRecetaDropdownChange = async (recetaId: string) => {
+    setSelectedRecetaId(recetaId)
+    if (recetaId) {
+      const selectedReceta = recetasDropdown.find((r) => r.id.toString() === recetaId)
+      if (selectedReceta) {
+        setCostoReceta(selectedReceta.costo?.toString() || "0")
+        const baseCantidad = selectedReceta.cantidad && selectedReceta.cantidad > 0 ? selectedReceta.cantidad : 1
+        setMaxRangeReceta(baseCantidad)
+        setSelectedRecetaCantidad("1")
+        setSelectedRecetaCant("1")
+        setSelectedRecetaUnidadBase(selectedReceta.tipounidadmedida?.descripcion || "N/A")
+      } else {
+        setCostoReceta("0")
+        setMaxRangeReceta(1)
+        setSelectedRecetaCantidad("1")
+        setSelectedRecetaCant("1")
+        setSelectedRecetaUnidadBase("")
+      }
+    } else {
+      setCostoReceta("")
+      setMaxRangeReceta(1)
+      setSelectedRecetaCantidad("1")
+      setSelectedRecetaCant("1")
+      setSelectedRecetaUnidadBase("")
+    }
+  }
+
+  const handleFinalUpdatePlatillo = async (confirmadoMultiMenu = false) => {
     if (!platilloId) {
       toast.error("ID de receta no proporcionado para la actualización final.")
       return
@@ -965,6 +1134,20 @@ export default function EditarPlatilloPage() {
       )
       setShowErrorDialog(true)
       return
+    }
+
+    // Precheck: si la receta está vinculada a más de un menú, avisar al usuario
+    if (!confirmadoMultiMenu) {
+      const { count, error: countError } = await supabase
+        .from("platillosxmenu")
+        .select("*", { count: "exact", head: true })
+        .eq("platilloid", platilloId)
+
+      if (!countError && count !== null && count > 1) {
+        setMultiMenuCount(count)
+        setShowMultiMenuDialog(true)
+        return
+      }
     }
 
     setIsSubmitting(true)
@@ -1026,76 +1209,40 @@ export default function EditarPlatilloPage() {
 
           if (updateCostoAdministrativoError) throw updateCostoAdministrativoError
 
-          // Actualizar platillosxmenu solo para el menuId específico si se proporciona
-          console.log("menu", menuId)
-          if (menuId) {
-            const margenUtilidadCalculado = precioVentaNum - costoAdministrativoCalculado
+          // El precio de venta se propaga a TODOS los menús relacionados con este platillo,
+          // independientemente del menú desde el cual se editó. Un platillo tiene un único precio.
+          const margenUtilidadCalculado = precioVentaNum - costoAdministrativoCalculado
 
-            const { error: updatePlatillosxMenuError } = await supabase
-              .from("platillosxmenu")
-              .update({
-                precioventa: precioVentaNum,
-                precioconiva: precioConIVANum,
-                margenutilidad: margenUtilidadCalculado,
-              })
-              .eq("platilloid", platilloId)
-              .eq("menuid", menuId)
+          const { error: updatePlatillosxMenuError } = await supabase
+            .from("platillosxmenu")
+            .update({
+              precioventa: precioVentaNum,
+              precioconiva: precioConIVANum,
+              margenutilidad: margenUtilidadCalculado,
+            })
+            .eq("platilloid", platilloId)
 
-            if (updatePlatillosxMenuError) {
-              console.error(`Error al actualizar platillosxmenu para menuId ${menuId}:`, updatePlatillosxMenuError)
-              throw updatePlatillosxMenuError
-            }
-          } else {
-            // Si no hay menuId específico, actualizar todos los registros del platillo
-            const { data: platillosxMenuEntries, error: platillosxMenuError } = await supabase
-              .from("platillosxmenu")
-              .select("id")
-              .eq("platilloid", platilloId)
-
-            if (platillosxMenuError) {
-              console.error("Error al obtener entradas de platillosxmenu:", platillosxMenuError)
-              throw new Error("Error al obtener datos de platillosxmenu.")
-            }
-
-            if (platillosxMenuEntries && platillosxMenuEntries.length > 0) {
-              for (const entry of platillosxMenuEntries) {
-                const margenUtilidadCalculado = precioVentaNum - costoAdministrativoCalculado
-
-                const { error: updatePlatillosxMenuError } = await supabase
-                  .from("platillosxmenu")
-                  .update({
-                    precioventa: precioVentaNum,
-                    precioconiva: precioConIVANum,
-                    margenutilidad: margenUtilidadCalculado,
-                  })
-                  .eq("id", entry.id)
-
-                if (updatePlatillosxMenuError) {
-                  console.error(`Error al actualizar platillosxmenu para ID ${entry.id}:`, updatePlatillosxMenuError)
-                  throw updatePlatillosxMenuError
-                }
-              }
-            }
+          if (updatePlatillosxMenuError) {
+            console.error(`Error al actualizar precios en platillosxmenu para platilloId ${platilloId}:`, updatePlatillosxMenuError)
+            throw updatePlatillosxMenuError
           }
 
           const { data: platilloMenus, error: platilloMenusError } = await supabase
             .from("platillosxmenu")
-            .select(
-              `
-            precioventa,
-            menuid,
-            menus!inner(
-              restauranteid,
-              restaurantes!inner(hotelid)
-            )
-          `,
-            )
+            .select(`
+              precioventa,
+              menuid,
+              menus!inner(
+                restauranteid,
+                restaurantes!inner(hotelid)
+              )
+            `)
             .eq("platilloid", platilloId)
 
           if (platilloMenusError) throw platilloMenusError
 
           const today = new Date()
-          const currentMonth = today.getMonth() + 1 // getMonth() returns 0-11, so add 1
+          const currentMonth = today.getMonth() + 1
           const currentYear = today.getFullYear()
 
           for (const menuAssoc of platilloMenus) {
@@ -1105,7 +1252,7 @@ export default function EditarPlatilloPage() {
             const PrecioAssoc = menuAssoc.precioventa
 
             const CostoAssoc = (costoAdministrativoCalculado / PrecioAssoc) * 100
-            // Verificar si existe registro del mismo mes para este platilloid y menuid
+
             const { data: existingHistoricoMonth, error: checkHistoricoMonthError } = await supabase
               .from("historico")
               .select("idrec, ingredienteid, recetaid")
@@ -1120,12 +1267,6 @@ export default function EditarPlatilloPage() {
             }
 
             if (existingHistoricoMonth && existingHistoricoMonth.length > 0) {
-              // Existe registro del mismo mes - BORRAR y volver a INSERTAR
-              console.log(
-                `Deleting and re-inserting historico records for platilloId: ${platilloId}, menuId: ${menuIdAssoc}, month: ${currentMonth}/${currentYear}`,
-              )
-
-              // Borrar todos los registros del mismo mes para este platilloid y menuid
               const { error: deleteHistoricoError } = await supabase
                 .from("historico")
                 .delete()
@@ -1139,9 +1280,7 @@ export default function EditarPlatilloPage() {
                 throw new Error("Error al eliminar registros históricos existentes.")
               }
 
-              // Insertar nuevos registros con datos actualizados
               const historicoIngredientesToInsert = []
-
               for (const ing of ingredientesPlatillo) {
                 historicoIngredientesToInsert.push({
                   hotelid: hotelId,
@@ -1167,7 +1306,6 @@ export default function EditarPlatilloPage() {
               }
 
               const historicoRecetasToInsert = []
-
               for (const rec of recetasPlatillo) {
                 historicoRecetasToInsert.push({
                   hotelid: hotelId,
@@ -1192,13 +1330,7 @@ export default function EditarPlatilloPage() {
                 if (insertRecetasHistoricoError) throw insertRecetasHistoricoError
               }
             } else {
-              // No existe registro del mismo mes - hacer INSERT
-              console.log(
-                `Inserting new historico records for platilloId: ${platilloId}, menuId: ${menuIdAssoc}, month: ${currentMonth}/${currentYear}`,
-              )
-
               const historicoIngredientesToInsert = []
-
               for (const ing of ingredientesPlatillo) {
                 historicoIngredientesToInsert.push({
                   hotelid: hotelId,
@@ -1224,7 +1356,6 @@ export default function EditarPlatilloPage() {
               }
 
               const historicoRecetasToInsert = []
-
               for (const rec of recetasPlatillo) {
                 historicoRecetasToInsert.push({
                   hotelid: hotelId,
@@ -1256,10 +1387,9 @@ export default function EditarPlatilloPage() {
       ])
 
       if (supabaseResult && supabaseResult.success) {
-        toast.success(
-          "Receta Actualizada correctamente, Se actualizó la información así como el nuevo costo de la receta",
-        )
-        router.push("/platillos")
+        setSavedPlatilloData((prev) => prev ? { ...prev, costototal: totalCostoPlatillo, costoadministrativo: costoAdministrativoPlatillo } : null)
+        setShowSuccessDialog(true)
+        setTimeout(() => setShowSuccessDialog(false), 2500)
       }
     } catch (error: any) {
       console.error("Error al actualizar costo total de la receta o histórico:", error)
@@ -1270,34 +1400,11 @@ export default function EditarPlatilloPage() {
     }
   }
 
-  const handleRecetaDropdownChange = async (recetaId: string) => {
-    setSelectedRecetaId(recetaId)
-    if (recetaId) {
-      const selectedReceta = recetasDropdown.find((r) => r.id.toString() === recetaId)
-      if (selectedReceta) {
-        setCostoReceta(selectedReceta.costo?.toString() || "0")
-        const baseCantidad = selectedReceta.cantidad && selectedReceta.cantidad > 0 ? selectedReceta.cantidad : 1
-        setMaxRangeReceta(baseCantidad)
-        setSelectedRecetaCantidad("1")
-        setSelectedRecetaCant("1")
-        setSelectedRecetaUnidadBase(selectedReceta.tipounidadmedida?.descripcion || "N/A")
-      } else {
-        setCostoReceta("0")
-        setMaxRangeReceta(1)
-        setSelectedRecetaCantidad("1")
-        setSelectedRecetaCant("1")
-        setSelectedRecetaUnidadBase("")
-      }
-    } else {
-      setCostoReceta("")
-      setMaxRangeReceta(1)
-      setSelectedRecetaCantidad("1")
-      setSelectedRecetaCant("1")
-      setSelectedRecetaUnidadBase("")
-    }
-  }
+  /* ==================================================
+    Render
+  ================================================== */
 
-  if (loading) {
+  if (loading && !platilloData) {
     return (
       <div className="flex h-screen w-full items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin" />
@@ -1317,13 +1424,14 @@ export default function EditarPlatilloPage() {
     )
   }
 
-  const formatCurrency = (amount: number | null) =>
-    new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(amount || 0)
-
   return (
-    <div className="container mx-auto max-w-5xl p-8">
+    <div className="container mx-auto max-w-6xl p-4 md:p-8 space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold tracking-tight">Actualizar Receta</h1>
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Información de Receta</h1>
+          <p className="text-muted-foreground">Información completa de la receta</p>
+        </div>
         <Button
           id="btnRegresarActPlatillos"
           name="btnRegresarActPlatillos"
@@ -1335,6 +1443,910 @@ export default function EditarPlatilloPage() {
           Regresar
         </Button>
       </div>
+
+      {/* ===== TOP SECTION: Image + Info Panel ===== */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-col md:flex-row gap-4">
+            {/* Left: Image */}
+            <div className="flex-shrink-0">
+              <div className="relative w-32 h-32 md:w-40 md:h-40 border rounded-lg overflow-hidden bg-gray-50">
+                {(imagenPreview || imageUrl) ? (
+                  <Image
+                    src={imagenPreview || imageUrl || "/placeholder.svg"}
+                    alt={savedPlatilloData?.nombre || "Imagen del platillo"}
+                    layout="fill"
+                    objectFit="cover"
+                  />
+                ) : (
+                  <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+                    Sin imagen
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Right: Info columns */}
+            <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-1">
+              {/* Column 1: Información Básica */}
+              <div>
+                <h3 className="text-sm font-semibold text-blue-700 mb-1">Información Básica</h3>
+                <div className="space-y-0.5 text-xs">
+                  <p><span className="font-semibold text-blue-700">ID:</span> {savedPlatilloData?.id}</p>
+                  <p><span className="font-semibold text-blue-700">Nombre:</span> {savedPlatilloData?.nombre}</p>
+                  <p><span className="font-semibold text-blue-700">Descripción:</span> {savedPlatilloData?.descripcion}</p>
+                  {savedPlatilloData?.instruccionespreparacion && (
+                    <p><span className="font-semibold text-blue-700">Instrucciones:</span> {savedPlatilloData.instruccionespreparacion}</p>
+                  )}
+                  {savedPlatilloData?.tiempopreparacion && (
+                    <p><span className="font-semibold text-blue-700">Tiempo Prep.:</span> {savedPlatilloData.tiempopreparacion}</p>
+                  )}
+                  <p>
+                    <span className="font-semibold text-blue-700">Estatus:</span>{" "}
+                    <Badge variant="default" className="bg-green-600 text-white ml-1">Activo</Badge>
+                  </p>
+                </div>
+              </div>
+
+              {/* Column 2: Costos */}
+              <div>
+                <h3 className="text-sm font-semibold text-orange-600 mb-1">Costos</h3>
+                <div className="space-y-0.5 text-xs">
+                  <p>
+                    <span className="font-semibold text-orange-600">Costo Elaboración:</span>{" "}
+                    {formatCurrency(platilloData.costototal)}
+                  </p>
+                  <p>
+                    <span className="font-semibold text-orange-600">Costo Total:</span>{" "}
+                    <span className="font-bold">{formatCurrency(platilloData.costoadministrativo)}</span>
+                  </p>
+                  {menusAsociados.length > 0 && menusAsociados[0].precioventa && (
+                    <>
+                      <p>
+                        <span className="font-semibold text-orange-600">Precio Venta:</span>{" "}
+                        {formatCurrency(menusAsociados[0].precioventa)}
+                      </p>
+                      <p>
+                        <span className="font-semibold text-orange-600">Precio con IVA:</span>{" "}
+                        {formatCurrency(menusAsociados[0].precioconiva)}
+                      </p>
+                      <p>
+                        <span className="font-semibold text-orange-600">Utilidad:</span>{" "}
+                        {formatCurrency(
+                          (menusAsociados[0].precioventa || 0) - (platilloData.costoadministrativo || 0),
+                        )}
+                      </p>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Column 3: Menú Asociado */}
+              <div>
+                <h3 className="text-sm font-semibold text-purple-700 mb-1">Menú Asociado</h3>
+                <div className="space-y-0.5 text-xs">
+                  {(() => {
+                    const menuActual = menusAsociados.find((m) => m.menuid === menuId)
+                    return menuActual ? (
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-xs">{menuActual.nombre}</Badge>
+                        {menuActual.precioventa && (
+                          <span className="text-muted-foreground">{formatCurrency(menuActual.precioventa)}</span>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-muted-foreground">Sin menú asociado</p>
+                    )
+                  })()}
+                </div>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ===== BOTTOM SECTION: Tabs ===== */}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="w-full justify-start border-b rounded-none bg-transparent h-auto p-0">
+          <TabsTrigger
+            value="informacion"
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-orange-500 data-[state=active]:text-orange-600 data-[state=active]:shadow-none px-6 py-3"
+          >
+            Información Básica
+          </TabsTrigger>
+          <TabsTrigger
+            value="ingredientes"
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-orange-500 data-[state=active]:text-orange-600 data-[state=active]:shadow-none px-6 py-3"
+          >
+            Ingredientes
+          </TabsTrigger>
+          <TabsTrigger
+            value="subrecetas"
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-orange-500 data-[state=active]:text-orange-600 data-[state=active]:shadow-none px-6 py-3"
+          >
+            Sub-Recetas
+          </TabsTrigger>
+          <TabsTrigger
+            value="costos"
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-orange-500 data-[state=active]:text-orange-600 data-[state=active]:shadow-none px-6 py-3"
+          >
+            Resumen de Precio
+          </TabsTrigger>
+        </TabsList>
+
+        {/* ===== TAB: Información Básica ===== */}
+        <TabsContent value="informacion">
+          <Card>
+            <CardHeader>
+              <CardTitle>Actualizar Información Básica</CardTitle>
+              <CardDescription>Actualiza los detalles principales de tu receta.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <label htmlFor="nombre" className="text-sm font-medium">
+                  Nombre de la Receta
+                </label>
+                <Input
+                  id="nombre"
+                  name="txtNombrePlatilloActualizar"
+                  type="text"
+                  maxLength={150}
+                  value={platilloData.nombre || ""}
+                  onChange={handleInputChange}
+                  placeholder="Nombre del platillo"
+                />
+              </div>
+              <div>
+                <label htmlFor="descripcion" className="text-sm font-medium">
+                  Descripción
+                </label>
+                <Input
+                  id="descripcion"
+                  name="txtDescripcionPlatilloActualizar"
+                  type="text"
+                  maxLength={150}
+                  value={platilloData.descripcion || ""}
+                  onChange={handleInputChange}
+                  placeholder="Descripción del platillo"
+                />
+              </div>
+              <div>
+                <label htmlFor="instruccionespreparacion" className="text-sm font-medium">
+                  Instrucciones de Elaboración
+                </label>
+                <Textarea
+                  id="instruccionespreparacion"
+                  name="txtPlatilloInstruccionesActualizar"
+                  maxLength={500}
+                  value={platilloData.instruccionespreparacion || ""}
+                  onChange={handleInputChange}
+                  placeholder="Instrucciones detalladas para la preparación"
+                  className="min-h-[100px]"
+                />
+              </div>
+              <div>
+                <label htmlFor="tiempopreparacion" className="text-sm font-medium">
+                  Tiempo de Preparación
+                </label>
+                <Textarea
+                  id="tiempopreparacion"
+                  name="txtPlatilloTiempoActualizar"
+                  maxLength={150}
+                  value={platilloData.tiempopreparacion || ""}
+                  onChange={handleInputChange}
+                  placeholder="Ej: 30 minutos, 1 hora"
+                  className="min-h-[60px]"
+                />
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="ImagenFile" className="text-sm font-medium">
+                  Cargar Imagen
+                </label>
+                <Input
+                  id="ImagenFile"
+                  name="ImagenFile"
+                  type="file"
+                  accept="image/jpeg, image/jpg, image/png, image/webp"
+                  onChange={handleImageChange}
+                  disabled={isSubmitting}
+                />
+                {isSubmitting && (
+                  <div className="flex items-center text-sm text-muted-foreground">
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Subiendo imagen...
+                  </div>
+                )}
+                {(imagenPreview || imageUrl) && (
+                  <div className="mt-4 flex items-center space-x-4">
+                    <div className="relative w-24 h-24 border rounded-md overflow-hidden">
+                      <Image
+                        src={imagenPreview || imageUrl || "/placeholder.svg"}
+                        alt="Previsualización de imagen"
+                        layout="fill"
+                        objectFit="cover"
+                      />
+                      <Button
+                        variant="destructive"
+                        size="icon"
+                        className="absolute -top-2 -right-2 rounded-full h-6 w-6"
+                        onClick={handleDeleteImage}
+                        disabled={isSubmitting}
+                      >
+                        <XCircle className="h-4 w-4" />
+                        <span className="sr-only">Eliminar imagen</span>
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center pt-4 justify-end">
+                <Button
+                  id="btnActualizarPlatillo"
+                  name="btnActualizarPlatillo"
+                  type="button"
+                  onClick={handleUpdateBasicInfo}
+                  disabled={isSubmitting}
+                  className="bg-black text-white hover:bg-gray-800"
+                >
+                  {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Guardar Información
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ===== TAB: Ingredientes ===== */}
+        <TabsContent value="ingredientes">
+          <Card>
+            <CardHeader>
+              <CardTitle>Ingredientes de la Receta</CardTitle>
+              <CardDescription>Agrega, actualiza o elimina ingredientes de tu receta.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {loading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                  <span>Cargando ingredientes...</span>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+                    <div className="md:col-span-2 relative">
+                      <label htmlFor="txtIngredienteSearch" className="text-sm font-medium">
+                        Ingrediente
+                      </label>
+                      <Input
+                        id="txtIngredienteSearch"
+                        name="txtIngredienteSearch"
+                        value={ingredienteSearchTerm}
+                        onChange={handleIngredienteSearchChange}
+                        onFocus={() => setShowIngredienteDropdown(true)}
+                        onBlur={() => setTimeout(() => setShowIngredienteDropdown(false), 100)}
+                        placeholder="Buscar por código o nombre..."
+                        disabled={isSubmitting}
+                        autoComplete="off"
+                      />
+                      {showIngredienteDropdown && filteredIngredientes.length > 0 && (
+                        <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-y-auto mt-1">
+                          {filteredIngredientes.map((ing) => (
+                            <div
+                              key={ing.id}
+                              className="px-4 py-2 cursor-pointer hover:bg-gray-100"
+                              onMouseDown={() => handleSelectIngredienteFromDropdown(ing)}
+                            >
+                              {ing.codigo} - {ing.nombre}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <label htmlFor="txtCantidadIngrediente" className="text-sm font-medium">
+                        Cantidad
+                      </label>
+                      <Input
+                        id="txtCantidadIngrediente"
+                        name="txtCantidadIngrediente"
+                        type="number"
+                        step="0.01"
+                        value={cantidadIngrediente}
+                        onChange={(e) => setCantidadIngrediente(e.target.value)}
+                        placeholder="Cantidad"
+                        disabled={isSubmitting}
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="ddlUnidadMedida" className="text-sm font-medium">
+                        Unidad de Medida
+                      </label>
+                      <Select
+                        name="ddlUnidadMedida"
+                        value={selectedUnidadMedidaId}
+                        onValueChange={setSelectedUnidadMedidaId}
+                        disabled={true}
+                      >
+                        <SelectTrigger id="ddlUnidadMedida">
+                          <SelectValue placeholder="Unidad de Medida" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {unidadesMedidaDropdown.map((um) => (
+                            <SelectItem key={um.id} value={um.id.toString()}>
+                              {um.descripcion}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label htmlFor="txtCostoIngrediente" className="text-sm font-medium">
+                        Costo Unitario
+                      </label>
+                      <Input
+                        id="txtCostoIngrediente"
+                        name="txtCostoIngrediente"
+                        type="text"
+                        value={costoIngrediente}
+                        readOnly
+                        disabled={true}
+                        placeholder="Costo"
+                      />
+                    </div>
+                    <div className="lg:col-span-4 flex justify-end">
+                      <Button
+                        id="btnAgregarIngrediente"
+                        name="btnAgregarIngrediente"
+                        type="button"
+                        onClick={handleAddIngrediente}
+                        disabled={isSubmitting}
+                        className="bg-green-800 hover:bg-green-900 text-white"
+                      >
+                        <PlusCircle className="mr-2 h-4 w-4" />
+                        Agregar Ingrediente
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="rounded-md border mt-6">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Ingrediente</TableHead>
+                          <TableHead>Cantidad</TableHead>
+                          <TableHead>Unidad</TableHead>
+                          <TableHead>Costo Parcial</TableHead>
+                          <TableHead className="text-right">Acciones</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {ingredientesPlatillo.length > 0 ? (
+                          ingredientesPlatillo.map((ing) => (
+                            <TableRow key={ing.id}>
+                              <TableCell>{ing.nombre}</TableCell>
+                              <TableCell>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  value={editingIngCantidad[ing.id] ?? String(ing.cantidad)}
+                                  onChange={(e) => handleIngredienteCantidadChange(ing.id, e.target.value)}
+                                  onBlur={() => handleIngredienteCantidadBlur(ing.id)}
+                                  className="h-8 w-24"
+                                />
+                              </TableCell>
+                              <TableCell>{ing.unidad}</TableCell>
+                              <TableCell>{formatCurrency(ing.ingredientecostoparcial)}</TableCell>
+                              <TableCell className="text-right">
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button
+                                      variant="destructive"
+                                      size="icon"
+                                      title="Eliminar Ingrediente"
+                                      onClick={() => setIngredienteToDelete(ing.id)}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>¿Confirmar eliminación?</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        ¿Estás seguro de que deseas eliminar este ingrediente del platillo?
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel onClick={() => setIngredienteToDelete(null)}>
+                                        Cancelar
+                                      </AlertDialogCancel>
+                                      <AlertDialogAction onClick={() => handleDeleteIngrediente(ing.id)}>Confirmar</AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        ) : (
+                          <TableRow>
+                            <TableCell colSpan={5} className="h-24 text-center">
+                              No hay ingredientes agregados.
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  {ingredientesPlatillo.length > 0 && (
+                    <div className="flex justify-end mt-3 pr-2">
+                      <p className="text-sm font-semibold text-gray-700">
+                        Total Costo Parcial:{" "}
+                        <span className="text-base font-bold text-orange-600">
+                          {formatCurrency(ingredientesPlatillo.reduce((sum, ing) => sum + (ing.ingredientecostoparcial || 0), 0))}
+                        </span>
+                      </p>
+                    </div>
+                  )}
+                  <div className="flex items-center pt-4 justify-end">
+                    <Button
+                      type="button"
+                      onClick={handleUpdateBasicInfo}
+                      disabled={isSubmitting}
+                      className="bg-black text-white hover:bg-gray-800"
+                    >
+                      {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      Guardar Información
+                    </Button>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ===== TAB: Sub-Recetas ===== */}
+        <TabsContent value="subrecetas">
+          <Card>
+            <CardHeader>
+              <CardTitle>Sub-Recetas de la Receta</CardTitle>
+              <CardDescription>Agrega, actualiza o elimina sub-recetas de tu receta.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {loading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                  <span>Cargando sub-recetas...</span>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+                    <div className="col-span-full">
+                      <label htmlFor="ddlReceta" className="text-sm font-medium">
+                        Sub-Receta
+                      </label>
+                      <Select
+                        name="ddlReceta"
+                        value={selectedRecetaId}
+                        onValueChange={handleRecetaDropdownChange}
+                        disabled={isSubmitting}
+                      >
+                        <SelectTrigger id="ddlReceta">
+                          <SelectValue placeholder="Selecciona una sub-receta" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {recetasDropdown.map((rec) => (
+                            <SelectItem key={rec.id} value={rec.id.toString()}>
+                              {rec.nombre}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="txtCantidad">Cantidad</Label>
+                      <Input
+                        id="txtCantidad"
+                        name="txtCantidad"
+                        type="number"
+                        value={selectedRecetaCantidad}
+                        onChange={handleCantidadRecetaChange}
+                        min="1"
+                        max={maxRangeReceta}
+                        disabled={!selectedRecetaId || maxRangeReceta === 0}
+                      />
+                    </div>
+
+                    <div className="col-span-2 w-[300px]">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Label htmlFor="txtCant">Porcion de Cantidad</Label>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs">
+                              <p>
+                                Rango de cantidad, favor de seleccionar la cantidad requerida de la subreceta que utiliza para
+                                esta Receta, la linea define el rango de la cantidad minima y maxima que se puede utilizar con
+                                esta subreceta.
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
+                      <Input
+                        id="txtCant"
+                        name="txtCant"
+                        type="range"
+                        value={selectedRecetaCant}
+                        onChange={handleCantRecetaRangeChange}
+                        min="1"
+                        max={maxRangeReceta}
+                        disabled={!selectedRecetaId || maxRangeReceta === 0}
+                      />
+                      <div className="mt-2 text-sm text-muted-foreground flex items-center justify-between">
+                        <span>
+                          {selectedRecetaCantidad} / {maxRangeReceta} {selectedRecetaUnidadBase || "unidades"}
+                        </span>
+                        {selectedRecetaId && selectedRecetaCantidad && costoReceta && (
+                          <span className="font-semibold text-primary">
+                            Costo: {formatCurrency((Number(costoReceta) / maxRangeReceta) * Number(selectedRecetaCantidad))}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="txtUnidadBase">Unidad Base</Label>
+                      <Input
+                        id="txtUnidadBase"
+                        name="txtUnidadBase"
+                        type="text"
+                        value={selectedRecetaUnidadBase}
+                        disabled
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="txtCostoReceta" className="text-sm font-medium">
+                        Costo Total Sub-Receta
+                      </label>
+                      <Input
+                        id="txtCostoReceta"
+                        name="txtCostoReceta"
+                        type="text"
+                        value={costoReceta}
+                        readOnly
+                        disabled={true}
+                        placeholder="Costo de la sub-receta"
+                      />
+                    </div>
+                    <div className="md:col-span-full flex justify-end">
+                      <Button
+                        id="btnAgregarReceta"
+                        name="btnAgregarReceta"
+                        type="button"
+                        onClick={handleAddReceta}
+                        disabled={
+                          isSubmitting ||
+                          !selectedRecetaId ||
+                          Number(selectedRecetaCantidad) < 1 ||
+                          Number(selectedRecetaCantidad) > maxRangeReceta
+                        }
+                        className="bg-green-800 hover:bg-green-900 text-white"
+                      >
+                        <PlusCircle className="mr-2 h-4 w-4" />
+                        Agregar Sub-Receta
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="rounded-md border mt-6">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Sub-Receta</TableHead>
+                          <TableHead>Cantidad</TableHead>
+                          <TableHead>Costo</TableHead>
+                          <TableHead className="text-right">Acciones</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {recetasPlatillo.length > 0 ? (
+                          recetasPlatillo.map((rec) => (
+                            <TableRow key={rec.id}>
+                              <TableCell>{rec.nombre}</TableCell>
+                              <TableCell>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  value={editingRecCantidad[rec.id] ?? String(rec.cantidad)}
+                                  onChange={(e) => handleRecetaCantidadChange(rec.id, e.target.value)}
+                                  onBlur={() => handleRecetaCantidadBlur(rec.id)}
+                                  className="h-8 w-24"
+                                />
+                              </TableCell>
+                              <TableCell>{formatCurrency(rec.recetacostoparcial)}</TableCell>
+                              <TableCell className="text-right">
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button
+                                      variant="destructive"
+                                      size="icon"
+                                      title="Eliminar Receta"
+                                      onClick={() => setRecetaToDelete(rec.id)}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>¿Confirmar eliminación?</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        ¿Estás seguro de que deseas eliminar esta sub-receta de la receta?
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel onClick={() => setRecetaToDelete(null)}>
+                                        Cancelar
+                                      </AlertDialogCancel>
+                                      <AlertDialogAction onClick={() => handleDeleteReceta(rec.id)}>Confirmar</AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        ) : (
+                          <TableRow>
+                            <TableCell colSpan={4} className="h-24 text-center">
+                              No hay sub-recetas agregadas.
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                      {recetasPlatillo.length > 0 && (
+                        <tfoot>
+                          <tr className="border-t">
+                            <td colSpan={2} className="p-2 text-right text-sm font-semibold text-gray-700">
+                              Total Costo:
+                            </td>
+                            <td className="p-2 text-sm font-bold text-orange-600">
+                              {formatCurrency(recetasPlatillo.reduce((sum, rec) => sum + (rec.recetacostoparcial || 0), 0))}
+                            </td>
+                            <td></td>
+                          </tr>
+                        </tfoot>
+                      )}
+                    </Table>
+                  </div>
+                  <div className="flex items-center pt-4 justify-end">
+                    <Button
+                      type="button"
+                      onClick={handleUpdateBasicInfo}
+                      disabled={isSubmitting}
+                      className="bg-black text-white hover:bg-gray-800"
+                    >
+                      {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      Guardar Información
+                    </Button>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ===== TAB: Resumen de Precio ===== */}
+        <TabsContent value="costos">
+          <Card>
+            <CardHeader>
+              <CardTitle>Resumen de Precio</CardTitle>
+              <CardDescription>Revisa los costos y establece el precio de venta.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {loading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                  <span>Cargando costos...</span>
+                </div>
+              ) : (
+                <>
+                  {/* Elaboración de la Receta */}
+                  <div className="space-y-2">
+                    <h3 className="text-lg font-semibold">Elaboración de la Receta</h3>
+                    {(ingredientesPlatillo.length > 0 || recetasPlatillo.length > 0) ? (
+                      <div className="rounded-md border">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="w-[10%]">Tipo</TableHead>
+                              <TableHead className="w-[25%]">Nombre</TableHead>
+                              <TableHead className="w-[15%] text-right">Costo</TableHead>
+                              <TableHead className="w-[15%] text-center">Unidad de Medida</TableHead>
+                              <TableHead className="w-[10%] text-center text-green-600">Cantidad</TableHead>
+                              <TableHead className="w-[25%] text-right text-green-600">Costo Parcial</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {ingredientesPlatillo.map((ing) => (
+                              <TableRow key={`ing-${ing.id}`}>
+                                <TableCell className="w-[10%]">
+                                  <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">Ingrediente</Badge>
+                                </TableCell>
+                                <TableCell className="w-[25%]">{ing.nombre}</TableCell>
+                                <TableCell className="w-[15%] text-right">{formatCurrency(ing.costounitario)}</TableCell>
+                                <TableCell className="w-[15%] text-center">{ing.unidad || "N/A"}</TableCell>
+                                <TableCell className="w-[10%] text-center text-green-600">{ing.cantidad}</TableCell>
+                                <TableCell className="w-[25%] text-right text-green-600">{formatCurrency(ing.ingredientecostoparcial)}</TableCell>
+                              </TableRow>
+                            ))}
+                            {recetasPlatillo.map((rec) => (
+                              <TableRow key={`rec-${rec.id}`}>
+                                <TableCell className="w-[10%]">
+                                  <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200">Sub-Receta</Badge>
+                                </TableCell>
+                                <TableCell className="w-[25%]">{rec.nombre}</TableCell>
+                                <TableCell className="w-[15%] text-right">{formatCurrency(rec.recetacostoparcial / (rec.cantidad || 1))}</TableCell>
+                                <TableCell className="w-[15%] text-center">N/A</TableCell>
+                                <TableCell className="w-[10%] text-center text-green-600">{rec.cantidad}</TableCell>
+                                <TableCell className="w-[25%] text-right text-green-600">{formatCurrency(rec.recetacostoparcial)}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                        <div className="border-t-2 border-blue-500 px-4 py-2 flex justify-end">
+                          <span className="text-sm font-semibold text-gray-700">Total Costo Parcial:{" "}
+                            <span className="text-base font-bold text-orange-600">
+                              {formatCurrency(
+                                ingredientesPlatillo.reduce((sum, ing) => sum + (ing.ingredientecostoparcial || 0), 0) +
+                                recetasPlatillo.reduce((sum, rec) => sum + (rec.recetacostoparcial || 0), 0)
+                              )}
+                            </span>
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-muted-foreground">No hay ingredientes ni sub-recetas agregados.</p>
+                    )}
+                  </div>
+
+                  {/* Cost summary + Price inputs */}
+                  <div className="flex flex-col items-end gap-4 mt-2">
+                    {/* Desglose de Costos */}
+                    <div className="w-full md:w-[480px] rounded-lg border bg-white p-4 space-y-2">
+                      <h3 className="text-sm font-semibold text-gray-800 border-b pb-2">Desglose de Costos</h3>
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-600">Costo de Elaboración</span>
+                        <span className="font-semibold text-gray-800">{formatCurrency(totalCostoPlatillo)}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-600">Variación de Precios</span>
+                        <span className="font-semibold text-gray-800">5%</span>
+                      </div>
+                      <div className="flex justify-between items-center pt-2 border-t-2 border-[#58e0be]">
+                        <span className="text-sm font-bold text-gray-900">Costo Total</span>
+                        <span className="text-lg font-bold text-gray-900">{formatCurrency(costoAdministrativoPlatillo)}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-xs pt-1">
+                        <span className="text-yellow-600 font-medium">* Precio Mínimo Sugerido</span>
+                        <span className="font-semibold text-yellow-600">{formatCurrency(precioSugeridoPlatillo)}</span>
+                      </div>
+                    </div>
+
+                    {/* Precio de Venta */}
+                    <div className="w-full md:w-[480px] rounded-lg border bg-gray-50 px-4 py-3">
+                      <h3 className="text-sm font-semibold text-gray-800 mb-2">Precio de Venta</h3>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <Label htmlFor="txtPrecioVenta" className="text-[11px] text-gray-500">Precio Venta</Label>
+                          <Input
+                            id="txtPrecioVenta"
+                            name="txtPrecioVenta"
+                            type="number"
+                            step="0.01"
+                            value={precioVenta}
+                            onChange={handlePrecioVentaChange}
+                            placeholder="0.00"
+                            className="text-center h-7 text-xs"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="txtPrecioConIVA" className="text-[11px] text-gray-500">Precio con IVA</Label>
+                          <Input
+                            id="txtPrecioConIVA"
+                            name="txtPrecioConIVA"
+                            type="text"
+                            value={precioConIVA}
+                            readOnly
+                            className="text-center h-7 text-xs"
+                            placeholder="0.00"
+                            disabled
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="txtCostoPorcentual" className="text-[11px] text-gray-500">Costo %</Label>
+                          <Input
+                            id="txtCostoPorcentual"
+                            name="txtCostoPorcentual"
+                            type="text"
+                            value={costoPorcentual}
+                            readOnly
+                            disabled
+                            className={`text-center h-7 text-xs font-semibold ${
+                              costoPorcentual && Number(costoPorcentual) > 30.0
+                                ? "bg-red-100 border-red-300 text-red-700"
+                                : "bg-green-100 border-green-300 text-green-700"
+                            }`}
+                            placeholder="0.00"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-4">
+                    <Button
+                      id="btnActualizarCompletoPlatillo"
+                      name="btnActualizarCompletoPlatillo"
+                      type="button"
+                      onClick={() => handleFinalUpdatePlatillo()}
+                      disabled={isSubmitting || (ingredientesPlatillo.length === 0 && recetasPlatillo.length === 0)}
+                      className="bg-green-800 hover:bg-green-900 text-white"
+                    >
+                      {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      Actualizar Receta
+                    </Button>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      {/* ===== Dialogs ===== */}
+      {/* Modal: precio se propagará a múltiples menús */}
+      <AlertDialog open={showMultiMenuDialog} onOpenChange={setShowMultiMenuDialog}>
+        <AlertDialogContent className="max-w-md p-0 overflow-hidden border-0">
+          <div className="bg-gradient-to-br from-[#528A94] to-[#3a7d6a] px-6 py-6 text-white">
+            <div className="flex items-center gap-3">
+              <div className="rounded-full bg-white/25 p-3 backdrop-blur-sm shadow-lg ring-2 ring-white/30">
+                <Info className="h-7 w-7" />
+              </div>
+              <div>
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="text-xl font-bold text-white text-left">
+                    Precio compartido en {multiMenuCount} menús
+                  </AlertDialogTitle>
+                  <AlertDialogDescription className="text-white/90 text-left mt-1">
+                    Esta receta está vinculada a <strong className="text-white">{multiMenuCount} menús</strong>. El nuevo precio de venta se aplicará a todos ellos para mantener consistencia.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+              </div>
+            </div>
+          </div>
+          <div className="px-6 py-4 bg-white flex flex-col gap-2">
+            <Button
+              onClick={() => {
+                setShowMultiMenuDialog(false)
+                handleFinalUpdatePlatillo(true)
+              }}
+              disabled={isSubmitting}
+              className="bg-[#5d8f72] hover:bg-[#44785a] text-white"
+            >
+              Continuar y actualizar todos
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => setShowMultiMenuDialog(false)}
+              disabled={isSubmitting}
+              className="text-gray-500 hover:bg-gray-100"
+            >
+              Cancelar
+            </Button>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={showErrorDialog} onOpenChange={setShowErrorDialog}>
         <AlertDialogContent>
@@ -1348,696 +2360,19 @@ export default function EditarPlatilloPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {currentStep === 1 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Etapa 1: Actualizar Información Básica del a Receta</CardTitle>
-            <CardDescription>Actualiza los detalles principales de tu receta.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <label htmlFor="nombre" className="text-sm font-medium">
-                Nombre de la Receta
-              </label>
-              <Input
-                id="nombre"
-                name="txtNombrePlatilloActualizar"
-                type="text"
-                maxLength={150}
-                value={platilloData.nombre || ""}
-                onChange={handleInputChange}
-                placeholder="Nombre del platillo"
-              />
-            </div>
-            <div>
-              <label htmlFor="descripcion" className="text-sm font-medium">
-                Descripción
-              </label>
-              <Input
-                id="descripcion"
-                name="txtDescripcionPlatilloActualizar"
-                type="text"
-                maxLength={150}
-                value={platilloData.descripcion || ""}
-                onChange={handleInputChange}
-                placeholder="Descripción del platillo"
-              />
-            </div>
-            <div>
-              <label htmlFor="instruccionespreparacion" className="text-sm font-medium">
-                Instrucciones de Elaboración
-              </label>
-              <Textarea
-                id="instruccionespreparacion"
-                name="txtPlatilloInstruccionesActualizar"
-                maxLength={500}
-                value={platilloData.instruccionespreparacion || ""}
-                onChange={handleInputChange}
-                placeholder="Instrucciones detalladas para la preparación"
-                className="min-h-[100px]"
-              />
-            </div>
-            <div>
-              <label htmlFor="tiempopreparacion" className="text-sm font-medium">
-                Tiempo de Preparación
-              </label>
-              <Textarea
-                id="tiempopreparacion"
-                name="txtPlatilloTiempoActualizar"
-                maxLength={150}
-                value={platilloData.tiempopreparacion || ""}
-                onChange={handleInputChange}
-                placeholder="Ej: 30 minutos, 1 hora"
-                className="min-h-[60px]"
-              />
-            </div>
-            <div className="space-y-2">
-              <label htmlFor="ImagenFile" className="text-sm font-medium">
-                Cargar Imagen
-              </label>
-              <Input
-                id="ImagenFile"
-                name="ImagenFile"
-                type="file"
-                accept="image/jpeg, image/jpg, image/png, image/webp"
-                onChange={handleImageChange}
-                disabled={isSubmitting}
-              />
-              {isSubmitting && (
-                <div className="flex items-center text-sm text-muted-foreground">
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Subiendo imagen...
-                </div>
-              )}
-              {(imagenPreview || imageUrl) && (
-                <div className="mt-4 flex items-center space-x-4">
-                  <div className="relative w-24 h-24 border rounded-md overflow-hidden">
-                    <Image
-                      src={imagenPreview || imageUrl || "/placeholder.svg"}
-                      alt="Previsualización de imagen"
-                      layout="fill"
-                      objectFit="cover"
-                    />
-                    <Button
-                      variant="destructive"
-                      size="icon"
-                      className="absolute -top-2 -right-2 rounded-full h-6 w-6"
-                      onClick={handleDeleteImage}
-                      disabled={isSubmitting}
-                    >
-                      <XCircle className="h-4 w-4" />
-                      <span className="sr-only">Eliminar imagen</span>
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="flex items-center p-6 pt-4 justify-end">
-              <Button
-                id="btnActualizarPlatillo"
-                name="btnActualizarPlatillo"
-                type="button"
-                onClick={handleNextStep}
-                disabled={isSubmitting}
-                className="bg-black text-white hover:bg-gray-800"
-              >
-                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Actualizar y Siguiente
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {currentStep === 2 && (
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Etapa 2: Ingredientes de la Receta</CardTitle>
-              <CardDescription>Agrega, actualiza o elimina ingredientes de tu receta.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
-                <div className="md:col-span-2 relative">
-                  <label htmlFor="txtIngredienteSearch" className="text-sm font-medium">
-                    Ingrediente
-                  </label>
-                  <Input
-                    id="txtIngredienteSearch"
-                    name="txtIngredienteSearch"
-                    value={ingredienteSearchTerm}
-                    onChange={handleIngredienteSearchChange}
-                    onFocus={() => setShowIngredienteDropdown(true)}
-                    onBlur={() => setTimeout(() => setShowIngredienteDropdown(false), 100)}
-                    placeholder="Buscar por código o nombre..."
-                    disabled={isSubmitting}
-                    autoComplete="off"
-                  />
-                  {showIngredienteDropdown && filteredIngredientes.length > 0 && (
-                    <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-y-auto mt-1">
-                      {filteredIngredientes.map((ing) => (
-                        <div
-                          key={ing.id}
-                          className="px-4 py-2 cursor-pointer hover:bg-gray-100"
-                          onMouseDown={() => handleSelectIngredienteFromDropdown(ing)}
-                        >
-                          {ing.codigo} - {ing.nombre}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <label htmlFor="txtCantidadIngrediente" className="text-sm font-medium">
-                    Cantidad
-                  </label>
-                  <Input
-                    id="txtCantidadIngrediente"
-                    name="txtCantidadIngrediente"
-                    type="number"
-                    step="0.01"
-                    value={cantidadIngrediente}
-                    onChange={(e) => setCantidadIngrediente(e.target.value)}
-                    placeholder="Cantidad"
-                    disabled={isSubmitting}
-                  />
-                </div>
-                <div>
-                  <label htmlFor="ddlUnidadMedida" className="text-sm font-medium">
-                    Unidad de Medida
-                  </label>
-                  <Select
-                    name="ddlUnidadMedida"
-                    value={selectedUnidadMedidaId}
-                    onValueChange={setSelectedUnidadMedidaId}
-                    disabled={true}
-                  >
-                    <SelectTrigger id="ddlUnidadMedida">
-                      <SelectValue placeholder="Unidad de Medida" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {unidadesMedidaDropdown.map((um) => (
-                        <SelectItem key={um.id} value={um.id.toString()}>
-                          {um.descripcion}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <label htmlFor="txtCostoIngrediente" className="text-sm font-medium">
-                    Costo Unitario
-                  </label>
-                  <Input
-                    id="txtCostoIngrediente"
-                    name="txtCostoIngrediente"
-                    type="text"
-                    value={costoIngrediente}
-                    readOnly
-                    disabled={true}
-                    placeholder="Costo"
-                  />
-                </div>
-                <div className="lg:col-span-4 flex justify-end">
-                  <Button
-                    id="btnAgregarIngrediente"
-                    name="btnAgregarIngrediente"
-                    type="button"
-                    onClick={handleAddIngrediente}
-                    disabled={isSubmitting}
-                    className="bg-green-800 hover:bg-green-900 text-white"
-                  >
-                    <PlusCircle className="mr-2 h-4 w-4" />
-                    Agregar Ingrediente
-                  </Button>
-                </div>
-              </div>
-
-              <div className="rounded-md border mt-6">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Ingrediente</TableHead>
-                      <TableHead>Cantidad</TableHead>
-                      <TableHead>Unidad</TableHead>
-                      <TableHead>Costo Parcial</TableHead>
-                      <TableHead className="text-right">Acciones</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {ingredientesPlatillo.length > 0 ? (
-                      ingredientesPlatillo.map((ing) => (
-                        <TableRow key={ing.id}>
-                          <TableCell>{ing.nombre}</TableCell>
-                          <TableCell>{ing.cantidad}</TableCell>
-                          <TableCell>{ing.unidad}</TableCell>
-                          <TableCell>{formatCurrency(ing.ingredientecostoparcial)}</TableCell>
-                          <TableCell className="text-right">
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button
-                                  variant="destructive"
-                                  size="icon"
-                                  title="Eliminar Ingrediente"
-                                  onClick={() => setIngredienteToDelete(ing.id)}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>¿Confirmar eliminación?</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    ¿Estás seguro de que deseas eliminar este ingrediente del platillo?
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel onClick={() => setIngredienteToDelete(null)}>
-                                    Cancelar
-                                  </AlertDialogCancel>
-                                  <AlertDialogAction onClick={() => handleDeleteIngrediente(ing.id)} >Confirmar</AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={4} className="h-24 text-center">
-                          No hay ingredientes agregados.
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Sub-Recetas de la Receta</CardTitle>
-              <CardDescription>Agrega, actualiza o elimina sub-recetas de tu receta.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
-                <div className="col-span-full">
-                  <label htmlFor="ddlReceta" className="text-sm font-medium">
-                    Sub-Receta
-                  </label>
-                  <Select
-                    name="ddlReceta"
-                    value={selectedRecetaId}
-                    onValueChange={handleRecetaDropdownChange}
-                    disabled={isSubmitting}
-                  >
-                    <SelectTrigger id="ddlReceta">
-                      <SelectValue placeholder="Selecciona una sub-receta" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {recetasDropdown.map((rec) => (
-                        <SelectItem key={rec.id} value={rec.id.toString()}>
-                          {rec.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="txtCantidad">Cantidad</Label>
-                  <Input
-                    id="txtCantidad"
-                    name="txtCantidad"
-                    type="number"
-                    value={selectedRecetaCantidad}
-                    onChange={handleCantidadRecetaChange}
-                    min="1"
-                    max={maxRangeReceta}
-                    disabled={!selectedRecetaId || maxRangeReceta === 0}
-                  />
-                </div>
-
-                {/* START: Update for Rango de Cantidad */}
-                <div className="col-span-2 w-[300px]">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Label htmlFor="txtCant">Porcion de Cantidad</Label>
-                    <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-xs">
-                        <p>
-                          Rango de cantidad, favor de seleccionar la cantidad requerida de la subreceta que utiliza para
-                          esta Receta, la linea define el rango de la cantidad minima y maxima que se puede utilizar con
-                          esta subreceta.
-                        </p>
-                      </TooltipContent>
-                    </Tooltip>
-                    </TooltipProvider>
-                  </div>
-                  <Input
-                    id="txtCant"
-                    name="txtCant"
-                    type="range"
-                    value={selectedRecetaCant}
-                    onChange={handleCantRecetaRangeChange}
-                    min="1"
-                    max={maxRangeReceta}
-                    disabled={!selectedRecetaId || maxRangeReceta === 0}
-                  />
-                  <div className="mt-2 text-sm text-muted-foreground flex items-center justify-between">
-                    <span>
-                      {selectedRecetaCantidad} / {maxRangeReceta} {selectedRecetaUnidadBase || "unidades"}
-                    </span>
-                    {selectedRecetaId && selectedRecetaCantidad && costoReceta && (
-                      <span className="font-semibold text-primary">
-                        Costo: {formatCurrency((Number(costoReceta) / maxRangeReceta) * Number(selectedRecetaCantidad))}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                {/* END: Update for Rango de Cantidad */}
-
-                <div>
-                  <Label htmlFor="txtUnidadBase">Unidad Base</Label>
-                  <Input
-                    id="txtUnidadBase"
-                    name="txtUnidadBase"
-                    type="text"
-                    value={selectedRecetaUnidadBase}
-                    disabled
-                  />
-                </div>
-                <div>
-                  <label htmlFor="txtCostoReceta" className="text-sm font-medium">
-                    Costo Total Sub-Receta
-                  </label>
-                  <Input
-                    id="txtCostoReceta"
-                    name="txtCostoReceta"
-                    type="text"
-                    value={costoReceta}
-                    readOnly
-                    disabled={true}
-                    placeholder="Costo de la sub-receta"
-                  />
-                </div>
-                <div className="md:col-span-full flex justify-end">
-                  <Button
-                    id="btnAgregarReceta"
-                    name="btnAgregarReceta"
-                    type="button"
-                    onClick={handleAddReceta}
-                    disabled={
-                      isSubmitting ||
-                      !selectedRecetaId ||
-                      Number(selectedRecetaCantidad) < 1 ||
-                      Number(selectedRecetaCantidad) > maxRangeReceta
-                    }
-                    className="bg-green-800 hover:bg-green-900 text-white"
-                  >
-                    <PlusCircle className="mr-2 h-4 w-4" />
-                    Agregar Sub-Receta
-                  </Button>
-                </div>
-              </div>
-
-              <div className="rounded-md border mt-6">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Sub-Receta</TableHead>
-                      <TableHead>Cantidad</TableHead>
-                      <TableHead>Costo</TableHead>
-                      <TableHead className="text-right">Acciones</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {recetasPlatillo.length > 0 ? (
-                      recetasPlatillo.map((rec) => (
-                        <TableRow key={rec.id}>
-                          <TableCell>{rec.nombre}</TableCell>
-                          <TableCell>{rec.cantidad}</TableCell>
-                          <TableCell>{formatCurrency(rec.recetacostoparcial)}</TableCell>
-                          <TableCell className="text-right">
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button
-                                  variant="destructive"
-                                  size="icon"
-                                  title="Eliminar Receta"
-                                  onClick={() => setRecetaToDelete(rec.id)}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>¿Confirmar eliminación?</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    ¿Estás seguro de que deseas eliminar esta sub-receta de la receta?
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel onClick={() => setRecetaToDelete(null)}>
-                                    Cancelar
-                                  </AlertDialogCancel>
-                                  <AlertDialogAction onClick={() => handleDeleteReceta(rec.id)} >Confirmar</AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={4} className="h-24 text-center">
-                          No hay sub-recetas agregadas.
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-
-          <div className="flex justify-between gap-4 mt-6">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handlePreviousStep}
-              disabled={isSubmitting}
-              className="bg-black text-white hover:bg-gray-800"
-            >
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Anterior
-            </Button>
-            <Button
-              type="button"
-              onClick={handleNextStep}
-              disabled={isSubmitting || (ingredientesPlatillo.length === 0 && recetasPlatillo.length === 0)}
-              className="bg-black text-white hover:bg-gray-800"
-            >
-              Siguiente
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {currentStep === 3 && (
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Etapa 3: Resumen de la Receta</CardTitle>
-              <CardDescription>Revisa la información y los costos de tu receta antes de finalizar.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-2">
-                <h3 className="text-lg font-semibold">Información Básica</h3>
-                <p>
-                  <span className="font-medium">Nombre:</span> {platilloData?.nombre}
-                </p>
-                <p>
-                  <span className="font-medium">Descripción:</span> {platilloData?.descripcion}
-                </p>
-                {platilloData?.instruccionespreparacion && (
-                  <p>
-                    <span className="font-medium">Instrucciones:</span> {platilloData.instruccionespreparacion}
-                  </p>
-                )}
-                {platilloData?.tiempopreparacion && (
-                  <p>
-                    <span className="font-medium">Tiempo de Preparación:</span> {platilloData.tiempopreparacion}
-                  </p>
-                )}
-                {(imagenPreview || imageUrl) && (
-                  <div className="mt-4">
-                    <span className="font-medium">Imagen:</span>
-                    <div className="relative w-32 h-32 mt-2 border rounded-md overflow-hidden">
-                      <Image
-                        src={imagenPreview || imageUrl || "/placeholder.svg"}
-                        alt="Imagen del platillo"
-                        layout="fill"
-                        objectFit="cover"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <h3 className="text-lg font-semibold">Ingredientes Agregados</h3>
-                {ingredientesPlatillo.length > 0 ? (
-                  <div className="rounded-md border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Ingrediente</TableHead>
-                          <TableHead>Cantidad</TableHead>
-                          <TableHead>Unidad</TableHead>
-                          <TableHead>Costo Parcial</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {ingredientesPlatillo.map((ing) => (
-                          <TableRow key={ing.id}>
-                            <TableCell>{ing.nombre}</TableCell>
-                            <TableCell>{ing.cantidad}</TableCell>
-                            <TableCell>{ing.unidad}</TableCell>
-                            <TableCell>{formatCurrency(ing.ingredientecostoparcial)}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                ) : (
-                  <p className="text-muted-foreground">No hay ingredientes agregados.</p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <h3 className="text-lg font-semibold">Sub-Recetas Agregadas</h3>
-                {recetasPlatillo.length > 0 ? (
-                  <div className="rounded-md border">
-                    <Table className="table-fixed w-full caption-bottom text-sm">
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-64 h-12 px-4 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0">
-                            Sub-Receta
-                          </TableHead>
-                          <TableHead>Cantidad</TableHead>
-                          <TableHead className="w-16 h-12 px-4 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0">
-                            Costo
-                          </TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {recetasPlatillo.map((rec) => (
-                          <TableRow key={rec.id}>
-                            <TableCell>{rec.nombre}</TableCell>
-                            <TableCell>{rec.cantidad}</TableCell>
-                            <TableCell>{formatCurrency(rec.recetacostoparcial)}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                ) : (
-                  <p className="text-muted-foreground">No hay sub-recetas agregadas.</p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <p className="mt-2 text-right text-xl font-semibold text-gray-700">
-                  Costo de Elaboracion: {formatCurrency(totalCostoPlatillo)}
-                </p>
-                <h3 className="text-right text-base font-semibold text-gray-700">Variacion de Precios: 5%</h3>
-                <p className="mt-6 text-right text-2xl font-bold border-t-4 border-[#58e0be] pt-4">
-                  Costo Total: {formatCurrency(costoAdministrativoPlatillo)}
-                </p>
-                <p className="mt-6 text-right text-lg text-black-600">
-                  <span className="text-yellow-600">*</span>Precio Mínimo: {formatCurrency(precioSugeridoPlatillo)}
-                </p>
-              </div>
-
-              {/* Nuevos inputs agregados */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6 p-4 border rounded-lg bg-gray-50">
-                <div>
-                  <Label htmlFor="txtCostoPorcentual">Costo%</Label>
-                  <Input
-                    id="txtCostoPorcentual"
-                    name="txtCostoPorcentual"
-                    type="text"
-                    value={costoPorcentual}
-                    readOnly
-                    disabled
-                    className={`text-center ${
-                      costoPorcentual && Number(costoPorcentual) > 30.0
-                        ? "bg-red-100 border-red-300"
-                        : "bg-green-100 border-green-300"
-                    }`}
-                    placeholder="0.00"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="txtPrecioVenta">Precio Venta</Label>
-                  <Input
-                    id="txtPrecioVenta"
-                    name="txtPrecioVenta"
-                    type="number"
-                    step="0.01"
-                    value={precioVenta}
-                    onChange={handlePrecioVentaChange}
-                    placeholder="0.00"
-                    className="text-center"
-                  />
-                </div>
-                <div className="col-span-1"></div>
-                <div className="col-span-1">
-                  <Label htmlFor="txtPrecioConIVA">Precio con IVA</Label>
-                  <Input
-                    id="txtPrecioConIVA"
-                    name="txtPrecioConIVA"
-                    type="text"
-                    value={precioConIVA}
-                    readOnly
-                    className="text-center"
-                    placeholder="0.00"
-                    disabled
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <div className="flex justify-between gap-4 mt-6">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handlePreviousStep}
-              disabled={isSubmitting}
-              className="bg-black text-white hover:bg-gray-800"
-            >
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Anterior
-            </Button>
-            <Button
-              id="btnActualizarCompletoPlatillo"
-              name="btnActualizarCompletoPlatillo"
-              type="button"
-              onClick={handleFinalUpdatePlatillo}
-              disabled={isSubmitting || (ingredientesPlatillo.length === 0 && recetasPlatillo.length === 0)}
-              className="bg-green-800 hover:bg-green-900 text-white"
-            >
-              {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Actualizar Receta Completa
-            </Button>
-          </div>
-        </div>
-      )}
+      <AlertDialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-green-700">Actualización Exitosa</AlertDialogTitle>
+            <AlertDialogDescription>
+              La información de la receta ha sido actualizada correctamente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setShowSuccessDialog(false)} className="bg-green-700 hover:bg-green-800">Aceptar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={showIngredienteExistsDialog} onOpenChange={setShowIngredienteExistsDialog}>
         <AlertDialogContent>

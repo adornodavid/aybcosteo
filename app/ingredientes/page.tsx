@@ -8,7 +8,7 @@ import Image from "next/image" // Importar Image de next/image
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Filter, Edit, Trash2, Package, Loader2, Eye, Calendar, AlertCircle, RotateCcw } from "lucide-react"
+import { Filter, Edit, Trash2, Package, Loader2, Eye, Calendar, AlertCircle, RotateCcw, Plus } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -20,6 +20,8 @@ import {
   eliminarIngrediente,
 } from "@/app/actions/ingredientes-actions"
 import { useAuth } from "@/contexts/auth-context"
+import { RegistrarInsumoDialog } from "@/components/ingredientes/registrar-insumo-dialog"
+import { EditarInsumoDialog } from "@/components/ingredientes/editar-insumo-dialog"
 
 interface Hotel {
   id: number
@@ -78,6 +80,9 @@ export default function IngredientesPage() {
   const [txtNombre, setTxtNombre] = useState("")
   const [ddlHoteles, setDdlHoteles] = useState("")
   const [ddlCategorias, setDdlCategorias] = useState("")
+  const [registrarInsumoOpen, setRegistrarInsumoOpen] = useState(false)
+  const [editarInsumoOpen, setEditarInsumoOpen] = useState(false)
+  const [editarInsumoId, setEditarInsumoId] = useState<number | null>(null)
 
   const itemsPerPage = 20
 
@@ -361,14 +366,29 @@ export default function IngredientesPage() {
           <h1 className="text-3xl font-bold">Ingredientes</h1>
           <p className="text-base text-muted-foreground mt-2">Gestión completa de ingredientes por hotel</p>
         </div>
-        {/* 2. Botones con alineación derecha */}
-        {/*<div className="flex gap-2">
-          <Button onClick={() => router.push("/ingredientes/nuevo")}>Registrar Ingrediente</Button>
-          <Button variant="outline" onClick={handleBtnImportarExcel}>
-            Importar Excel
+        <div className="flex gap-2">
+          <Button
+            onClick={() => setRegistrarInsumoOpen(true)}
+            className="bg-[#5d8f72] hover:bg-[#44785a] text-white"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Registrar Insumo
           </Button>
-        </div>*/}
+        </div>
       </div>
+
+      <RegistrarInsumoDialog
+        open={registrarInsumoOpen}
+        onOpenChange={setRegistrarInsumoOpen}
+        onSuccess={() => ejecutarBusqueda(1)}
+      />
+
+      <EditarInsumoDialog
+        open={editarInsumoOpen}
+        onOpenChange={setEditarInsumoOpen}
+        ingredienteId={editarInsumoId}
+        onSuccess={() => ejecutarBusqueda(currentPage)}
+      />
 
       {/* 3. Resumen de estadísticas generales */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -581,24 +601,18 @@ export default function IngredientesPage() {
                         </td>
                         <td className="p-4 align-middle text-right">
                           <div className="flex justify-end gap-2">
-                           {/* <Button variant="ghost" size="sm" asChild>
-                              <Link href={`/ingredientes/${ingrediente.id}`}>
-                                <Eye className="h-4 w-4" />
-                              </Link>
-                            </Button>
-                            <Button variant="ghost" size="sm" asChild>
-                              <Link href={`/ingredientes/${ingrediente.id}/editar`}>
-                                <Edit className="h-4 w-4" />
-                              </Link>
-                            </Button>
                             <Button
                               variant="ghost"
-                              size="sm"
-                              onClick={() => handleEliminarIngrediente(ingrediente.id, ingrediente.nombre || "")}
-                              className="text-red-500 hover:text-red-700"
+                              size="icon"
+                              title="Editar insumo"
+                              onClick={() => {
+                                setEditarInsumoId(ingrediente.id)
+                                setEditarInsumoOpen(true)
+                              }}
+                              className="text-[#528A94] hover:bg-[#528A94]/10 hover:text-[#3f6e77]"
                             >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>*/}
+                              <Edit className="h-4 w-4" />
+                            </Button>
                           </div>
                         </td>
                       </tr>

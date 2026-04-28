@@ -666,9 +666,6 @@ export default function RecetasPage() {
                     <TableCell>{receta.hotel}</TableCell>
                     <TableCell>
                       <div className="flex space-x-2">
-                        <Button size="sm" variant="outline" onClick={() => handleViewRecetaDetails(receta.folio)}>
-                          <Eye className="h-3 w-3" />
-                        </Button>
                         {sesion && [1, 2, 3, 4].includes(Number.parseInt(sesion.RolId?.toString() || "0", 10)) && (
                           <Button
                             size="sm"

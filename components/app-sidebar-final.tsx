@@ -52,7 +52,10 @@ export function AppSidebar() {
     [attemptNavigation, router],
   )
 
-  const menuItems = [
+  const userRolId = Number(sessionData?.RolId ?? 0)
+  const isAdminRole = [1, 2, 3, 4].includes(userRolId)
+
+  const allMenuItems = [
     {
       name: "Dashboard",
       href: "/dashboard",
@@ -102,6 +105,13 @@ export function AppSidebar() {
       ],
     },
     {
+      name: "Administración",
+      icon: Icons.UsersRound,
+      hasSubmenu: true,
+      onlyAdmin: true,
+      submenu: [{ name: "Control de Usuarios", href: "/control-usuarios", icon: Icons.UsersRound }],
+    },
+    {
       name: "Perfil",
       icon: Icons.User,
       hasSubmenu: true,
@@ -111,6 +121,8 @@ export function AppSidebar() {
       ],
     },
   ]
+
+  const menuItems = allMenuItems.filter((item: any) => !item.onlyAdmin || isAdminRole)
 
   return (
     <>
@@ -219,13 +231,49 @@ export function AppSidebar() {
             {/* Iconos de navegación directa */}
             <button
               onClick={() => handleNavigationClick("/dashboard")}
-              className={`w-full flex justify-center items-center p-3 rounded-md transition-colors ${
+              className={`w-full flex flex-col items-center gap-1 p-2 rounded-md transition-colors ${
                 isActive("/dashboard") ? "bg-[#56706e] text-white" : "text-white hover:bg-[#56706e]"
               }`}
               title="Dashboard"
             >
               <Icons.LayoutDashboard className="w-6 h-6" />
+              <span className="text-[10px] font-medium leading-tight">Dashboard</span>
             </button>
+
+            <button
+              onClick={() => handleNavigationClick("/platillos")}
+              className={`w-full flex flex-col items-center gap-1 p-2 rounded-md transition-colors ${
+                isActive("/platillos") ? "bg-[#56706e] text-white" : "text-white hover:bg-[#56706e]"
+              }`}
+              title="Recetas"
+            >
+              <Icons.Utensils className="w-6 h-6" />
+              <span className="text-[10px] font-medium leading-tight">Recetas</span>
+            </button>
+
+            <button
+              onClick={() => handleNavigationClick("/menus")}
+              className={`w-full flex flex-col items-center gap-1 p-2 rounded-md transition-colors ${
+                isActive("/menus") ? "bg-[#56706e] text-white" : "text-white hover:bg-[#56706e]"
+              }`}
+              title="Menús"
+            >
+              <Icons.BookOpen className="w-6 h-6" />
+              <span className="text-[10px] font-medium leading-tight">Menús</span>
+            </button>
+
+            {isAdminRole && (
+              <button
+                onClick={() => handleNavigationClick("/control-usuarios")}
+                className={`w-full flex flex-col items-center gap-1 p-2 rounded-md transition-colors ${
+                  isActive("/control-usuarios") ? "bg-[#56706e] text-white" : "text-white hover:bg-[#56706e]"
+                }`}
+                title="Control de Usuarios"
+              >
+                <Icons.UsersRound className="w-6 h-6" />
+                <span className="text-[10px] font-medium leading-tight text-center">Control Usuarios</span>
+              </button>
+            )}
 
             {/*<button
               onClick={() => handleNavigationClick("/ingredientes")}

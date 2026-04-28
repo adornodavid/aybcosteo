@@ -257,21 +257,19 @@ export async function actualizarDisponibilidadPlatillo(data: {
 
 export async function actualizarPrecioVenta(data: ActualizarPrecioVentaData) {
   try {
-    // Modificación aquí: margenUtilidad ahora usa costoadministrativo
+    // El precio de venta se propaga a TODOS los menús relacionados con este platillo.
+    // Un platillo tiene un único precio, sin importar desde qué menú se edite.
     const margenUtilidad = data.precioventa - data.costoadministrativo
 
     const { data: result, error } = await supabase
-      .from("platillosxmenu") // Usar 'platillosxmenu'
+      .from("platillosxmenu")
       .update({
-        precioventa: data.precioventa, // Usar 'precioventa'
-        margenutilidad: margenUtilidad, // Actualizar margen de utilidad
-        precioconiva: data.precioventa * 0.16 + data.precioventa, // Usar 'precioventa'
-        // No hay 'updated_at' en tu SQL, así que lo omito
+        precioventa: data.precioventa,
+        margenutilidad: margenUtilidad,
+        precioconiva: data.precioventa * 0.16 + data.precioventa,
       })
-      .eq("menuid", data.menuid) // Usar 'menuid'
-      .eq("platilloid", data.platilloid) // Usar 'platilloid'
+      .eq("platilloid", data.platilloid)
       .select()
-      .single()
 
     if (error) {
       console.error("Error al actualizar precio de venta en platillosxmenu:", error)

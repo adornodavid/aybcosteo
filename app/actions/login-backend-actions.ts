@@ -38,7 +38,7 @@ export async function procesarInicioSesion(email: string, password: string): Pro
     // Paso 2: Obtener datos del usuario
     const { data: userData, error: userError } = await supabase
       .from("usuarios")
-      .select("id, email, nombrecompleto, hotelid, rolid")
+      .select("id, email, nombrecompleto, hotelid, rolid, cantidadaccesos")
       .eq("email", email)
       .single()
 
@@ -48,6 +48,21 @@ export async function procesarInicioSesion(email: string, password: string): Pro
         success: false,
         message: "Error obteniendo datos del usuario.",
       }
+    }
+
+    // Paso 2.1: Tracking de acceso — incrementar contador y actualizar última fecha
+    const nuevaCantidad = (userData.cantidadaccesos || 0) + 1
+    const hoy = new Date().toISOString().split("T")[0]
+    const { error: trackError } = await supabase
+      .from("usuarios")
+      .update({
+        cantidadaccesos: nuevaCantidad,
+        fechaultimoacceso: hoy,
+      })
+      .eq("id", userData.id)
+    if (trackError) {
+      console.error("Error actualizando tracking de acceso:", trackError)
+      // No bloquea el login si falla
     }
 
     // Paso 3: Obtener permisos del rol

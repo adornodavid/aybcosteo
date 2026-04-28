@@ -222,6 +222,149 @@ export async function obtenerCategoriasIngredientes() {
   }
 }
 
+export async function obtenerTipoUnidadMedida() {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("tipounidadmedida")
+      .select("id, descripcion")
+      .order("descripcion", { ascending: true })
+
+    if (error) {
+      console.error("Error obteniendo tipos de unidad de medida:", error)
+      return { success: false, data: [], error: error.message }
+    }
+
+    return { success: true, data: data || [] }
+  } catch (error: any) {
+    console.error("Error obteniendo tipos de unidad de medida:", error)
+    return { success: false, data: [], error: error.message }
+  }
+}
+
+export async function validarCodigoIngrediente(codigo: string, hotelid: number) {
+  try {
+    if (!codigo || !codigo.trim() || !hotelid) {
+      return { success: false, exists: false, error: "Código u hotel inválido" }
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from("ingredientes")
+      .select("id")
+      .eq("hotelid", hotelid)
+      .eq("codigo", codigo.trim())
+      .limit(1)
+
+    if (error) {
+      console.error("Error validando código:", error)
+      return { success: false, exists: false, error: error.message }
+    }
+
+    return { success: true, exists: (data?.length || 0) > 0 }
+  } catch (error: any) {
+    console.error("Error validando código:", error)
+    return { success: false, exists: false, error: error.message }
+  }
+}
+
+export async function registrarInsumo(insumo: {
+  codigo: string
+  hotelid: number
+  nombre: string
+  categoriaid: number
+  unidadmedidaid: number
+  costo: number
+  conversion: number
+  porcentajemerma: number
+  codigorapsodia?: string | null
+}) {
+  try {
+    if (!insumo.codigo?.trim() || !insumo.hotelid || !insumo.nombre?.trim()) {
+      return { success: false, error: "Faltan campos obligatorios" }
+    }
+
+    const { data: existente, error: errExist } = await supabaseAdmin
+      .from("ingredientes")
+      .select("id")
+      .eq("hotelid", insumo.hotelid)
+      .eq("codigo", insumo.codigo.trim())
+      .limit(1)
+
+    if (errExist) throw errExist
+    if (existente && existente.length > 0) {
+      return { success: false, error: "El código ya existe para este hotel" }
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from("ingredientes")
+      .insert([
+        {
+          codigo: insumo.codigo.trim(),
+          hotelid: insumo.hotelid,
+          nombre: insumo.nombre.trim(),
+          categoriaid: insumo.categoriaid,
+          unidadmedidaid: insumo.unidadmedidaid,
+          costo: insumo.costo,
+          conversion: insumo.conversion,
+          porcentajemerma: insumo.porcentajemerma,
+          codigorapsodia: insumo.codigorapsodia?.trim() || null,
+          activo: true,
+          fechacreacion: new Date().toISOString().split("T")[0],
+        },
+      ])
+      .select()
+      .single()
+
+    if (error) throw error
+
+    revalidatePath("/ingredientes")
+    return { success: true, data }
+  } catch (error: any) {
+    console.error("Error registrando insumo:", error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function actualizarInsumo(
+  id: number,
+  insumo: {
+    nombre: string
+    categoriaid: number | null
+    unidadmedidaid: number
+    costo: number
+    conversion: number
+    porcentajemerma: number
+    codigorapsodia?: string | null
+  },
+) {
+  try {
+    if (!id || !insumo.nombre?.trim()) {
+      return { success: false, error: "Faltan datos obligatorios" }
+    }
+
+    const { error } = await supabaseAdmin
+      .from("ingredientes")
+      .update({
+        nombre: insumo.nombre.trim(),
+        categoriaid: insumo.categoriaid,
+        unidadmedidaid: insumo.unidadmedidaid,
+        costo: insumo.costo,
+        conversion: insumo.conversion,
+        porcentajemerma: insumo.porcentajemerma,
+        codigorapsodia: insumo.codigorapsodia?.trim() || null,
+        fechamodificacion: new Date().toISOString().split("T")[0],
+      })
+      .eq("id", id)
+
+    if (error) throw error
+
+    revalidatePath("/ingredientes")
+    return { success: true }
+  } catch (error: any) {
+    console.error("Error actualizando insumo:", error)
+    return { success: false, error: error.message }
+  }
+}
+
 export async function buscarIngredientes(filtros: {
   codigo?: string
   nombre?: string

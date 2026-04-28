@@ -848,16 +848,14 @@ export default function MenusPage() {
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
-                          {sessionRolId && [1, 2, 3, 4].includes(sessionRolId) && (
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              title="Agregar platillos"
-                              onClick={() => router.push(`/menus/${menu.id}/agregar`)}
-                            >
-                               <HandPlatter className="h-4 w-4" />
-                            </Button>
-                          )}
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            title="Agregar platillos"
+                            onClick={() => router.push(`/menus/${menu.id}/agregar`)}
+                          >
+                            <HandPlatter className="h-4 w-4" />
+                          </Button>
                           {sessionRolId && [1, 2, 3, 4].includes(sessionRolId) && (
                             <Button
                               size="icon"

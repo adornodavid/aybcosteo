@@ -28,6 +28,8 @@ import {
   Home,
   Lock,
   KeyRound,
+  BookOpen,
+  UsersRound,
 } from "lucide-react"
 
 export const Icons = {
@@ -60,6 +62,8 @@ export const Icons = {
   Home,
   Lock,
   KeyRound,
+  BookOpen,
+  UsersRound,
 }
 
 export type Icon = keyof typeof Icons

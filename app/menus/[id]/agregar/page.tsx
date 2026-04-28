@@ -4,7 +4,7 @@
   Imports
 ================================================== */
 import { useState, useEffect, useCallback } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
 import {
   agregarPlatilloAMenu,
@@ -30,9 +30,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/components/ui/use-toast"
-import { Loader2, ArrowLeft, Plus, Trash2, Pencil, TriangleAlert } from "lucide-react"
+import { Loader2, ArrowLeft, Plus, Trash2, Pencil, TriangleAlert, Info } from "lucide-react"
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table"
 import { createClient } from "@/lib/supabase"
+import { getSession } from "@/app/actions/session-actions"
 
 interface AgregarPlatillosPageProps {
   params: {
@@ -43,6 +44,7 @@ interface AgregarPlatillosPageProps {
 export default function AgregarPlatillosPage({ params }: AgregarPlatillosPageProps) {
   const menuId = Number.parseInt(params.id)
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { toast } = useToast()
 
   const [assignedPlatillos, setAssignedPlatillos] = useState<MenuPlatillo[]>([])
@@ -58,7 +60,7 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showValidationAlert, setShowValidationAlert] = useState(false)
   const [costoPorcentual, setCostoPorcentual] = useState<string>("")
-  const [searchFilter, setSearchFilter] = useState<string>("")
+  const [searchFilter, setSearchFilter] = useState<string>(searchParams.get("buscar") || "")
   const [sortOrder, setSortOrder] = useState<string>("")
 
   const [showDetailsDialog, setShowDetailsDialog] = useState(false)
@@ -70,6 +72,21 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
   const [platilloToEdit, setPlatilloToEdit] = useState<MenuPlatillo | null>(null)
   const [editPrecioVenta, setEditPrecioVenta] = useState<string>("")
   const [ivaRate, setIvaRate] = useState<number>(1.16)
+  // Modal: precio se propagará a múltiples menús
+  const [showMultiMenuDialog, setShowMultiMenuDialog] = useState(false)
+  const [multiMenuCount, setMultiMenuCount] = useState(0)
+
+  const [sessionRolId, setSessionRolId] = useState<number | null>(null)
+  const canEditMenu = sessionRolId !== null && [1, 2, 3, 4].includes(sessionRolId)
+
+  useEffect(() => {
+    const loadSession = async () => {
+      const session = await getSession()
+      const rolId = Number.parseInt(session?.RolId?.toString() || "0", 10)
+      setSessionRolId(rolId)
+    }
+    loadSession()
+  }, [])
 
   const fetchNombreMenu = useCallback(async () => {
     const res = await obtenerNombreMenu(menuId)
@@ -331,7 +348,7 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
     setShowEditPriceDialog(true)
   }
 
-  const handleUpdatePrecioVenta = async () => {
+  const handleUpdatePrecioVenta = async (confirmadoMultiMenu = false) => {
     if (!platilloToEdit || !editPrecioVenta) {
       toast({
         title: "Información faltante",
@@ -349,6 +366,21 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
         variant: "destructive",
       })
       return
+    }
+
+    // Precheck: si el platillo está vinculado a más de un menú, avisar al usuario
+    if (!confirmadoMultiMenu) {
+      const supabaseClient = createClient()
+      const { count, error: countError } = await supabaseClient
+        .from("platillosxmenu")
+        .select("*", { count: "exact", head: true })
+        .eq("platilloid", platilloToEdit.platilloid)
+
+      if (!countError && count !== null && count > 1) {
+        setMultiMenuCount(count)
+        setShowMultiMenuDialog(true)
+        return
+      }
     }
 
     setIsSubmitting(true)
@@ -421,10 +453,12 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
           </Button>
           <h1 className="text-3xl font-bold">Recetas de Menú: {nombreMenu || "Cargando..."}</h1>
         </div>
-        <Button id="btnAgregarPlatillo" name="btnAgregarPlatillo" onClick={handleOpenDialog}>
-          <Plus className="mr-2 h-4 w-4" />
-          Agregar Recetas
-        </Button>
+        {canEditMenu && (
+          <Button id="btnAgregarPlatillo" name="btnAgregarPlatillo" onClick={handleOpenDialog}>
+            <Plus className="mr-2 h-4 w-4" />
+            Agregar Recetas
+          </Button>
+        )}
       </div>
 
       <section className="mb-8">
@@ -479,16 +513,18 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {filteredAndSortedAssignedPlatillos.map((platillo) => (
               <Card key={platillo.id} className="flex flex-col items-center text-center relative">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="absolute top-2 right-2 z-10 text-red-500 hover:text-red-700"
-                  onClick={() => handleDeletePlatillo(platillo.platilloid)}
-                  disabled={isSubmitting}
-                >
-                  <Trash2 className="h-5 w-5" />
-                  <span className="sr-only">Eliminar Platillo</span>
-                </Button>
+                {canEditMenu && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute top-2 right-2 z-10 text-red-500 hover:text-red-700"
+                    onClick={() => handleDeletePlatillo(platillo.platilloid)}
+                    disabled={isSubmitting}
+                  >
+                    <Trash2 className="h-5 w-5" />
+                    <span className="sr-only">Eliminar Platillo</span>
+                  </Button>
+                )}
                 <div className="cursor-pointer w-full" onClick={() => handleViewDetails(platillo.platillos!)}>
                   <CardHeader className="p-0 w-full">
                     <div className="relative w-full h-40 bg-gray-100">
@@ -507,18 +543,20 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
                     <div className="flex flex-col items-center justify-center gap-1">
                       <div className="flex items-center justify-center gap-2">
                         <p className="text-gray-700 text-sm">Precio Venta: ${(platillo.precioventa ?? 0).toFixed(2)}</p>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 text-gray-500 hover:text-gray-700"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleEditPrice(platillo)
-                          }}
-                        >
-                          <Pencil className="h-4 w-4" />
-                          <span className="sr-only">Editar Precio</span>
-                        </Button>
+                        {canEditMenu && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-gray-500 hover:text-gray-700"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleEditPrice(platillo)
+                            }}
+                          >
+                            <Pencil className="h-4 w-4" />
+                            <span className="sr-only">Editar Precio</span>
+                          </Button>
+                        )}
                       </div>
                       <p className="text-gray-600 text-xs">
                         Con IVA: ${((platillo.precioventa ?? 0) * ivaRate).toFixed(2)}
@@ -858,7 +896,7 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
             <Button
               id="btnActualizarPrecio"
               name="btnActualizarPrecio"
-              onClick={handleUpdatePrecioVenta}
+              onClick={() => handleUpdatePrecioVenta()}
               disabled={isSubmitting}
             >
               {isSubmitting ? (
@@ -871,6 +909,49 @@ export default function AgregarPlatillosPage({ params }: AgregarPlatillosPagePro
               )}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: precio se propagará a múltiples menús */}
+      <Dialog open={showMultiMenuDialog} onOpenChange={setShowMultiMenuDialog}>
+        <DialogContent className="max-w-md p-0 overflow-hidden border-0">
+          <div className="bg-gradient-to-br from-[#528A94] to-[#3a7d6a] px-6 py-6 text-white">
+            <div className="flex items-center gap-3">
+              <div className="rounded-full bg-white/25 p-3 backdrop-blur-sm shadow-lg ring-2 ring-white/30">
+                <Info className="h-7 w-7" />
+              </div>
+              <div>
+                <DialogHeader>
+                  <DialogTitle className="text-xl font-bold text-white text-left">
+                    Precio compartido en {multiMenuCount} menús
+                  </DialogTitle>
+                  <DialogDescription className="text-white/90 text-left mt-1">
+                    Este platillo está vinculado a <strong className="text-white">{multiMenuCount} menús</strong>. El nuevo precio de venta se aplicará a todos ellos para mantener consistencia.
+                  </DialogDescription>
+                </DialogHeader>
+              </div>
+            </div>
+          </div>
+          <div className="px-6 py-4 bg-white flex flex-col gap-2">
+            <Button
+              onClick={() => {
+                setShowMultiMenuDialog(false)
+                handleUpdatePrecioVenta(true)
+              }}
+              disabled={isSubmitting}
+              className="bg-[#5d8f72] hover:bg-[#44785a] text-white"
+            >
+              Continuar y actualizar todos
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => setShowMultiMenuDialog(false)}
+              disabled={isSubmitting}
+              className="text-gray-500 hover:bg-gray-100"
+            >
+              Cancelar
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

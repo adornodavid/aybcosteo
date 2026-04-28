@@ -6,7 +6,7 @@
 import type React from "react"
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
-import { Loader2, UploadCloud, HelpCircle } from "lucide-react"
+import { Loader2, UploadCloud, HelpCircle, ChefHat, Utensils, ListChecks, Receipt, CheckCircle2, Lock, Save } from "lucide-react"
 import { toast } from "sonner"
 import { Suspense } from "react"
 import Loading from "./loading"
@@ -14,6 +14,7 @@ import Image from "next/image" // Importar Image de next/image
 
 import * as actions from "@/app/actions/platillos-wizard-actions"
 import { useNavigationGuard } from "@/contexts/navigation-guard-context" // Importar el hook del contexto
+import { supabase } from "@/lib/supabase"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -23,6 +24,7 @@ import { Progress } from "@/components/ui/progress"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Badge } from "@/components/ui/badge"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -75,11 +77,14 @@ interface IngredienteAgregada {
   cantidad: number
   ingredientecostoparcial: number
   unidad: string // Añadir esta línea
+  costoUnitarioEfectivo?: number
 }
 interface RecetaAgregada {
   id: number
   nombre: string
   recetacostoparcial: number
+  cantidad?: number
+  costoUnitarioEfectivo?: number
 }
 
 const MAX_IMAGE_SIZE_MB = 10
@@ -91,9 +96,32 @@ export default function NuevoPlatilloPage() {
 
   // --- ESTADO GENERAL ---
   const [etapa, setEtapa] = useState(1)
+  const [maxEtapaAlcanzada, setMaxEtapaAlcanzada] = useState(1)
   const [loading, setLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showCookingAnimation, setShowCookingAnimation] = useState(false) // Nuevo estado para la animación
+
+  const formatCurrency = (amount: number | null) =>
+    new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(amount || 0)
+
+  const goToEtapa = (target: number) => {
+    if (target <= maxEtapaAlcanzada) setEtapa(target)
+  }
+  const advanceToEtapa = (target: number) => {
+    setEtapa(target)
+    setMaxEtapaAlcanzada((prev) => Math.max(prev, target))
+  }
+
+  // Modal de cambios guardados
+  const [showSavedModal, setShowSavedModal] = useState(false)
+  const [savedModalMessage, setSavedModalMessage] = useState("")
+
+  // Modal de confirmación al registrar sin precio
+  const [showSinPrecioDialog, setShowSinPrecioDialog] = useState(false)
+
+  // Edición inline de cantidad en tablas
+  const [editingIngCantidad, setEditingIngCantidad] = useState<Record<number, string>>({})
+  const [editingRecCantidad, setEditingRecCantidad] = useState<Record<number, string>>({})
 
   // --- ESTADO DE DATOS Y PROCESO ---
   const [platilloId, setPlatilloId] = useState<number | null>(null)
@@ -411,7 +439,7 @@ export default function NuevoPlatilloPage() {
     if (result.success && result.platilloId) {
       setPlatilloId(result.platilloId)
       toast.success("Información básica guardada. Continue con el siguiente paso.")
-      setEtapa(2)
+      advanceToEtapa(2)
     } else {
       setErrorMessage(result.error || "Ocurrió un error al registrar la receta.")
       setShowErrorDialog(true)
@@ -426,7 +454,152 @@ export default function NuevoPlatilloPage() {
     }
     const menu = menus.find((m) => m.id.toString() === menuId)
     setMenuNom(menu?.nombre || "")
-    setEtapa(3)
+    advanceToEtapa(3)
+  }
+
+  const handleGuardarCambiosEtapa1 = async () => {
+    if (!platilloId) return
+    if (!nombre || !descripcion) {
+      setErrorMessage("Favor de llenar la información faltante (Nombre y Descripción son obligatorios).")
+      setShowErrorDialog(true)
+      return
+    }
+    setIsSubmitting(true)
+    const formData = new FormData()
+    formData.append("nombre", nombre)
+    formData.append("descripcion", descripcion)
+    formData.append("instruccionespreparacion", instrucciones || "")
+    formData.append("tiempopreparacion", tiempo || "")
+    if (imagenFile) {
+      formData.append("imagen", imagenFile)
+    }
+    const result = await actions.actualizarPlatilloBasico(platilloId, formData)
+    if (result.success) {
+      setSavedModalMessage("La información básica de la receta se actualizó correctamente.")
+      setShowSavedModal(true)
+    } else {
+      setErrorMessage(result.error || "No se pudieron guardar los cambios.")
+      setShowErrorDialog(true)
+    }
+    setIsSubmitting(false)
+  }
+
+  const handleIngredienteCantidadChange = (id: number, value: string) => {
+    setEditingIngCantidad((prev) => ({ ...prev, [id]: value }))
+    const num = Number.parseFloat(value)
+    if (!isNaN(num) && num > 0) {
+      setIngredientesAgregados((prev) =>
+        prev.map((ing) => {
+          if (ing.id !== id) return ing
+          const cu = ing.costoUnitarioEfectivo ?? (ing.cantidad > 0 ? ing.ingredientecostoparcial / ing.cantidad : 0)
+          return { ...ing, cantidad: num, ingredientecostoparcial: num * cu, costoUnitarioEfectivo: cu }
+        }),
+      )
+    }
+  }
+
+  const handleIngredienteCantidadBlur = async (id: number) => {
+    const ing = ingredientesAgregados.find((i) => i.id === id)
+    if (!ing) return
+
+    const draft = editingIngCantidad[id]
+    const num = draft !== undefined ? Number.parseFloat(draft) : ing.cantidad
+
+    if (isNaN(num) || num <= 0) {
+      toast.error("Cantidad inválida.")
+      setEditingIngCantidad((prev) => {
+        const { [id]: _omit, ...rest } = prev
+        return rest
+      })
+      return
+    }
+
+    const cu = ing.costoUnitarioEfectivo ?? (ing.cantidad > 0 ? ing.ingredientecostoparcial / ing.cantidad : 0)
+    const newParcial = num * cu
+
+    const { error } = await supabase
+      .from("ingredientesxplatillo")
+      .update({
+        cantidad: num,
+        ingredientecostoparcial: newParcial,
+        fechamodificacion: new Date().toISOString(),
+      })
+      .eq("id", id)
+
+    if (error) {
+      toast.error("Error al actualizar cantidad: " + error.message)
+      return
+    }
+
+    setIngredientesAgregados((prev) =>
+      prev.map((i) =>
+        i.id === id ? { ...i, cantidad: num, ingredientecostoparcial: newParcial, costoUnitarioEfectivo: cu } : i,
+      ),
+    )
+    setEditingIngCantidad((prev) => {
+      const { [id]: _omit, ...rest } = prev
+      return rest
+    })
+  }
+
+  const handleRecetaCantidadChange = (id: number, value: string) => {
+    setEditingRecCantidad((prev) => ({ ...prev, [id]: value }))
+    const num = Number.parseFloat(value)
+    if (!isNaN(num) && num > 0) {
+      setRecetasAgregadas((prev) =>
+        prev.map((rec) => {
+          if (rec.id !== id) return rec
+          const cant = rec.cantidad ?? 1
+          const cu = rec.costoUnitarioEfectivo ?? (cant > 0 ? rec.recetacostoparcial / cant : 0)
+          return { ...rec, cantidad: num, recetacostoparcial: num * cu, costoUnitarioEfectivo: cu }
+        }),
+      )
+    }
+  }
+
+  const handleRecetaCantidadBlur = async (id: number) => {
+    const rec = recetasAgregadas.find((r) => r.id === id)
+    if (!rec) return
+
+    const draft = editingRecCantidad[id]
+    const cantBase = rec.cantidad ?? 1
+    const num = draft !== undefined ? Number.parseFloat(draft) : cantBase
+
+    if (isNaN(num) || num <= 0) {
+      toast.error("Cantidad inválida.")
+      setEditingRecCantidad((prev) => {
+        const { [id]: _omit, ...rest } = prev
+        return rest
+      })
+      return
+    }
+
+    const cu = rec.costoUnitarioEfectivo ?? (cantBase > 0 ? rec.recetacostoparcial / cantBase : 0)
+    const newParcial = num * cu
+
+    const { error } = await supabase
+      .from("recetasxplatillo")
+      .update({
+        cantidad: num,
+        recetacostoparcial: newParcial,
+        fechamodificacion: new Date().toISOString(),
+      })
+      .eq("id", id)
+
+    if (error) {
+      toast.error("Error al actualizar cantidad: " + error.message)
+      return
+    }
+
+    setRecetasAgregadas((prev) =>
+      prev.map((r) =>
+        r.id === id ? { ...r, cantidad: num, recetacostoparcial: newParcial, costoUnitarioEfectivo: cu } : r,
+      ),
+    )
+    setEditingRecCantidad((prev) => {
+      const { [id]: _omit, ...rest } = prev
+      return rest
+    })
   }
 
   const handleIngredienteSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -462,7 +635,12 @@ export default function NuevoPlatilloPage() {
     )
 
     if (result.success && result.ingredientes) {
-      setIngredientesAgregados(result.ingredientes)
+      setIngredientesAgregados(
+        result.ingredientes.map((i: any) => ({
+          ...i,
+          costoUnitarioEfectivo: i.cantidad && i.cantidad > 0 ? i.ingredientecostoparcial / i.cantidad : 0,
+        })),
+      )
       toast.success("Ingrediente agregado.")
       // Limpiar inputs
       setSelIngredienteId("") // Esto activará el useEffect para limpiar ingredienteSearchTerm
@@ -524,7 +702,12 @@ export default function NuevoPlatilloPage() {
     const result = await actions.agregarReceta(platilloId!, Number(selRecetaId), Number(selRecetaCantidad))
 
     if (result.success && result.recetas) {
-      setRecetasAgregadas(result.recetas)
+      setRecetasAgregadas(
+        result.recetas.map((r: any) => ({
+          ...r,
+          costoUnitarioEfectivo: r.cantidad && r.cantidad > 0 ? r.recetacostoparcial / r.cantidad : 0,
+        })),
+      )
       toast.success("Sub-Receta agregada.")
       setSelRecetaId("")
       setSelRecetaCosto("")
@@ -571,24 +754,25 @@ export default function NuevoPlatilloPage() {
     setIsSubmitting(false)
   }
 
-  const handleRegistroCompleto = async () => {
+  const handleRegistroCompleto = async (forzarSinPrecio = false) => {
     if (!menuNom) {
       toast.error("La receta no se encuentra asignada a ningun Menu, favor de llenar la informacion.")
       return
     }
 
-    if (!precioVenta || Number(precioVenta) <= 0) {
-      setErrorMessage("Favor de ingresar un precio de venta válido.")
-      setShowErrorDialog(true)
+    // Si no hay precio y el usuario no ha confirmado registrar sin él → modal de confirmación
+    if (!forzarSinPrecio && (!precioVenta || Number(precioVenta) <= 0)) {
+      setShowSinPrecioDialog(true)
       return
     }
 
-    const precioVentaNum = Number(precioVenta)
+    const precioVentaNum = forzarSinPrecio ? 0 : Number(precioVenta)
     const costoAdmin = costoAdministrativoPlatillo || 0
-    const precioConIVANum = Number(precioConIVA)
-    const costoPorcentualNum = Number(costoPorcentual)
+    const precioConIVANum = forzarSinPrecio ? 0 : Number(precioConIVA)
+    const costoPorcentualNum = forzarSinPrecio ? 0 : Number(costoPorcentual)
 
-    if (precioConIVANum < (precioSugeridoPlatillo || 0)) {
+    // Validación del precio mínimo sugerido sólo si hay precio capturado
+    if (!forzarSinPrecio && precioConIVANum < (precioSugeridoPlatillo || 0)) {
       setErrorMessage(
         `El precio con IVA no puede ser menor al precio mínimo sugerido ($${(precioSugeridoPlatillo || 0).toFixed(2)}).`,
       )
@@ -616,7 +800,7 @@ export default function NuevoPlatilloPage() {
 
       if (result.success) {
         setValidaRegistroId(1)
-        setEtapa(5) // Cambiar a la nueva Etapa 5
+        advanceToEtapa(5) // Cambiar a la nueva Etapa 5
       } else {
         toast.error(result.error || "Error al finalizar el registro.")
       }
@@ -629,26 +813,31 @@ export default function NuevoPlatilloPage() {
     }
   }
 
-  // Esta función es llamada por el AlertDialog y resuelve la promesa de navegación
+  // Esta función es llamada por el AlertDialog y resuelve la promesa de navegación.
+  // - Si la receta NO está vinculada a un menú (validaRegistroId === 0): se borra en background.
+  // - Si ya tiene menú vinculado: no entra al modal porque el guard ya está desactivado.
+  // La navegación se resuelve INMEDIATAMENTE — la limpieza corre fire-and-forget para no bloquear.
   const handleLeavePage = useCallback(
-    async (confirm: boolean) => {
-      setShowLeaveConfirm(false) // Cerrar el modal
+    (confirm: boolean) => {
+      setShowLeaveConfirm(false)
       if (confirm) {
-        if (platilloId) {
-          const result = await actions.cancelarRegistro(platilloId)
-          if (result.success) {
-            toast.info("Registro cancelado y datos depurados.")
-          } else {
-            toast.error(result.error || "Error al cancelar el registro y depurar datos.")
-          }
+        resolveNavigationRef.current?.(true)
+        resolveNavigationRef.current = null
+        // Sólo borrar si no hay menú asignado todavía
+        if (platilloId && validaRegistroId === 0) {
+          actions
+            .cancelarRegistro(platilloId)
+            .then((r) => {
+              if (!r.success) console.error("Error al cancelar registro:", r.error)
+            })
+            .catch((e) => console.error("Error inesperado en cancelarRegistro:", e))
         }
-        resolveNavigationRef.current?.(true) // Resolver la promesa con true (proceder)
       } else {
-        resolveNavigationRef.current?.(false) // Resolver la promesa con false (cancelar)
+        resolveNavigationRef.current?.(false)
+        resolveNavigationRef.current = null
       }
-      resolveNavigationRef.current = null // Limpiar la referencia
     },
-    [platilloId],
+    [platilloId, validaRegistroId],
   )
 
   // Esta es la función que se registra en el NavigationGuardProvider
@@ -696,12 +885,14 @@ export default function NuevoPlatilloPage() {
         <AlertDialog open={showLeaveConfirm} onOpenChange={setShowLeaveConfirm}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>¿Estás seguro que deseas abandonar el registro de receta?</AlertDialogTitle>
-              <AlertDialogDescription>Se perderá la información cargada previamente.</AlertDialogDescription>
+              <AlertDialogTitle>¿Abandonar el registro de receta?</AlertDialogTitle>
+              <AlertDialogDescription>
+                La receta aún no se ha vinculado a un menú. Si sales ahora, la receta y su contenido se eliminarán para no dejar datos incompletos.
+              </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => handleLeavePage(false)}>Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={() => handleLeavePage(true)}>Aceptar</AlertDialogAction>
+              <AlertDialogCancel onClick={() => handleLeavePage(false)}>Permanecer</AlertDialogCancel>
+              <AlertDialogAction onClick={() => handleLeavePage(true)}>Salir y descartar</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
@@ -762,6 +953,77 @@ export default function NuevoPlatilloPage() {
           </AlertDialogContent>
         </AlertDialog>
 
+        {/* Modal de confirmación: registrar sin precio */}
+        <AlertDialog open={showSinPrecioDialog} onOpenChange={setShowSinPrecioDialog}>
+          <AlertDialogContent className="max-w-md p-0 overflow-hidden border-0">
+            <div className="bg-gradient-to-br from-amber-500 to-orange-500 px-6 py-6 text-white">
+              <div className="flex items-center gap-3">
+                <div className="rounded-full bg-white/25 p-3 backdrop-blur-sm shadow-lg ring-2 ring-white/30">
+                  <HelpCircle className="h-7 w-7" />
+                </div>
+                <div>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle className="text-xl font-bold text-white text-left">
+                      ¿Registrar sin precio?
+                    </AlertDialogTitle>
+                    <AlertDialogDescription className="text-white/90 text-left mt-1">
+                      No se ha asignado ningún precio de venta a la receta. ¿Realmente deseas continuar con el registro?
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                </div>
+              </div>
+            </div>
+            <div className="px-6 py-4 bg-white flex flex-col gap-2">
+              <Button
+                onClick={() => {
+                  setShowSinPrecioDialog(false)
+                  handleRegistroCompleto(true)
+                }}
+                disabled={isSubmitting}
+                className="bg-[#5d8f72] hover:bg-[#44785a] text-white"
+              >
+                {isSubmitting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
+                Sí, registrar sin precio
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => setShowSinPrecioDialog(false)}
+                disabled={isSubmitting}
+                className="text-gray-500 hover:bg-gray-100"
+              >
+                Cancelar
+              </Button>
+            </div>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Modal de cambios guardados */}
+        <AlertDialog open={showSavedModal} onOpenChange={setShowSavedModal}>
+          <AlertDialogContent className="max-w-md p-0 overflow-hidden border-0">
+            <div className="bg-gradient-to-br from-[#58e0be] to-[#5d8f72] px-6 py-6 text-white text-center">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-white/25 backdrop-blur-sm shadow-lg ring-4 ring-white/20 animate-in zoom-in duration-300">
+                <CheckCircle2 className="h-9 w-9" />
+              </div>
+              <AlertDialogHeader className="mt-4">
+                <AlertDialogTitle className="text-2xl font-bold text-white text-center">
+                  ¡Cambios guardados!
+                </AlertDialogTitle>
+                <AlertDialogDescription className="text-white/90 text-center mt-1">
+                  {savedModalMessage}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+            </div>
+            <div className="px-6 py-4 bg-white flex justify-center">
+              <AlertDialogAction
+                onClick={() => setShowSavedModal(false)}
+                className="bg-[#5d8f72] hover:bg-[#44785a] text-white min-w-[120px]"
+              >
+                Continuar
+              </AlertDialogAction>
+            </div>
+          </AlertDialogContent>
+        </AlertDialog>
+
         {/* Animación de cocinando */}
         {showCookingAnimation && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -796,25 +1058,95 @@ export default function NuevoPlatilloPage() {
 
         <div className="mb-8">
           <Progress value={progressValue} className="h-2 [&>*]:bg-[#58e0be]" />
-          <div className="mt-2 grid grid-cols-5 text-center text-sm">
-            {" "}
-            {/* Ajustado a 5 columnas */}
-            <div className={etapa >= 1 ? "font-bold text-[#58e0be]" : "text-muted-foreground"}>Info. Básica</div>
-            <div className={etapa >= 2 ? "font-bold text-[#58e0be]" : "text-muted-foreground"}>Asignar Menú</div>
-            <div className={etapa >= 3 ? "font-bold text-[#58e0be]" : "text-muted-foreground"}>Contenido</div>
-            <div className={etapa >= 4 ? "font-bold text-[#58e0be]" : "text-muted-foreground"}>Resumen</div>
-            <div className={etapa >= 5 ? "font-bold text-[#58e0be]" : "text-muted-foreground"}>Finalizado</div>{" "}
-            {/* Nueva etapa */}
+          <div className="mt-4 grid grid-cols-5 gap-2">
+            {[
+              { num: 1, label: "Info. Básica", icon: ChefHat },
+              { num: 2, label: "Asignar Menú", icon: Utensils },
+              { num: 3, label: "Contenido", icon: ListChecks },
+              { num: 4, label: "Resumen", icon: Receipt },
+              { num: 5, label: "Finalizado", icon: CheckCircle2 },
+            ].map((tab) => {
+              const Icon = tab.icon
+              const isActive = etapa === tab.num
+              const isCompleted = etapa > tab.num || (tab.num < 5 && validaRegistroId === 1)
+              const isUnlocked = tab.num <= maxEtapaAlcanzada
+              const isLocked = !isUnlocked
+              return (
+                <button
+                  key={tab.num}
+                  type="button"
+                  onClick={() => goToEtapa(tab.num)}
+                  disabled={isLocked}
+                  className={[
+                    "group relative flex flex-col items-center gap-1.5 rounded-xl border-2 px-3 py-3 transition-all duration-300",
+                    isActive
+                      ? "border-[#58e0be] bg-gradient-to-br from-[#58e0be]/15 to-[#58e0be]/5 shadow-lg shadow-[#58e0be]/20 scale-[1.03]"
+                      : isCompleted
+                        ? "border-[#5d8f72]/40 bg-[#5d8f72]/5 hover:border-[#5d8f72] hover:bg-[#5d8f72]/10 cursor-pointer"
+                        : isUnlocked
+                          ? "border-gray-200 bg-white hover:border-gray-300 cursor-pointer"
+                          : "border-gray-100 bg-gray-50 opacity-50 cursor-not-allowed",
+                  ].join(" ")}
+                >
+                  <div
+                    className={[
+                      "relative flex h-10 w-10 items-center justify-center rounded-full transition-all duration-300",
+                      isActive
+                        ? "bg-gradient-to-br from-[#58e0be] to-[#5d8f72] text-white shadow-md"
+                        : isCompleted
+                          ? "bg-[#5d8f72] text-white"
+                          : isUnlocked
+                            ? "bg-gray-200 text-gray-600"
+                            : "bg-gray-200 text-gray-400",
+                    ].join(" ")}
+                  >
+                    {isCompleted && !isActive ? (
+                      <CheckCircle2 className="h-5 w-5" />
+                    ) : isLocked ? (
+                      <Lock className="h-4 w-4" />
+                    ) : (
+                      <Icon className="h-5 w-5" />
+                    )}
+                    {isActive && (
+                      <span className="absolute -inset-1 rounded-full border-2 border-[#58e0be] animate-ping opacity-40"></span>
+                    )}
+                  </div>
+                  <span
+                    className={[
+                      "text-xs font-semibold tracking-tight",
+                      isActive ? "text-[#3a7d6a]" : isCompleted ? "text-[#5d8f72]" : "text-gray-500",
+                    ].join(" ")}
+                  >
+                    {tab.label}
+                  </span>
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-gray-400">
+                    Paso {tab.num}
+                  </span>
+                </button>
+              )
+            })}
           </div>
         </div>
 
         {/* --- ETAPA 1: INFORMACIÓN BÁSICA --- */}
         {etapa === 1 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Etapa 1: Información Básica de la Receta</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
+          <Card className="overflow-hidden border-0 shadow-xl">
+            <div className="bg-gradient-to-r from-[#58e0be] to-[#5d8f72] px-6 py-4 text-white">
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg bg-white/20 p-2 backdrop-blur-sm">
+                  <ChefHat className="h-6 w-6" />
+                </div>
+                <div>
+                  <CardTitle className="text-xl text-white">Información Básica de la Receta</CardTitle>
+                  <CardDescription className="text-white/85">
+                    {platilloId
+                      ? "La receta ya fue registrada. Puedes editar los datos y guardar los cambios."
+                      : "Captura los datos generales para iniciar el registro."}
+                  </CardDescription>
+                </div>
+              </div>
+            </div>
+            <CardContent className="space-y-6 pt-6">
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <div className="space-y-4">
                   <div>
@@ -825,7 +1157,6 @@ export default function NuevoPlatilloPage() {
                       value={nombre}
                       onChange={(e) => setNombre(e.target.value)}
                       maxLength={150}
-                      disabled={platilloId !== null}
                       required
                     />
                   </div>
@@ -838,7 +1169,6 @@ export default function NuevoPlatilloPage() {
                       onChange={(e) => setDescripcion(e.target.value)}
                       maxLength={150}
                       rows={4}
-                      disabled={platilloId !== null}
                       required
                     />
                   </div>
@@ -850,7 +1180,6 @@ export default function NuevoPlatilloPage() {
                       value={instrucciones}
                       onChange={(e) => setInstrucciones(e.target.value)}
                       rows={4}
-                      disabled={platilloId !== null}
                     />
                   </div>
                   <div>
@@ -861,13 +1190,12 @@ export default function NuevoPlatilloPage() {
                       type="number"
                       value={tiempo}
                       onChange={(e) => setTiempo(e.target.value)}
-                      disabled={platilloId !== null}
                     />
                   </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="ImagenFile">Cargar Imagen (Opcional: .jpg, &lt;10MB, 500x500px)</Label>
-                  <div className="flex h-64 w-full items-center justify-center rounded-md border-2 border-dashed">
+                  <div className="flex h-64 w-full items-center justify-center rounded-md border-2 border-dashed border-[#58e0be]/40 bg-[#58e0be]/5">
                     {imagenPreview ? (
                       <img
                         src={imagenPreview || "/placeholder.svg"}
@@ -876,8 +1204,8 @@ export default function NuevoPlatilloPage() {
                       />
                     ) : (
                       <div className="text-center">
-                        <UploadCloud className="mx-auto h-12 w-12 text-gray-400" />
-                        <p>Arrastra o selecciona una imagen</p>
+                        <UploadCloud className="mx-auto h-12 w-12 text-[#5d8f72]/60" />
+                        <p className="text-sm text-gray-600">Arrastra o selecciona una imagen</p>
                       </div>
                     )}
                   </div>
@@ -885,35 +1213,64 @@ export default function NuevoPlatilloPage() {
                     id="ImagenFile"
                     name="ImagenFile"
                     type="file"
-                    accept="image/jpeg, image/jpg, image/png, image/webp" // Aceptar más formatos si el backend los soporta
+                    accept="image/jpeg, image/jpg, image/png, image/webp"
                     onChange={handleImageChange}
                     className="mt-2"
-                    disabled={platilloId !== null}
                   />
                 </div>
               </div>
             </CardContent>
-            <CardFooter className="justify-end">
-              <Button
-                id="btnRegistrarPlatillo"
-                name="btnRegistrarPlatillo"
-                onClick={handleRegistrarPlatillo}
-                disabled={isSubmitting || platilloId !== null}
-              >
-                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Registrar y Continuar
-              </Button>
+            <CardFooter className="justify-end gap-2 bg-gray-50/50 border-t">
+              {platilloId ? (
+                <>
+                  <Button
+                    id="btnGuardarCambiosEtapa1"
+                    name="btnGuardarCambiosEtapa1"
+                    onClick={handleGuardarCambiosEtapa1}
+                    disabled={isSubmitting}
+                    className="bg-[#5d8f72] hover:bg-[#44785a] text-white"
+                  >
+                    {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                    Guardar Cambios
+                  </Button>
+                  <Button
+                    onClick={() => goToEtapa(2)}
+                    disabled={maxEtapaAlcanzada < 2}
+                    variant="outline"
+                  >
+                    Siguiente paso
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  id="btnRegistrarPlatillo"
+                  name="btnRegistrarPlatillo"
+                  onClick={handleRegistrarPlatillo}
+                  disabled={isSubmitting}
+                  className="bg-gradient-to-r from-[#58e0be] to-[#5d8f72] hover:from-[#46c9a8] hover:to-[#44785a] text-white shadow-md"
+                >
+                  {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Registrar y Continuar
+                </Button>
+              )}
             </CardFooter>
           </Card>
         )}
 
         {/* --- ETAPA 2: ASIGNAR A MENÚ --- */}
         {etapa === 2 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Etapa 2: Asignar a un Menú</CardTitle>
-              <CardDescription>Es requerido asignar la receta a un Menú para su completo registro.</CardDescription>
-            </CardHeader>
+          <Card className="overflow-hidden border-0 shadow-xl">
+            <div className="bg-gradient-to-r from-[#58e0be] to-[#5d8f72] px-6 py-4 text-white">
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg bg-white/20 p-2 backdrop-blur-sm">
+                  <Utensils className="h-6 w-6" />
+                </div>
+                <div>
+                  <CardTitle className="text-xl text-white">Asignar a un Menú</CardTitle>
+                  <CardDescription className="text-white/85">Es requerido asignar la receta a un Menú para su completo registro.</CardDescription>
+                </div>
+              </div>
+            </div>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 <div>
@@ -963,11 +1320,17 @@ export default function NuevoPlatilloPage() {
                 </div>
               </div>
             </CardContent>
-            <CardFooter className="flex justify-between">
-              {/*<Button variant="outline" onClick={() => setEtapa(1)}>
-              Anterior
-            </Button>*/}
-              <Button id="btnContinuar" name="btnContinuar" onClick={handleContinuarEtapa2} disabled={!menuId}>
+            <CardFooter className="flex justify-between bg-gray-50/50 border-t">
+              <Button variant="outline" onClick={() => goToEtapa(1)}>
+                Anterior
+              </Button>
+              <Button
+                id="btnContinuar"
+                name="btnContinuar"
+                onClick={handleContinuarEtapa2}
+                disabled={!menuId}
+                className="bg-gradient-to-r from-[#58e0be] to-[#5d8f72] hover:from-[#46c9a8] hover:to-[#44785a] text-white shadow-md"
+              >
                 Continuar
               </Button>
             </CardFooter>
@@ -977,10 +1340,18 @@ export default function NuevoPlatilloPage() {
         {/* --- ETAPA 3: CONTENIDO --- */}
         {etapa === 3 && (
           <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Agregar Ingredientes</CardTitle>
-              </CardHeader>
+            <Card className="overflow-hidden border-0 shadow-xl">
+              <div className="bg-gradient-to-r from-[#58e0be] to-[#5d8f72] px-6 py-4 text-white">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-lg bg-white/20 p-2 backdrop-blur-sm">
+                    <ListChecks className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-xl text-white">Agregar Ingredientes</CardTitle>
+                    <CardDescription className="text-white/85">Selecciona cada ingrediente que forma parte de tu receta.</CardDescription>
+                  </div>
+                </div>
+              </div>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
                   <div className="md:col-span-2 relative">
@@ -1065,7 +1436,7 @@ export default function NuevoPlatilloPage() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Nombre</TableHead>
-                        <TableHead>Cantidad</TableHead>
+                        <TableHead className="w-[140px]">Cantidad</TableHead>
                         <TableHead>Unidad</TableHead>
                         <TableHead className="text-right">Costo Parcial</TableHead>
                         <TableHead>Acciones</TableHead>
@@ -1075,9 +1446,21 @@ export default function NuevoPlatilloPage() {
                       {ingredientesAgregados.map((i) => (
                         <TableRow key={i.id}>
                           <TableCell>{i.nombre}</TableCell>
-                          <TableCell>{i.cantidad}</TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={editingIngCantidad[i.id] ?? String(i.cantidad)}
+                              onChange={(e) => handleIngredienteCantidadChange(i.id, e.target.value)}
+                              onBlur={() => handleIngredienteCantidadBlur(i.id)}
+                              className="h-9 w-28 text-right focus-visible:ring-[#58e0be]"
+                            />
+                          </TableCell>
                           <TableCell>{i.unidad}</TableCell>
-                          <TableCell className="text-right">${i.ingredientecostoparcial.toFixed(2)}</TableCell>
+                          <TableCell className="text-right font-medium">
+                            ${i.ingredientecostoparcial.toFixed(2)}
+                          </TableCell>
                           <TableCell>
                             <Button
                               variant="destructive"
@@ -1096,10 +1479,18 @@ export default function NuevoPlatilloPage() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Agregar Sub-Recetas</CardTitle>
-              </CardHeader>
+            <Card className="overflow-hidden border-0 shadow-xl">
+              <div className="bg-gradient-to-r from-[#5d8f72] to-[#3a7d6a] px-6 py-4 text-white">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-lg bg-white/20 p-2 backdrop-blur-sm">
+                    <ChefHat className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-xl text-white">Agregar Sub-Recetas</CardTitle>
+                    <CardDescription className="text-white/85">Suma sub-recetas previamente creadas como parte de la receta.</CardDescription>
+                  </div>
+                </div>
+              </div>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-6">
                   <div className="col-span-6">
@@ -1214,6 +1605,7 @@ export default function NuevoPlatilloPage() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Nombre</TableHead>
+                        <TableHead className="w-[140px]">Cantidad</TableHead>
                         <TableHead className="text-right">Costo Parcial</TableHead>
                         <TableHead className="text-right">Acciones</TableHead>
                       </TableRow>
@@ -1222,7 +1614,20 @@ export default function NuevoPlatilloPage() {
                       {recetasAgregadas.map((r) => (
                         <TableRow key={r.id}>
                           <TableCell>{r.nombre}</TableCell>
-                          <TableCell className="text-right">${r.recetacostoparcial.toFixed(2)}</TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={editingRecCantidad[r.id] ?? String(r.cantidad ?? 1)}
+                              onChange={(e) => handleRecetaCantidadChange(r.id, e.target.value)}
+                              onBlur={() => handleRecetaCantidadBlur(r.id)}
+                              className="h-9 w-28 text-right focus-visible:ring-[#58e0be]"
+                            />
+                          </TableCell>
+                          <TableCell className="text-right font-medium">
+                            ${r.recetacostoparcial.toFixed(2)}
+                          </TableCell>
                           <TableCell className="text-right">
                             <Button
                               variant="destructive"
@@ -1242,14 +1647,15 @@ export default function NuevoPlatilloPage() {
             </Card>
 
             <div className="flex justify-between">
-              <Button variant="outline" onClick={() => setEtapa(2)}>
+              <Button variant="outline" onClick={() => goToEtapa(2)}>
                 Anterior
               </Button>
               <Button
                 id="btnContinuarIngrediente"
                 name="btnContinuarIngrediente"
-                onClick={() => setEtapa(4)}
-                disabled={ingredientesAgregados.length === 0 && recetasAgregadas.length === 0} // Habilitar si hay ingredientes O recetas
+                onClick={() => advanceToEtapa(4)}
+                disabled={ingredientesAgregados.length === 0 && recetasAgregadas.length === 0}
+                className="bg-gradient-to-r from-[#58e0be] to-[#5d8f72] hover:from-[#46c9a8] hover:to-[#44785a] text-white shadow-md"
               >
                 Continuar
               </Button>
@@ -1259,176 +1665,197 @@ export default function NuevoPlatilloPage() {
 
         {/* --- ETAPA 4: RESUMEN --- */}
         {etapa === 4 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Etapa 4: Resumen y Confirmación</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          <Card className="overflow-hidden border-0 shadow-xl">
+            <div className="bg-gradient-to-r from-[#58e0be] to-[#5d8f72] px-6 py-4 text-white">
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg bg-white/20 p-2 backdrop-blur-sm">
+                  <Receipt className="h-6 w-6" />
+                </div>
                 <div>
-                  <h3 className="mb-2 font-semibold">Información de la Receta</h3>
-                  <div className="space-y-1 text-sm">
-                    <p>
-                      <strong>Nombre:</strong> {nombre}
-                    </p>
-                    <p>
-                      <strong>Descripción:</strong> {descripcion}
-                    </p>
-                    {instrucciones && (
-                      <p>
-                        <strong>Instrucciones:</strong> {instrucciones}
-                      </p>
-                    )}
-                    {tiempo && (
-                      <p>
-                        <strong>Tiempo:</strong> {tiempo} minutos
-                      </p>
-                    )}
+                  <CardTitle className="text-xl text-white">Resumen y Confirmación</CardTitle>
+                  <CardDescription className="text-white/85">Revisa la información, define el precio de venta y completa el registro.</CardDescription>
+                </div>
+              </div>
+            </div>
+            <CardContent className="space-y-6 pt-6">
+              {/* Header info: receta + asignación */}
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="rounded-lg border bg-gradient-to-br from-[#58e0be]/5 to-transparent p-4">
+                  <h3 className="mb-2 text-sm font-bold text-[#3a7d6a] uppercase tracking-wide">Información de la Receta</h3>
+                  <div className="space-y-1 text-sm text-gray-700">
+                    <p><span className="font-semibold">Nombre:</span> {nombre}</p>
+                    <p><span className="font-semibold">Descripción:</span> {descripcion}</p>
+                    {instrucciones && <p><span className="font-semibold">Instrucciones:</span> {instrucciones}</p>}
+                    {tiempo && <p><span className="font-semibold">Tiempo:</span> {tiempo} min</p>}
                     {imagenPreview && (
-                      <div className="mt-2">
-                        <strong>Imagen:</strong>
-                        <img
-                          src={imagenPreview || "/placeholder.svg"}
-                          alt="Vista previa"
-                          className="mt-1 h-24 w-24 object-cover rounded-md"
-                        />
-                      </div>
+                      <img
+                        src={imagenPreview || "/placeholder.svg"}
+                        alt="Vista previa"
+                        className="mt-2 h-20 w-20 object-cover rounded-md ring-1 ring-gray-200"
+                      />
                     )}
                   </div>
                 </div>
-                <div>
-                  <h3 className="mb-2 font-semibold">Asignación</h3>
-                  <div className="space-y-1 text-sm">
-                    <p>
-                      <strong>Hotel:</strong> {hoteles.find((h) => h.id.toString() === hotelId)?.nombre}
-                    </p>
-                    <p>
-                      <strong>Restaurante:</strong>{" "}
-                      {restaurantes.find((r) => r.id.toString() === restauranteId)?.nombre}
-                    </p>
-                    <p>
-                      <strong>Menú:</strong> {menuNom}
-                    </p>
+                <div className="rounded-lg border bg-gradient-to-br from-[#5d8f72]/5 to-transparent p-4">
+                  <h3 className="mb-2 text-sm font-bold text-[#3a7d6a] uppercase tracking-wide">Asignación</h3>
+                  <div className="space-y-1 text-sm text-gray-700">
+                    <p><span className="font-semibold">Hotel:</span> {hoteles.find((h) => h.id.toString() === hotelId)?.nombre}</p>
+                    <p><span className="font-semibold">Restaurante:</span> {restaurantes.find((r) => r.id.toString() === restauranteId)?.nombre}</p>
+                    <p><span className="font-semibold">Menú:</span> {menuNom}</p>
                   </div>
                 </div>
               </div>
-              <div>
-                <h3 className="mb-2 font-semibold">Contenido de la Receta</h3>
-                {ingredientesAgregados.length > 0 && (
-                  <>
-                    <h4 className="mb-1 font-medium">Ingredientes:</h4>
+
+              {/* Elaboración de la Receta */}
+              <div className="space-y-2">
+                <h3 className="text-lg font-semibold">Elaboración de la Receta</h3>
+                {(ingredientesAgregados.length > 0 || recetasAgregadas.length > 0) ? (
+                  <div className="rounded-md border">
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Nombre</TableHead>
-                          <TableHead>Cantidad</TableHead>
-                          <TableHead className="text-right">Costo Parcial</TableHead>
+                          <TableHead className="w-[10%]">Tipo</TableHead>
+                          <TableHead className="w-[25%]">Nombre</TableHead>
+                          <TableHead className="w-[15%] text-right">Costo</TableHead>
+                          <TableHead className="w-[15%] text-center">Unidad de Medida</TableHead>
+                          <TableHead className="w-[10%] text-center text-green-600">Cantidad</TableHead>
+                          <TableHead className="w-[25%] text-right text-green-600">Costo Parcial</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {ingredientesAgregados.map((i) => (
-                          <TableRow key={i.id}>
-                            <TableCell>{i.nombre}</TableCell>
-                            <TableCell>{i.cantidad}</TableCell>
-                            <TableCell className="text-right">${i.ingredientecostoparcial.toFixed(2)}</TableCell>
-                          </TableRow>
-                        ))}
+                        {ingredientesAgregados.map((ing) => {
+                          const costoUnit = ing.costoUnitarioEfectivo ?? (ing.cantidad > 0 ? ing.ingredientecostoparcial / ing.cantidad : 0)
+                          return (
+                            <TableRow key={`ing-${ing.id}`}>
+                              <TableCell className="w-[10%]">
+                                <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">Ingrediente</Badge>
+                              </TableCell>
+                              <TableCell className="w-[25%]">{ing.nombre}</TableCell>
+                              <TableCell className="w-[15%] text-right">{formatCurrency(costoUnit)}</TableCell>
+                              <TableCell className="w-[15%] text-center">{ing.unidad || "N/A"}</TableCell>
+                              <TableCell className="w-[10%] text-center text-green-600">{ing.cantidad}</TableCell>
+                              <TableCell className="w-[25%] text-right text-green-600">{formatCurrency(ing.ingredientecostoparcial)}</TableCell>
+                            </TableRow>
+                          )
+                        })}
+                        {recetasAgregadas.map((rec) => {
+                          const cant = rec.cantidad ?? 1
+                          const costoUnit = rec.costoUnitarioEfectivo ?? (cant > 0 ? rec.recetacostoparcial / cant : 0)
+                          return (
+                            <TableRow key={`rec-${rec.id}`}>
+                              <TableCell className="w-[10%]">
+                                <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200">Sub-Receta</Badge>
+                              </TableCell>
+                              <TableCell className="w-[25%]">{rec.nombre}</TableCell>
+                              <TableCell className="w-[15%] text-right">{formatCurrency(costoUnit)}</TableCell>
+                              <TableCell className="w-[15%] text-center">N/A</TableCell>
+                              <TableCell className="w-[10%] text-center text-green-600">{cant}</TableCell>
+                              <TableCell className="w-[25%] text-right text-green-600">{formatCurrency(rec.recetacostoparcial)}</TableCell>
+                            </TableRow>
+                          )
+                        })}
                       </TableBody>
                     </Table>
-                  </>
-                )}
-                {recetasAgregadas.length > 0 && (
-                  <>
-                    <h4 className="mt-4 mb-1 font-medium">Sub-Recetas:</h4>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Nombre</TableHead>
-                          <TableHead className="text-right">Costo Parcial</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {recetasAgregadas.map((r) => (
-                          <TableRow key={r.id}>
-                            <TableCell>{r.nombre}</TableCell>
-                            <TableCell className="text-right">${r.recetacostoparcial.toFixed(2)}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </>
-                )}
-                {ingredientesAgregados.length === 0 && recetasAgregadas.length === 0 && (
-                  <p className="text-muted-foreground">No se han agregado ingredientes ni sub-recetas.</p>
+                    <div className="border-t-2 border-blue-500 px-4 py-2 flex justify-end">
+                      <span className="text-sm font-semibold text-gray-700">Total Costo Parcial:{" "}
+                        <span className="text-base font-bold text-orange-600">
+                          {formatCurrency(
+                            ingredientesAgregados.reduce((sum, ing) => sum + (ing.ingredientecostoparcial || 0), 0) +
+                            recetasAgregadas.reduce((sum, rec) => sum + (rec.recetacostoparcial || 0), 0)
+                          )}
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground">No hay ingredientes ni sub-recetas agregados.</p>
                 )}
               </div>
-              {totalCostoPlatillo !== null && (
-                <div className="mt-2 text-right text-xl font-semibold text-gray-700">
-                  Costo de Elaboracion: ${totalCostoPlatillo.toFixed(2)}
+
+              {/* Cost summary + Price inputs */}
+              <div className="flex flex-col items-end gap-4 mt-2">
+                {/* Desglose de Costos */}
+                <div className="w-full md:w-[480px] rounded-lg border bg-white p-4 space-y-2">
+                  <h3 className="text-sm font-semibold text-gray-800 border-b pb-2">Desglose de Costos</h3>
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-gray-600">Costo de Elaboración</span>
+                    <span className="font-semibold text-gray-800">{formatCurrency(totalCostoPlatillo)}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-gray-600">Variación de Precios</span>
+                    <span className="font-semibold text-gray-800">5%</span>
+                  </div>
+                  <div className="flex justify-between items-center pt-2 border-t-2 border-[#58e0be]">
+                    <span className="text-sm font-bold text-gray-900">Costo Total</span>
+                    <span className="text-lg font-bold text-gray-900">{formatCurrency(costoAdministrativoPlatillo)}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs pt-1">
+                    <span className="text-yellow-600 font-medium">* Precio Mínimo Sugerido</span>
+                    <span className="font-semibold text-yellow-600">{formatCurrency(precioSugeridoPlatillo)}</span>
+                  </div>
                 </div>
-              )}
-              <div className="text-right text-base font-semibold text-gray-700">Variacion Precios: 5%</div>
-              {costoAdministrativoPlatillo !== null && (
-                <div className="mt-6 text-right text-2xl font-bold border-t-4 border-[#58e0be] pt-4">
-                  Costo Total: ${costoAdministrativoPlatillo.toFixed(2)}
-                </div>
-              )}
-              {/* Línea 1107 del código anterior, el nuevo contenido va después de este div */}
-              {precioSugeridoPlatillo !== null && (
-                <div className="mt-6 text-right text-lg text-black-600">
-                  <span className="text-yellow-600">*</span> Precio Mínimo: ${precioSugeridoPlatillo.toFixed(2)}
-                </div>
-              )}
-              {/* NUEVOS INPUTS PRECIO VENTA, COSTO% Y PRECIO CON IVA */}
-              <div className="mt-4 flex justify-end gap-4">
-                <div className="w-48">
-                  <Label htmlFor="txtCostoPorcentual">Costo%</Label>
-                  <Input
-                    id="txtCostoPorcentual"
-                    name="txtCostoPorcentual"
-                    type="text"
-                    value={`${costoPorcentual}%`}
-                    className={`text-right ${Number(costoPorcentual) > 30.0 ? "bg-red-100" : "bg-green-100"}`}
-                    disabled
-                  />
-                </div>
-                <div className="w-64">
-                  <Label htmlFor="txtPrecioVenta">Precio Venta</Label>
-                  <Input
-                    id="txtPrecioVenta"
-                    name="txtPrecioVenta"
-                    type="text"
-                    value={precioVenta}
-                    onChange={handlePrecioVentaChange}
-                    placeholder="0.00"
-                    className="text-right"
-                    required
-                  />
-                </div>
-              </div>
-              <div className="mt-4 flex justify-end">
-                <div className="w-64">
-                  <Label htmlFor="txtPrecioConIVA">Precio con IVA</Label>
-                  <Input
-                    id="txtPrecioConIVA"
-                    name="txtPrecioConIVA"
-                    type="text"
-                    value={`$${precioConIVA}`}
-                    className="text-right"
-                    disabled
-                  />
+
+                {/* Precio de Venta */}
+                <div className="w-full md:w-[480px] rounded-lg border bg-gray-50 px-4 py-3">
+                  <h3 className="text-sm font-semibold text-gray-800 mb-2">Precio de Venta</h3>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <Label htmlFor="txtPrecioVenta" className="text-[11px] text-gray-500">Precio Venta</Label>
+                      <Input
+                        id="txtPrecioVenta"
+                        name="txtPrecioVenta"
+                        type="number"
+                        step="0.01"
+                        value={precioVenta}
+                        onChange={handlePrecioVentaChange}
+                        placeholder="0.00"
+                        className="text-center h-7 text-xs"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="txtPrecioConIVA" className="text-[11px] text-gray-500">Precio con IVA</Label>
+                      <Input
+                        id="txtPrecioConIVA"
+                        name="txtPrecioConIVA"
+                        type="text"
+                        value={precioConIVA}
+                        readOnly
+                        className="text-center h-7 text-xs"
+                        placeholder="0.00"
+                        disabled
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="txtCostoPorcentual" className="text-[11px] text-gray-500">Costo %</Label>
+                      <Input
+                        id="txtCostoPorcentual"
+                        name="txtCostoPorcentual"
+                        type="text"
+                        value={costoPorcentual}
+                        readOnly
+                        disabled
+                        className={`text-center h-7 text-xs font-semibold ${
+                          costoPorcentual && Number(costoPorcentual) > 30.0
+                            ? "bg-red-100 border-red-300 text-red-700"
+                            : "bg-green-100 border-green-300 text-green-700"
+                        }`}
+                        placeholder="0.00"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
             </CardContent>
-            <CardFooter className="flex justify-between">
-              <Button variant="outline" onClick={() => setEtapa(3)}>
+            <CardFooter className="flex justify-between bg-gray-50/50 border-t">
+              <Button variant="outline" onClick={() => goToEtapa(3)}>
                 Anterior
               </Button>
               <Button
                 id="btnRegistroCompleto"
                 name="btnRegistroCompleto"
-                onClick={handleRegistroCompleto}
+                onClick={() => handleRegistroCompleto()}
                 disabled={isSubmitting}
+                className="bg-gradient-to-r from-[#58e0be] to-[#5d8f72] hover:from-[#46c9a8] hover:to-[#44785a] text-white shadow-md"
               >
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Registro Completo de Platillo
@@ -1439,16 +1866,24 @@ export default function NuevoPlatilloPage() {
 
         {/* --- ETAPA 5: REGISTRO COMPLETADO --- */}
         {etapa === 5 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>¡Registro Completado!</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4 text-center">
-              <p className="text-lg font-semibold text-green-600">
+          <Card className="overflow-hidden border-0 shadow-xl">
+            <div className="bg-gradient-to-r from-[#5d8f72] to-[#3a7d6a] px-6 py-6 text-white text-center">
+              <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
+                <CheckCircle2 className="h-10 w-10" />
+              </div>
+              <CardTitle className="text-2xl text-white">¡Registro Completado!</CardTitle>
+            </div>
+            <CardContent className="space-y-4 text-center pt-6">
+              <p className="text-lg font-semibold text-[#5d8f72]">
                 El registro del platillo/receta se realizó correctamente y sin errores.
               </p>
               <p className="text-md text-gray-700">En {countdown} segundos serás dirigido a la página de platillos.</p>
-              <Button onClick={() => router.push("/platillos")}>Regresar a Platillos</Button>
+              <Button
+                onClick={() => router.push("/platillos")}
+                className="bg-[#5d8f72] hover:bg-[#44785a] text-white"
+              >
+                Regresar a Platillos
+              </Button>
             </CardContent>
           </Card>
         )}

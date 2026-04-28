@@ -37,7 +37,8 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog" // Importar componentes de Dialog
 import * as DialogPrimitive from "@radix-ui/react-dialog" // Importar DialogPrimitive directamente
-import { Search, Eye, Edit, ToggleLeft, ToggleRight, Loader2, PlusCircle, RotateCcw } from "lucide-react"
+import { Search, Eye, Edit, ToggleLeft, ToggleRight, Loader2, PlusCircle, RotateCcw, Download } from "lucide-react"
+import * as XLSX from "xlsx"
 import { getPlatilloDetailsForModal } from "@/app/actions/platillos-details-actions" // Importar la nueva acción
 
 // --- Interfaces ---
@@ -52,6 +53,7 @@ interface PlatilloListado {
   PlatilloDescripcion: string
   PlatilloTiempo: string
   PlatilloCosto: number
+  PlatilloCostoAdministrativo: number
   PlatilloActivo: boolean
   PlatilloImagenUrl: string | null // Añadido para la URL de la imagen
   HotelId: number
@@ -551,6 +553,177 @@ export default function PlatillosPage() {
     setPageLoading(false)
   }
 
+  const [isDownloading, setIsDownloading] = useState(false)
+
+  const handleDownloadReport = async () => {
+    if (platillos.length === 0) {
+      toast.error("No hay recetas para descargar.")
+      return
+    }
+
+    setIsDownloading(true)
+    try {
+      // Traer TODOS los platillos sin paginación con los mismos filtros
+      let allQuery = supabase.from("platillos").select(`
+          id, nombre, descripcion, tiempopreparacion, costototal, costoadministrativo, activo, imgurl,
+          platillosxmenu!inner(
+            menus!inner(
+              id, nombre,
+              restaurantes!inner(
+                id, nombre,
+                hoteles!inner(id, nombre)
+              )
+            )
+          )
+        `)
+
+      if (filtroNombre) allQuery = allQuery.ilike("nombre", `%${filtroNombre}%`)
+      if (Number(filtroHotel) !== -1) allQuery = allQuery.eq("platillosxmenu.menus.restaurantes.hoteles.id", Number(filtroHotel))
+      if (Number(filtroRestaurante) !== -1) allQuery = allQuery.eq("platillosxmenu.menus.restaurantes.id", Number(filtroRestaurante))
+      if (Number(filtroMenu) !== -1) allQuery = allQuery.eq("platillosxmenu.menus.id", Number(filtroMenu))
+
+      allQuery = allQuery.order("nombre", { ascending: true })
+
+      const { data: allData, error: allError } = await allQuery
+
+      if (allError) throw allError
+
+      const allPlatillos = (allData || []).flatMap((p: any) =>
+        p.platillosxmenu.map((x: any) => ({
+          PlatilloId: p.id,
+          PlatilloNombre: p.nombre,
+          PlatilloDescripcion: p.descripcion,
+          PlatilloCosto: p.costototal,
+          PlatilloCostoAdministrativo: p.costoadministrativo,
+          PlatilloActivo: p.activo,
+          HotelNombre: x.menus.restaurantes.hoteles.nombre,
+          RestauranteNombre: x.menus.restaurantes.nombre,
+          MenuId: x.menus.id,
+          MenuNombre: x.menus.nombre,
+        })),
+      )
+
+      const platilloIds = [...new Set(allPlatillos.map((p: any) => p.PlatilloId))]
+
+      const [ingResult, recResult, menuResult] = await Promise.all([
+        supabase
+          .from("ingredientesxplatillo")
+          .select(`
+            platilloid, cantidad, ingredientecostoparcial,
+            ingredientes(nombre, costo, tipounidadmedida(descripcion))
+          `)
+          .in("platilloid", platilloIds),
+        supabase
+          .from("recetasxplatillo")
+          .select(`
+            platilloid, cantidad, recetacostoparcial,
+            recetas(nombre)
+          `)
+          .in("platilloid", platilloIds),
+        supabase
+          .from("platillosxmenu")
+          .select("platilloid, menuid, precioventa, precioconiva, margenutilidad")
+          .in("platilloid", platilloIds),
+      ])
+
+      const ingredientesByPlatillo: Record<number, any[]> = {}
+      for (const item of ingResult.data || []) {
+        if (!ingredientesByPlatillo[item.platilloid]) ingredientesByPlatillo[item.platilloid] = []
+        ingredientesByPlatillo[item.platilloid].push(item)
+      }
+
+      const recetasByPlatillo: Record<number, any[]> = {}
+      for (const item of recResult.data || []) {
+        if (!recetasByPlatillo[item.platilloid]) recetasByPlatillo[item.platilloid] = []
+        recetasByPlatillo[item.platilloid].push(item)
+      }
+
+      const preciosByKey: Record<string, any> = {}
+      for (const item of menuResult.data || []) {
+        preciosByKey[`${item.platilloid}-${item.menuid}`] = item
+      }
+
+      // Reporte unificado: una fila por cada ingrediente/subreceta de cada platillo
+      const reporteData: any[] = []
+      for (const p of allPlatillos) {
+        const precios = preciosByKey[`${p.PlatilloId}-${p.MenuId}`]
+        const ings = ingredientesByPlatillo[p.PlatilloId] || []
+        const recs = recetasByPlatillo[p.PlatilloId] || []
+
+        const baseRow = {
+          "ID": p.PlatilloId,
+          "Receta": p.PlatilloNombre,
+          "Descripcion": p.PlatilloDescripcion,
+          "Hotel": p.HotelNombre,
+          "Restaurante": p.RestauranteNombre,
+          "Menu": p.MenuNombre,
+          "Costo Elaboracion": p.PlatilloCosto || 0,
+          "Costo Total": p.PlatilloCostoAdministrativo || 0,
+          "Precio Venta": precios?.precioventa || 0,
+          "Precio con IVA": precios?.precioconiva || 0,
+          "Margen Utilidad": precios?.margenutilidad || 0,
+          "Estado": p.PlatilloActivo ? "Activo" : "Inactivo",
+        }
+
+        for (const ing of ings) {
+          reporteData.push({
+            ...baseRow,
+            "Tipo": "Ingrediente",
+            "Nombre Componente": ing.ingredientes?.nombre || "",
+            "Costo Unitario": ing.ingredientes?.costo || 0,
+            "Unidad de Medida": ing.ingredientes?.tipounidadmedida?.descripcion || "N/A",
+            "Cantidad": ing.cantidad,
+            "Costo Parcial": ing.ingredientecostoparcial,
+          })
+        }
+
+        for (const rec of recs) {
+          reporteData.push({
+            ...baseRow,
+            "Tipo": "Sub-Receta",
+            "Nombre Componente": rec.recetas?.nombre || "",
+            "Costo Unitario": rec.recetacostoparcial / (rec.cantidad || 1),
+            "Unidad de Medida": "N/A",
+            "Cantidad": rec.cantidad,
+            "Costo Parcial": rec.recetacostoparcial,
+          })
+        }
+
+        if (ings.length === 0 && recs.length === 0) {
+          reporteData.push({
+            ...baseRow,
+            "Tipo": "",
+            "Nombre Componente": "Sin componentes",
+            "Costo Unitario": "",
+            "Unidad de Medida": "",
+            "Cantidad": "",
+            "Costo Parcial": "",
+          })
+        }
+      }
+
+      const wb = XLSX.utils.book_new()
+
+      const ws = XLSX.utils.json_to_sheet(reporteData)
+      ws["!cols"] = [
+        { wch: 8 }, { wch: 28 }, { wch: 25 }, { wch: 18 }, { wch: 18 },
+        { wch: 18 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 14 },
+        { wch: 14 }, { wch: 10 }, { wch: 12 }, { wch: 28 }, { wch: 14 },
+        { wch: 16 }, { wch: 10 }, { wch: 14 },
+      ]
+      XLSX.utils.book_append_sheet(wb, ws, "Reporte Recetas")
+
+      const today = new Date().toISOString().slice(0, 10)
+      XLSX.writeFile(wb, `Reporte_Recetas_${today}.xlsx`)
+      toast.success("Reporte descargado exitosamente.")
+    } catch (error: any) {
+      console.error("Error al generar reporte:", error)
+      toast.error("Error al generar el reporte: " + error.message)
+    } finally {
+      setIsDownloading(false)
+    }
+  }
+
   // Handler para abrir el modal de detalles del platillo
   const handleViewPlatilloDetails = async (platilloId: number) => {
     setIsDetailsLoading(true)
@@ -768,10 +941,23 @@ export default function PlatillosPage() {
       {/* 4. Grid de Resultados */}
       <Card>
         <CardHeader>
-          <CardTitle>Resultados</CardTitle>
-          <CardDescription>
-            Mostrando página {paginaActual} de {totalPaginas} ({platillos.length} recetas en esta página)
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Resultados</CardTitle>
+              <CardDescription>
+                Mostrando página {paginaActual} de {totalPaginas} ({platillos.length} recetas en esta página)
+              </CardDescription>
+            </div>
+            <Button
+              size="sm"
+              onClick={handleDownloadReport}
+              disabled={isDownloading || platillos.length === 0}
+              className="bg-green-700 hover:bg-green-800 text-white"
+            >
+              {isDownloading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+              Descargar Reporte
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="rounded-md border">
@@ -800,7 +986,7 @@ export default function PlatillosPage() {
                     <TableRow
                       key={`${p.PlatilloId}-${p.MenuId}-${index}`}
                       className="cursor-pointer hover:bg-gray-50"
-                      onClick={() => handleViewPlatilloDetails(p.PlatilloId)}
+                      onClick={() => router.push(`/platillos/ver?getPlatilloId=${p.PlatilloId}&getMenuNombre=${p.MenuNombre}`)}
                     >
                       <TableCell>
                         <div className="flex items-center gap-3">
@@ -828,21 +1014,7 @@ export default function PlatillosPage() {
                         </span>
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          {/* Botón "Ver" para abrir el modal de detalles */}
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            title="Ver Detalles"
-                            onClick={() => handleViewPlatilloDetails(p.PlatilloId)}
-                            disabled={isDetailsLoading}
-                          >
-                            {isDetailsLoading ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <Eye className="h-4 w-4" />
-                            )}
-                          </Button>
+                        <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
                           {user && [1, 2, 3, 4].includes(Number.parseInt(user.RolId?.toString() || "0", 10)) && (
                             <Link
                               href={`/platillos/editar?getPlatilloId=${p.PlatilloId}&getMenuNombre=${p.MenuNombre}`}
@@ -934,6 +1106,21 @@ export default function PlatillosPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Modal de Loading para Descarga */}
+      <Dialog open={isDownloading}>
+        <DialogContent className="sm:max-w-[320px] text-center [&>button]:hidden">
+          <div className="flex flex-col items-center gap-4 py-4">
+            <Loader2 className="h-10 w-10 animate-spin text-green-700" />
+            <div>
+              <DialogTitle className="text-base">Generando Reporte</DialogTitle>
+              <DialogDescription className="mt-1">
+                Descargando toda la información de las recetas, por favor espere...
+              </DialogDescription>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Modal de Confirmación de Cambio de Estado */}
       <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
