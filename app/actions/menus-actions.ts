@@ -3,6 +3,62 @@
 import { supabase } from "@/lib/supabase"
 import { revalidatePath } from "next/cache"
 
+export interface ReporteMenuRow {
+  hotel: string
+  restaurante: string
+  menu: string
+  receta: string
+  precioventa: number | null
+  precioconiva: number | null
+  margenutilidad: number | null
+}
+
+export async function obtenerReporteMenus(menuIds: number[]) {
+  try {
+    if (!menuIds || menuIds.length === 0) {
+      return { success: true, data: [] as ReporteMenuRow[] }
+    }
+
+    const { data, error } = await supabase
+      .from("platillosxmenu")
+      .select(`
+        precioventa,
+        precioconiva,
+        margenutilidad,
+        menus!inner(
+          id,
+          nombre,
+          restaurantes!inner(
+            nombre,
+            hoteles!inner(nombre)
+          )
+        ),
+        platillos!inner(nombre)
+      `)
+      .in("menuid", menuIds)
+
+    if (error) {
+      console.error("Error al obtener reporte de menús:", error)
+      return { success: false, data: [] as ReporteMenuRow[], error: error.message }
+    }
+
+    const filas: ReporteMenuRow[] = (data || []).map((r: any) => ({
+      restaurante: r.menus?.restaurantes?.nombre || "",
+      hotel: r.menus?.restaurantes?.hoteles?.nombre || "",
+      menu: r.menus?.nombre || "",
+      receta: r.platillos?.nombre || "",
+      precioventa: r.precioventa,
+      precioconiva: r.precioconiva,
+      margenutilidad: r.margenutilidad,
+    }))
+
+    return { success: true, data: filas }
+  } catch (error: any) {
+    console.error("Error en obtenerReporteMenus:", error)
+    return { success: false, data: [] as ReporteMenuRow[], error: error.message }
+  }
+}
+
 export async function obtenerMenus() {
   try {
     const { data, error } = await supabase.from("menus").select("*").order("nombre", { ascending: true })
@@ -155,3 +211,4 @@ export async function eliminarMenu(menuId: string) {
     return { success: false, error: error.message }
   }
 }
+

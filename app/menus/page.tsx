@@ -1,6 +1,7 @@
 "use client"
 import Image from "next/image"
-import { Utensils, Search, RotateCcw, Eye, Plus, Edit, Ban, Check, HandPlatter,PowerOff, Power, X } from "lucide-react"
+import { Utensils, Search, RotateCcw, Eye, Plus, Edit, Ban, Check, HandPlatter,PowerOff, Power, X, Download } from "lucide-react"
+import * as XLSX from "xlsx"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
@@ -18,6 +19,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog"
 import { Loader2 } from "@/components/ui/loader2"
 import { getMenuDetails } from "@/app/actions/menus-details-actions"
 import { updateMenu, getHotelsForDropdown, getRestaurantsForDropdown } from "@/app/actions/menus-editar-actions"
+import { obtenerReporteMenus } from "@/app/actions/menus-actions"
 
 interface Menu {
   id: string
@@ -89,6 +91,7 @@ export default function MenusPage() {
   const itemsPerPage = 20
   const [loading, setLoading] = useState(true)
   const [searching, setSearching] = useState(false)
+  const [isDownloading, setIsDownloading] = useState(false)
 
   const [sessionRolId, setSessionRolId] = useState<number | null>(null)
   const [sessionHotelId, setSessionHotelId] = useState<string | null>(null)
@@ -371,6 +374,75 @@ export default function MenusPage() {
           variant: "destructive",
         })
       }
+    }
+  }
+
+  const handleDescargarReporte = async () => {
+    if (menus.length === 0) {
+      toast({
+        title: "Sin datos",
+        description: "No hay menús en el listado para exportar.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsDownloading(true)
+    try {
+      const menuIds = menus.map((m) => Number(m.id)).filter((n) => !Number.isNaN(n))
+      const res = await obtenerReporteMenus(menuIds)
+
+      if (!res.success) {
+        toast({
+          title: "Error",
+          description: res.error || "No se pudo generar el reporte.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const round4 = (n: number | null | undefined): number | "" =>
+        n === null || n === undefined ? "" : Math.round(n * 10000) / 10000
+
+      const filas = res.data.map((r) => ({
+        Hotel: r.hotel,
+        Restaurante: r.restaurante,
+        Menú: r.menu,
+        Receta: r.receta,
+        "Precio Venta": round4(r.precioventa),
+        "Precio con IVA": round4(r.precioconiva),
+        "Margen Utilidad": round4(r.margenutilidad),
+      }))
+
+      const wb = XLSX.utils.book_new()
+      const ws = XLSX.utils.json_to_sheet(filas)
+      ws["!cols"] = [
+        { wch: 28 }, // Hotel
+        { wch: 28 }, // Restaurante
+        { wch: 30 }, // Menú
+        { wch: 30 }, // Receta
+        { wch: 16 }, // Precio Venta
+        { wch: 16 }, // Precio con IVA
+        { wch: 18 }, // Margen Utilidad
+      ]
+      XLSX.utils.book_append_sheet(wb, ws, "Reporte Menús")
+
+      const today = new Date().toISOString().slice(0, 10)
+      XLSX.writeFile(wb, `Reporte_Menus_${today}.xlsx`)
+
+      toast({
+        title: "Reporte descargado",
+        description: `Se exportaron ${filas.length} registros de ${menus.length} menú(s).`,
+      })
+    } catch (error: any) {
+      console.error("Error al generar reporte de menús:", error)
+      toast({
+        title: "Error",
+        description: error.message || "Error inesperado al generar el reporte.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsDownloading(false)
     }
   }
 
@@ -800,8 +872,20 @@ export default function MenusPage() {
 
       {/* Grid del listado */}
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <CardTitle>Listado de Menús</CardTitle>
+          <Button
+            onClick={handleDescargarReporte}
+            disabled={isDownloading || searching || menus.length === 0}
+            className="bg-[#5d8f72] hover:bg-[#44785a] text-white"
+          >
+            {isDownloading ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4 mr-2" />
+            )}
+            Descargar Reporte
+          </Button>
         </CardHeader>
         <CardContent>
           {searching ? (
