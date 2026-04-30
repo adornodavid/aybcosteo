@@ -836,3 +836,117 @@ export async function eliminarRecetaDePlatillo(platilloId: number, Id: number) {
     return { success: false, error: e.message }
   }
 }
+
+export type RecalcularCostosResult = {
+  success: boolean
+  ingredientesActualizados: number
+  recetasActualizadas: number
+  costoTotalAnterior: number
+  costoTotalNuevo: number
+  diferencia: number
+  error?: string
+}
+
+export async function recalcularCostosPlatillo(platilloId: number): Promise<RecalcularCostosResult> {
+  const supabase = createServerSupabaseClient()
+  const empty: RecalcularCostosResult = {
+    success: false,
+    ingredientesActualizados: 0,
+    recetasActualizadas: 0,
+    costoTotalAnterior: 0,
+    costoTotalNuevo: 0,
+    diferencia: 0,
+  }
+
+  try {
+    const { data: ingredientes, error: ingError } = await supabase
+      .from("ingredientesxplatillo")
+      .select(`id, cantidad, ingredientecostoparcial, ingredientes(id, costo)`)
+      .eq("platilloid", platilloId)
+
+    if (ingError) {
+      return { ...empty, error: `Error al leer ingredientes: ${ingError.message}` }
+    }
+
+    const { data: recetas, error: recError } = await supabase
+      .from("recetasxplatillo")
+      .select(`id, cantidad, recetacostoparcial, recetas(id, costo, cantidad)`)
+      .eq("platilloid", platilloId)
+
+    if (recError) {
+      return { ...empty, error: `Error al leer sub-recetas: ${recError.message}` }
+    }
+
+    const costoIngredientesAntes = (ingredientes || []).reduce(
+      (s, it: any) => s + (it.ingredientecostoparcial || 0),
+      0,
+    )
+    const costoRecetasAntes = (recetas || []).reduce((s, it: any) => s + (it.recetacostoparcial || 0), 0)
+    const costoTotalAnterior = costoIngredientesAntes + costoRecetasAntes
+
+    let ingredientesActualizados = 0
+    const ahora = new Date().toISOString()
+
+    for (const item of (ingredientes || []) as any[]) {
+      const costoUnit = item.ingredientes?.costo ?? 0
+      const cant = item.cantidad ?? 0
+      const nuevoParcial = cant * costoUnit
+      const anterior = item.ingredientecostoparcial ?? 0
+
+      if (Math.abs(nuevoParcial - anterior) < 0.000001) continue
+
+      const { error: updErr } = await supabase
+        .from("ingredientesxplatillo")
+        .update({ ingredientecostoparcial: nuevoParcial, fechamodificacion: ahora })
+        .eq("id", item.id)
+
+      if (updErr) {
+        return { ...empty, error: `Error al actualizar ingrediente ${item.id}: ${updErr.message}` }
+      }
+      ingredientesActualizados++
+    }
+
+    let recetasActualizadas = 0
+    for (const item of (recetas || []) as any[]) {
+      const costoReceta = item.recetas?.costo ?? 0
+      const cantidadBase = item.recetas?.cantidad && item.recetas.cantidad > 0 ? item.recetas.cantidad : 1
+      const cantidadUsada = item.cantidad ?? 0
+      const nuevoParcial = (costoReceta / cantidadBase) * cantidadUsada
+      const anterior = item.recetacostoparcial ?? 0
+
+      if (Math.abs(nuevoParcial - anterior) < 0.000001) continue
+
+      const { error: updErr } = await supabase
+        .from("recetasxplatillo")
+        .update({ recetacostoparcial: nuevoParcial, fechamodificacion: ahora })
+        .eq("id", item.id)
+
+      if (updErr) {
+        return { ...empty, error: `Error al actualizar sub-receta ${item.id}: ${updErr.message}` }
+      }
+      recetasActualizadas++
+    }
+
+    const costoIngredientesDespues = (ingredientes || []).reduce((s, it: any) => {
+      const costoUnit = it.ingredientes?.costo ?? 0
+      return s + (it.cantidad ?? 0) * costoUnit
+    }, 0)
+    const costoRecetasDespues = (recetas || []).reduce((s, it: any) => {
+      const costoReceta = it.recetas?.costo ?? 0
+      const cantidadBase = it.recetas?.cantidad && it.recetas.cantidad > 0 ? it.recetas.cantidad : 1
+      return s + (costoReceta / cantidadBase) * (it.cantidad ?? 0)
+    }, 0)
+    const costoTotalNuevo = costoIngredientesDespues + costoRecetasDespues
+
+    return {
+      success: true,
+      ingredientesActualizados,
+      recetasActualizadas,
+      costoTotalAnterior,
+      costoTotalNuevo,
+      diferencia: costoTotalNuevo - costoTotalAnterior,
+    }
+  } catch (e: any) {
+    return { ...empty, error: e?.message || "Error inesperado al recalcular costos" }
+  }
+}

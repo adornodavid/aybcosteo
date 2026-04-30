@@ -30,7 +30,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Loader2, ArrowLeft, PlusCircle, Trash2, XCircle, HelpCircle, Info } from "lucide-react"
+import { Loader2, ArrowLeft, PlusCircle, Trash2, XCircle, HelpCircle, Info, RefreshCw, CheckCircle2, AlertTriangle } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip"
 
 import { deleteImage } from "@/app/actions/recetas-image-actions"
@@ -39,6 +39,8 @@ import {
   searchIngredientes as searchPlatilloIngredientes,
   getRecetas as getRecetasForDropdown,
   getUnidadesMedidaByIngrediente,
+  recalcularCostosPlatillo,
+  type RecalcularCostosResult,
 } from "@/app/actions/platillos-wizard-actions"
 import { Label } from "@/components/ui/label"
 
@@ -71,6 +73,8 @@ interface RecetaPlatillo {
   recetacostoparcial: number
   cantidad: number
   costoUnitarioEfectivo: number
+  recetaCosto: number
+  recetaCantidadBase: number
 }
 
 interface DropdownItem {
@@ -173,6 +177,12 @@ export default function EditarPlatilloPage() {
   // Track if tab data has been loaded
   const [ingredientesLoaded, setIngredientesLoaded] = useState(false)
   const [costosLoaded, setCostosLoaded] = useState(false)
+
+  // Recalcular costos
+  const [showRecalcularConfirm, setShowRecalcularConfirm] = useState(false)
+  const [showRecalcularResult, setShowRecalcularResult] = useState(false)
+  const [isRecalculando, setIsRecalculando] = useState(false)
+  const [recalcularResult, setRecalcularResult] = useState<RecalcularCostosResult | null>(null)
 
   const formatCurrency = (amount: number | null) =>
     new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(amount || 0)
@@ -353,7 +363,7 @@ export default function EditarPlatilloPage() {
         .from("recetasxplatillo")
         .select(`
           id, recetacostoparcial, cantidad,
-          recetas(id, nombre)
+          recetas(id, nombre, costo, cantidad)
         `)
         .eq("platilloid", platilloId)
 
@@ -370,6 +380,9 @@ export default function EditarPlatilloPage() {
             cantidad: item.cantidad,
             costoUnitarioEfectivo:
               item.cantidad && item.cantidad > 0 ? item.recetacostoparcial / item.cantidad : 0,
+            recetaCosto: item.recetas?.costo ?? 0,
+            recetaCantidadBase:
+              item.recetas?.cantidad && item.recetas.cantidad > 0 ? item.recetas.cantidad : 1,
           })),
         )
       }
@@ -434,6 +447,29 @@ export default function EditarPlatilloPage() {
       loadCostosData()
     }
   }, [activeTab, loadIngredientesData, loadCostosData])
+
+  const handleConfirmRecalcularCostos = async () => {
+    if (!platilloId) return
+    setIsRecalculando(true)
+    try {
+      const result = await recalcularCostosPlatillo(Number(platilloId))
+      setRecalcularResult(result)
+      setShowRecalcularConfirm(false)
+      setShowRecalcularResult(true)
+
+      if (result.success) {
+        // Recargar datos de tablas y costos para reflejar los nuevos parciales
+        setIngredientesLoaded(false)
+        setCostosLoaded(false)
+        await loadIngredientesData()
+        await loadCostosData()
+      }
+    } catch (e: any) {
+      toast.error("Error al recalcular costos: " + (e?.message || "desconocido"))
+    } finally {
+      setIsRecalculando(false)
+    }
+  }
 
   // Debounced ingredient search
   useEffect(() => {
@@ -732,7 +768,7 @@ export default function EditarPlatilloPage() {
       setIngredientesPlatillo((prev) =>
         prev.map((ing) =>
           ing.id === id
-            ? { ...ing, cantidad: num, ingredientecostoparcial: num * ing.costoUnitarioEfectivo }
+            ? { ...ing, cantidad: num, ingredientecostoparcial: num * ing.costounitario }
             : ing,
         ),
       )
@@ -755,7 +791,21 @@ export default function EditarPlatilloPage() {
       return
     }
 
-    const newParcial = num * ing.costoUnitarioEfectivo
+    // Re-leer costo actual del catálogo para evitar usar un valor cacheado en memoria
+    const { data: ingActual, error: readErr } = await supabase
+      .from("ingredientes")
+      .select("costo")
+      .eq("id", ing.ingredienteid)
+      .single()
+
+    if (readErr) {
+      console.error("Error al leer costo actual del ingrediente:", readErr)
+      toast.error("Error al leer costo actual: " + readErr.message)
+      return
+    }
+
+    const costoActual = ingActual?.costo ?? 0
+    const newParcial = num * costoActual
 
     const { error } = await supabase
       .from("ingredientesxplatillo")
@@ -773,7 +823,17 @@ export default function EditarPlatilloPage() {
     }
 
     setIngredientesPlatillo((prev) =>
-      prev.map((i) => (i.id === id ? { ...i, cantidad: num, ingredientecostoparcial: newParcial } : i)),
+      prev.map((i) =>
+        i.id === id
+          ? {
+              ...i,
+              cantidad: num,
+              ingredientecostoparcial: newParcial,
+              costounitario: costoActual,
+              costoUnitarioEfectivo: costoActual,
+            }
+          : i,
+      ),
     )
     setEditingIngCantidad((prev) => {
       const { [id]: _omit, ...rest } = prev
@@ -787,11 +847,17 @@ export default function EditarPlatilloPage() {
     const num = Number.parseFloat(value)
     if (!isNaN(num) && num > 0) {
       setRecetasPlatillo((prev) =>
-        prev.map((rec) =>
-          rec.id === id
-            ? { ...rec, cantidad: num, recetacostoparcial: num * rec.costoUnitarioEfectivo }
-            : rec,
-        ),
+        prev.map((rec) => {
+          if (rec.id !== id) return rec
+          const tope = rec.recetaCantidadBase || 1
+          const cantidadAplicada = Math.min(num, tope)
+          const costoUnitActual = rec.recetaCosto / tope
+          return {
+            ...rec,
+            cantidad: cantidadAplicada,
+            recetacostoparcial: cantidadAplicada * costoUnitActual,
+          }
+        }),
       )
     }
   }
@@ -812,7 +878,70 @@ export default function EditarPlatilloPage() {
       return
     }
 
-    const newParcial = num * rec.costoUnitarioEfectivo
+    // Re-leer costo y cantidad base del catálogo de recetas
+    const { data: recActual, error: readErr } = await supabase
+      .from("recetas")
+      .select("costo, cantidad")
+      .eq("id", rec.recetaid)
+      .single()
+
+    if (readErr) {
+      console.error("Error al leer datos actuales de la receta:", readErr)
+      toast.error("Error al leer datos de la sub-receta: " + readErr.message)
+      return
+    }
+
+    const costoActual = recActual?.costo ?? 0
+    const cantidadBaseActual = recActual?.cantidad && recActual.cantidad > 0 ? recActual.cantidad : 1
+
+    if (num > cantidadBaseActual) {
+      toast.error(
+        `La cantidad (${num}) supera el tope de la sub-receta (${cantidadBaseActual}). Se ajustó al máximo permitido.`,
+      )
+      // Ajustar al tope en lugar de bloquear
+      const ajustada = cantidadBaseActual
+      const costoUnitActual = costoActual / cantidadBaseActual
+      const newParcial = ajustada * costoUnitActual
+
+      const { error } = await supabase
+        .from("recetasxplatillo")
+        .update({
+          cantidad: ajustada,
+          recetacostoparcial: newParcial,
+          fechamodificacion: new Date().toISOString(),
+        })
+        .eq("id", id)
+
+      if (error) {
+        console.error("Error al actualizar cantidad de sub-receta:", error)
+        toast.error("Error al actualizar cantidad: " + error.message)
+        return
+      }
+
+      setRecetasPlatillo((prev) =>
+        prev.map((r) =>
+          r.id === id
+            ? {
+                ...r,
+                cantidad: ajustada,
+                recetacostoparcial: newParcial,
+                recetaCosto: costoActual,
+                recetaCantidadBase: cantidadBaseActual,
+                costoUnitarioEfectivo: costoUnitActual,
+              }
+            : r,
+        ),
+      )
+      setEditingRecCantidad((prev) => {
+        const { [id]: _omit, ...rest } = prev
+        return rest
+      })
+      setCostosLoaded(false)
+      return
+    }
+
+    const costoUnitActual = costoActual / cantidadBaseActual
+    const newParcial = num * costoUnitActual
 
     const { error } = await supabase
       .from("recetasxplatillo")
@@ -830,7 +959,18 @@ export default function EditarPlatilloPage() {
     }
 
     setRecetasPlatillo((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, cantidad: num, recetacostoparcial: newParcial } : r)),
+      prev.map((r) =>
+        r.id === id
+          ? {
+              ...r,
+              cantidad: num,
+              recetacostoparcial: newParcial,
+              recetaCosto: costoActual,
+              recetaCantidadBase: cantidadBaseActual,
+              costoUnitarioEfectivo: costoUnitActual,
+            }
+          : r,
+      ),
     )
     setEditingRecCantidad((prev) => {
       const { [id]: _omit, ...rest } = prev
@@ -2055,15 +2195,35 @@ export default function EditarPlatilloPage() {
                             <TableRow key={rec.id}>
                               <TableCell>{rec.nombre}</TableCell>
                               <TableCell>
-                                <Input
-                                  type="number"
-                                  step="0.01"
-                                  min="0"
-                                  value={editingRecCantidad[rec.id] ?? String(rec.cantidad)}
-                                  onChange={(e) => handleRecetaCantidadChange(rec.id, e.target.value)}
-                                  onBlur={() => handleRecetaCantidadBlur(rec.id)}
-                                  className="h-8 w-24"
-                                />
+                                {(() => {
+                                  const draftRaw = editingRecCantidad[rec.id]
+                                  const draftNum = draftRaw !== undefined ? Number.parseFloat(draftRaw) : rec.cantidad
+                                  const tope = rec.recetaCantidadBase || 1
+                                  const excede = !isNaN(draftNum) && draftNum > tope
+                                  return (
+                                    <div className="flex flex-col gap-1">
+                                      <Input
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        max={tope}
+                                        value={editingRecCantidad[rec.id] ?? String(rec.cantidad)}
+                                        onChange={(e) => handleRecetaCantidadChange(rec.id, e.target.value)}
+                                        onBlur={() => handleRecetaCantidadBlur(rec.id)}
+                                        className={`h-8 w-24 ${excede ? "border-red-500 ring-1 ring-red-500" : ""}`}
+                                      />
+                                      <span
+                                        className={`text-[10px] leading-tight ${
+                                          excede ? "text-red-600 font-medium" : "text-gray-500"
+                                        }`}
+                                      >
+                                        Asignado: <span className="font-mono">{isNaN(draftNum) ? rec.cantidad : draftNum}</span>{" / "}
+                                        Tope: <span className="font-mono">{tope}</span>
+                                        {excede && " — excede"}
+                                      </span>
+                                    </div>
+                                  )
+                                })()}
                               </TableCell>
                               <TableCell>{formatCurrency(rec.recetacostoparcial)}</TableCell>
                               <TableCell className="text-right">
@@ -2139,9 +2299,26 @@ export default function EditarPlatilloPage() {
         {/* ===== TAB: Resumen de Precio ===== */}
         <TabsContent value="costos">
           <Card>
-            <CardHeader>
-              <CardTitle>Resumen de Precio</CardTitle>
-              <CardDescription>Revisa los costos y establece el precio de venta.</CardDescription>
+            <CardHeader className="flex flex-row items-start justify-between gap-4">
+              <div>
+                <CardTitle>Resumen de Precio</CardTitle>
+                <CardDescription>Revisa los costos y establece el precio de venta.</CardDescription>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowRecalcularConfirm(true)}
+                disabled={isRecalculando || loading}
+                className="border-[#5d8f72] text-[#5d8f72] hover:bg-[#5d8f72] hover:text-white"
+              >
+                {isRecalculando ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                )}
+                Recalcular costos
+              </Button>
             </CardHeader>
             <CardContent className="space-y-6">
               {loading ? (
@@ -2420,6 +2597,140 @@ export default function EditarPlatilloPage() {
           </div>
         </div>
       )}
+
+      {/* Modal: Confirmar recálculo de costos */}
+      <AlertDialog open={showRecalcularConfirm} onOpenChange={setShowRecalcularConfirm}>
+        <AlertDialogContent className="p-0 overflow-hidden">
+          <div className="bg-gradient-to-r from-amber-500 to-orange-500 px-6 py-4 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-white/20 ring-2 ring-white/40 flex items-center justify-center">
+              <AlertTriangle className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <AlertDialogTitle className="text-white text-lg">Recalcular costos del platillo</AlertDialogTitle>
+            </div>
+          </div>
+          <div className="px-6 py-4 space-y-3">
+            <AlertDialogDescription className="text-gray-700">
+              Esto recalculará los costos parciales de los ingredientes y sub-recetas usando los costos actuales del catálogo.
+            </AlertDialogDescription>
+            <ul className="text-sm text-gray-600 list-disc pl-5 space-y-1">
+              <li>Ingredientes: <code>cantidad × costo_actual_del_ingrediente</code></li>
+              <li>Sub-recetas: <code>(costo_actual_de_la_receta / cantidad_base) × cantidad_usada</code></li>
+            </ul>
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+              No se modifican los costos del catálogo de ingredientes ni de recetas. Solo los parciales guardados en este platillo.
+            </p>
+          </div>
+          <AlertDialogFooter className="px-6 pb-6 pt-0 flex flex-col gap-2 sm:flex-col">
+            <Button
+              onClick={handleConfirmRecalcularCostos}
+              disabled={isRecalculando}
+              className="w-full bg-[#5d8f72] hover:bg-[#44785a] text-white"
+            >
+              {isRecalculando ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Recalculando...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Recalcular ahora
+                </>
+              )}
+            </Button>
+            <AlertDialogCancel className="w-full mt-0" disabled={isRecalculando}>
+              Cancelar
+            </AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Modal: Resultado del recálculo */}
+      <AlertDialog open={showRecalcularResult} onOpenChange={setShowRecalcularResult}>
+        <AlertDialogContent className="p-0 overflow-hidden">
+          {recalcularResult?.success ? (
+            <>
+              <div className="bg-gradient-to-r from-[#58e0be] to-[#5d8f72] px-6 py-4 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-white/20 ring-2 ring-white/40 flex items-center justify-center">
+                  <CheckCircle2 className="h-5 w-5 text-white" />
+                </div>
+                <AlertDialogTitle className="text-white text-lg">Costos actualizados</AlertDialogTitle>
+              </div>
+              <div className="px-6 py-4 space-y-4">
+                <AlertDialogDescription className="text-gray-700">
+                  El recálculo terminó correctamente.
+                </AlertDialogDescription>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="rounded-md border bg-gray-50 px-3 py-2">
+                    <div className="text-gray-500 text-xs">Ingredientes actualizados</div>
+                    <div className="font-semibold text-gray-800">{recalcularResult.ingredientesActualizados}</div>
+                  </div>
+                  <div className="rounded-md border bg-gray-50 px-3 py-2">
+                    <div className="text-gray-500 text-xs">Sub-recetas actualizadas</div>
+                    <div className="font-semibold text-gray-800">{recalcularResult.recetasActualizadas}</div>
+                  </div>
+                </div>
+                <div className="rounded-md border bg-blue-50 px-3 py-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Costo total anterior:</span>
+                    <span className="font-mono">{formatCurrency(recalcularResult.costoTotalAnterior)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Costo total nuevo:</span>
+                    <span className="font-mono font-semibold">{formatCurrency(recalcularResult.costoTotalNuevo)}</span>
+                  </div>
+                  <div className="flex justify-between border-t mt-1 pt-1">
+                    <span className="text-gray-600">Diferencia:</span>
+                    <span
+                      className={`font-mono font-semibold ${
+                        recalcularResult.diferencia > 0
+                          ? "text-red-600"
+                          : recalcularResult.diferencia < 0
+                            ? "text-green-700"
+                            : "text-gray-600"
+                      }`}
+                    >
+                      {recalcularResult.diferencia > 0 ? "+" : ""}
+                      {formatCurrency(recalcularResult.diferencia)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <AlertDialogFooter className="px-6 pb-6 pt-0">
+                <AlertDialogAction
+                  onClick={() => setShowRecalcularResult(false)}
+                  className="w-full bg-[#5d8f72] hover:bg-[#44785a] text-white"
+                >
+                  Aceptar
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </>
+          ) : (
+            <>
+              <div className="bg-gradient-to-r from-red-500 to-rose-600 px-6 py-4 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-white/20 ring-2 ring-white/40 flex items-center justify-center">
+                  <XCircle className="h-5 w-5 text-white" />
+                </div>
+                <AlertDialogTitle className="text-white text-lg">Error al recalcular</AlertDialogTitle>
+              </div>
+              <div className="px-6 py-4 space-y-2">
+                <AlertDialogDescription className="text-gray-700">
+                  {recalcularResult?.error || "Ocurrió un error inesperado."}
+                </AlertDialogDescription>
+              </div>
+              <AlertDialogFooter className="px-6 pb-6 pt-0">
+                <AlertDialogAction
+                  onClick={() => setShowRecalcularResult(false)}
+                  className="w-full bg-red-600 hover:bg-red-700 text-white"
+                >
+                  Aceptar
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </>
+          )}
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
