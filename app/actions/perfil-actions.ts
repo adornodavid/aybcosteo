@@ -212,3 +212,25 @@ export async function obtenerUsuariosPorHotel(hotelId: string): Promise<Usuario[
     return []
   }
 }
+
+// Datos mínimos del usuario actual para el header global (avatar + nombre).
+// Se hace una sola consulta a `usuarios` y devuelve solo lo necesario.
+export async function obtenerHeaderUsuario(usuarioId: number | string) {
+  try {
+    const supabase = createSupabaseServerClient()
+    const { data, error } = await supabase
+      .from("usuarios")
+      .select("id, nombrecompleto, email, imgurl")
+      .eq("id", usuarioId)
+      .single()
+    if (error || !data) return null
+    return {
+      id: (data as any).id as number,
+      nombrecompleto: (data as any).nombrecompleto as string | null,
+      email: (data as any).email as string,
+      imgurl: ((data as any).imgurl as string | null) ?? null,
+    }
+  } catch {
+    return null
+  }
+}

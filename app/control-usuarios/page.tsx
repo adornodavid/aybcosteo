@@ -4,9 +4,6 @@ import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import {
   Users,
-  UserCheck,
-  UserX,
-  Activity,
   Calendar,
   Search,
   RotateCcw,
@@ -15,7 +12,6 @@ import {
   Mail,
   Building2,
   ShieldCheck,
-  TrendingUp,
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -95,18 +91,6 @@ export default function ControlUsuariosPage() {
     return Math.floor(ms / (1000 * 60 * 60 * 24))
   }
 
-  const stats = useMemo(() => {
-    const total = usuarios.length
-    const activos = usuarios.filter((u) => u.activo).length
-    const inactivos = total - activos
-    const totalAccesos = usuarios.reduce((s, u) => s + u.cantidadaccesos, 0)
-    const conAccesoReciente = usuarios.filter((u) => {
-      const d = daysSince(u.fechaultimoacceso)
-      return d !== null && d <= 7
-    }).length
-    return { total, activos, inactivos, totalAccesos, conAccesoReciente }
-  }, [usuarios])
-
   const rolesUnicos = useMemo(
     () => Array.from(new Set(usuarios.map((u) => u.rolNombre).filter((r) => r && r !== "Sin rol"))).sort(),
     [usuarios],
@@ -155,98 +139,20 @@ export default function ControlUsuariosPage() {
   }
 
   return (
-    <div className="flex-1 space-y-6 p-4 md:p-8 pt-6">
+    <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
       {/* Header */}
-      <div className="rounded-xl bg-gradient-to-r from-[#528A94] via-[#5d8f72] to-[#3a7d6a] px-6 py-6 text-white shadow-lg">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-white/20 p-3 backdrop-blur-sm">
-              <Users className="h-7 w-7" />
-            </div>
-            <div>
-              <h1 className="text-3xl font-bold">Control de Usuarios</h1>
-              <p className="text-white/85 text-sm mt-1">
-                Monitoreo de acceso y actividad de usuarios del sistema
-              </p>
-            </div>
+      <div className="rounded-lg bg-gradient-to-r from-[#528A94] via-[#5d8f72] to-[#3a7d6a] px-4 py-2.5 text-white shadow-sm">
+        <div className="flex items-center gap-2.5">
+          <div className="rounded bg-white/20 p-1.5 backdrop-blur-sm">
+            <Users className="h-4 w-4" />
           </div>
-          <Button
-            onClick={cargarUsuarios}
-            variant="secondary"
-            className="bg-white/20 hover:bg-white/30 text-white border border-white/30 backdrop-blur-sm"
-          >
-            <RotateCcw className="h-4 w-4 mr-2" />
-            Refrescar
-          </Button>
+          <div className="flex items-baseline gap-2 flex-wrap">
+            <h1 className="text-lg font-bold leading-none">Control de Usuarios</h1>
+            <p className="text-white/80 text-xs leading-none">
+              Monitoreo de acceso y actividad
+            </p>
+          </div>
         </div>
-      </div>
-
-      {/* Stats cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <Card className="border-l-4 border-l-[#528A94] shadow-sm hover:shadow-md transition-shadow">
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-xs font-medium text-gray-600 uppercase tracking-wide">Total</CardTitle>
-              <Users className="h-4 w-4 text-[#528A94]" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-gray-900">{stats.total}</div>
-            <p className="text-xs text-gray-500 mt-1">usuarios registrados</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-l-4 border-l-emerald-500 shadow-sm hover:shadow-md transition-shadow">
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-xs font-medium text-gray-600 uppercase tracking-wide">Activos</CardTitle>
-              <UserCheck className="h-4 w-4 text-emerald-500" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-emerald-600">{stats.activos}</div>
-            <p className="text-xs text-gray-500 mt-1">cuentas habilitadas</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-l-4 border-l-red-400 shadow-sm hover:shadow-md transition-shadow">
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-xs font-medium text-gray-600 uppercase tracking-wide">Inactivos</CardTitle>
-              <UserX className="h-4 w-4 text-red-400" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-red-500">{stats.inactivos}</div>
-            <p className="text-xs text-gray-500 mt-1">sin acceso</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-l-4 border-l-blue-500 shadow-sm hover:shadow-md transition-shadow">
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-xs font-medium text-gray-600 uppercase tracking-wide">Accesos</CardTitle>
-              <Activity className="h-4 w-4 text-blue-500" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-blue-600">{stats.totalAccesos}</div>
-            <p className="text-xs text-gray-500 mt-1">accesos acumulados</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-l-4 border-l-amber-500 shadow-sm hover:shadow-md transition-shadow">
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-xs font-medium text-gray-600 uppercase tracking-wide">Recientes</CardTitle>
-              <TrendingUp className="h-4 w-4 text-amber-500" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-amber-600">{stats.conAccesoReciente}</div>
-            <p className="text-xs text-gray-500 mt-1">≤ 7 días</p>
-          </CardContent>
-        </Card>
       </div>
 
       {/* Filtros */}
@@ -323,10 +229,10 @@ export default function ControlUsuariosPage() {
               <p>No se encontraron usuarios con los filtros aplicados.</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-auto max-h-[60vh]">
               <Table>
-                <TableHeader>
-                  <TableRow className="bg-gray-50/80">
+                <TableHeader className="sticky top-0 z-10 bg-gray-50/95 backdrop-blur shadow-sm">
+                  <TableRow className="bg-gray-50/80 hover:bg-gray-50/80">
                     <TableHead className="font-semibold">Usuario</TableHead>
                     <TableHead className="font-semibold">Rol</TableHead>
                     <TableHead className="font-semibold">Hotel</TableHead>
@@ -340,7 +246,12 @@ export default function ControlUsuariosPage() {
                   {filtrados.map((u) => {
                     const dias = daysSince(u.fechaultimoacceso)
                     return (
-                      <TableRow key={u.id} className="hover:bg-[#528A94]/5 transition-colors">
+                      <TableRow
+                        key={u.id}
+                        className="hover:bg-[#528A94]/10 transition-colors cursor-pointer"
+                        onClick={() => router.push(`/control-usuarios/bitacora?id=${u.id}`)}
+                        title="Ver bitácora del usuario"
+                      >
                         <TableCell>
                           <div className="flex items-center gap-3">
                             <Avatar className="h-9 w-9 ring-2 ring-[#528A94]/15">

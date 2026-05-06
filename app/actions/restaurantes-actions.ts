@@ -5,6 +5,8 @@ import { cookies } from "next/headers"
 import { createServerSupabaseClient } from "@/lib/supabase-server"
 import type { Restaurante, DropdownOption, RestauranteTableRow } from "@/lib/types-sistema-costeo"
 import { revalidatePath } from "next/cache"
+import { registrarBitacora } from "@/app/actions/bitacora-actions"
+import { BITACORA_ACTIVIDADES, BITACORA_MODULOS } from "@/lib/bitacora-actividades"
 
 // Helper para obtener el cliente Supabase en el servidor
 const getSupabaseClient = () => createServerSupabaseClient(cookies())
@@ -244,7 +246,19 @@ export async function crearOActualizarRestaurante(
   }
 
   revalidatePath("/restaurantes")
-  return { success: true, message: `Restaurante ${id && id !== "0" ? "actualizado" : "creado"} exitosamente.` }
+
+  const fueActualizar = id && id !== "0"
+  const restId = fueActualizar ? Number(id) : (result.data as any)?.id ?? null
+  await registrarBitacora({
+    actividad: fueActualizar
+      ? BITACORA_ACTIVIDADES.ACTUALIZAR_RESTAURANTE
+      : BITACORA_ACTIVIDADES.CREAR_RESTAURANTE,
+    observaciones: `${fueActualizar ? "Actualizó" : "Creó"} restaurante «${nombre}» (id ${restId ?? "?"}, hotel ${hotelid}).`,
+    modulo: BITACORA_MODULOS.RESTAURANTES,
+    recursoid: restId,
+  })
+
+  return { success: true, message: `Restaurante ${fueActualizar ? "actualizado" : "creado"} exitosamente.` }
 }
 
 export async function actualizarEstadoRestaurante(
@@ -252,6 +266,14 @@ export async function actualizarEstadoRestaurante(
   newStatus: boolean,
 ): Promise<{ success: boolean; message: string; error?: string }> {
   const supabase = getSupabaseClient()
+
+  // Capturar nombre del restaurante para que el log sea legible.
+  const { data: prevRest } = await supabase
+    .from("restaurantes")
+    .select("nombre")
+    .eq("id", id)
+    .single()
+
   const { error } = await supabase.from("restaurantes").update({ activo: newStatus }).eq("id", id)
 
   if (error) {
@@ -260,6 +282,15 @@ export async function actualizarEstadoRestaurante(
   }
 
   revalidatePath("/restaurantes")
+
+  const nomRest = (prevRest as any)?.nombre ?? "(sin nombre)"
+  await registrarBitacora({
+    actividad: BITACORA_ACTIVIDADES.ACTUALIZAR_RESTAURANTE,
+    observaciones: `Cambió estado del restaurante «${nomRest}» (id ${id}) a ${newStatus ? "activo" : "inactivo"}.`,
+    modulo: BITACORA_MODULOS.RESTAURANTES,
+    recursoid: id,
+  })
+
   return { success: true, message: `Restaurante ${newStatus ? "activado" : "inactivado"} exitosamente.` }
 }
 

@@ -30,6 +30,7 @@ import {
   KeyRound,
   BookOpen,
   UsersRound,
+  Tag,
 } from "lucide-react"
 
 export const Icons = {
@@ -64,6 +65,7 @@ export const Icons = {
   KeyRound,
   BookOpen,
   UsersRound,
+  Tag,
 }
 
 export type Icon = keyof typeof Icons

@@ -109,7 +109,11 @@ export function AppSidebar() {
       icon: Icons.UsersRound,
       hasSubmenu: true,
       onlyAdmin: true,
-      submenu: [{ name: "Control de Usuarios", href: "/control-usuarios", icon: Icons.UsersRound }],
+      submenu: [
+        { name: "Control de Usuarios", href: "/control-usuarios", icon: Icons.UsersRound },
+        { name: "Importación de Datos", href: "/importar", icon: Icons.FileUp },
+        { name: "Carga de Ventas", href: "/cargaventas", icon: Icons.Tag },
+      ],
     },
     {
       name: "Perfil",
@@ -127,11 +131,11 @@ export function AppSidebar() {
   return (
     <>
       {/* Sidebar compacta de 100px */}
-      <div className="w-[100px] h-screen bg-[#528A94] text-white flex flex-col fixed left-0 top-0 z-40">
-        {/* Logo compacto */}
-        <div className="p-4 border-b border-[#a6d1cc] flex justify-center">
-          <div className="w-8 h-8 bg-white rounded flex items-center justify-center">
-            <Icons.Utensils className="w-5 h-5 text-black" />
+      <div className="w-[90px] h-screen bg-[#1F4F58] text-white flex flex-col fixed left-0 top-0 z-40">
+        {/* Logo compacto — altura alineada con el AppHeader (h-14) */}
+        <div className="h-14 border-b border-[#528A94] flex items-center justify-center">
+          <div className="w-8 h-8 bg-[#E8F0F1] rounded flex items-center justify-center">
+            <Icons.Utensils className="w-4 h-4 text-[#1F4F58]" />
           </div>
         </div>
 
@@ -141,15 +145,15 @@ export function AppSidebar() {
             {/* Botón hamburguesa para offcanvas */}
             <Sheet open={isOffcanvasOpen} onOpenChange={setIsOffcanvasOpen}>
               <SheetTrigger asChild>
-                <button className="w-full flex justify-center items-center p-3 rounded-md text-white hover:bg-[#56706e] transition-colors">
+                <button className="w-full flex justify-center items-center p-3 rounded-md text-white hover:bg-[#2D6470] transition-colors">
                   <Icons.Menu className="w-6 h-6" />
                 </button>
               </SheetTrigger>
-              <SheetContent side="left" className="w-64 p-0 bg-[#528A94] border-r-0">
+              <SheetContent side="left" className="w-64 p-0 bg-[#1F4F58] border-r-0">
                 {/* Contenido completo de la sidebar offcanvas */}
                 <div className="h-full flex flex-col">
                   {/* Logo */}
-                  <div className="p-4 border-b border-[#a6d1cc]">
+                  <div className="p-4 border-b border-[#528A94]">
                     <div className="flex items-center space-x-3">
                       <div className="w-8 h-8 bg-white rounded flex items-center justify-center">
                         <Icons.Utensils className="w-5 h-5 text-black" />
@@ -159,7 +163,7 @@ export function AppSidebar() {
                   </div>
 
                   {/* Nombre del usuario */}
-                  <div className="p-4 border-b border-[#a6d1cc]">
+                  <div className="p-4 border-b border-[#528A94]">
                     <div className="flex items-center space-x-2">
                       <Icons.User className="w-5 h-5 text-white" />
                       <span className="text-sm font-medium text-white">{sessionData?.NombreCompleto || "Usuario"}</span>
@@ -176,8 +180,8 @@ export function AppSidebar() {
                               onClick={() => handleNavigationClick(item.href!)}
                               className={`flex items-center space-x-3 px-3 py-2 rounded-md text-sm font-medium transition-colors w-full ${
                                 isActive(item.href!)
-                                  ? "bg-[#56706e] text-white"
-                                  : "text-white hover:bg-[#56706e] hover:text-white"
+                                  ? "bg-[#7BAEB8] text-white shadow-sm"
+                                  : "text-white hover:bg-[#2D6470] hover:text-white"
                               }`}
                             >
                               <item.icon className="w-5 h-5 text-white" />
@@ -191,7 +195,7 @@ export function AppSidebar() {
                               <CollapsibleTrigger asChild>
                                 <Button
                                   variant="ghost"
-                                  className="w-full justify-start space-x-3 px-3 py-2 text-sm font-medium text-white hover:bg-[#56706e] hover:text-white"
+                                  className="w-full justify-start space-x-3 px-3 py-2 text-sm font-medium text-white hover:bg-[#2D6470] hover:text-white"
                                 >
                                   <item.icon className="w-5 h-5 text-white" />
                                   <span className="flex-1 text-left">{item.name}</span>
@@ -209,8 +213,8 @@ export function AppSidebar() {
                                     onClick={() => handleNavigationClick(subItem.href)}
                                     className={`flex items-center space-x-3 px-3 py-2 rounded-md text-sm transition-colors w-full ${
                                       isActive(subItem.href)
-                                        ? "bg-[#56706e] text-white"
-                                        : "text-white hover:bg-[#56706e] hover:text-white"
+                                        ? "bg-[#7BAEB8] text-white shadow-sm"
+                                        : "text-white hover:bg-[#2D6470] hover:text-white"
                                     }`}
                                   >
                                     <subItem.icon className="w-4 h-4 text-white" />
@@ -232,7 +236,7 @@ export function AppSidebar() {
             <button
               onClick={() => handleNavigationClick("/dashboard")}
               className={`w-full flex flex-col items-center gap-1 p-2 rounded-md transition-colors ${
-                isActive("/dashboard") ? "bg-[#56706e] text-white" : "text-white hover:bg-[#56706e]"
+                isActive("/dashboard") ? "bg-[#7BAEB8] text-white shadow-sm" : "text-white hover:bg-[#2D6470]"
               }`}
               title="Dashboard"
             >
@@ -243,7 +247,7 @@ export function AppSidebar() {
             <button
               onClick={() => handleNavigationClick("/platillos")}
               className={`w-full flex flex-col items-center gap-1 p-2 rounded-md transition-colors ${
-                isActive("/platillos") ? "bg-[#56706e] text-white" : "text-white hover:bg-[#56706e]"
+                isActive("/platillos") ? "bg-[#7BAEB8] text-white shadow-sm" : "text-white hover:bg-[#2D6470]"
               }`}
               title="Recetas"
             >
@@ -252,9 +256,20 @@ export function AppSidebar() {
             </button>
 
             <button
+              onClick={() => handleNavigationClick("/recetas")}
+              className={`w-full flex flex-col items-center gap-1 p-2 rounded-md transition-colors ${
+                isActive("/recetas") ? "bg-[#7BAEB8] text-white shadow-sm" : "text-white hover:bg-[#2D6470]"
+              }`}
+              title="Sub-Recetas"
+            >
+              <Icons.FileText className="w-6 h-6" />
+              <span className="text-[10px] font-medium leading-tight">Sub-Recetas</span>
+            </button>
+
+            <button
               onClick={() => handleNavigationClick("/menus")}
               className={`w-full flex flex-col items-center gap-1 p-2 rounded-md transition-colors ${
-                isActive("/menus") ? "bg-[#56706e] text-white" : "text-white hover:bg-[#56706e]"
+                isActive("/menus") ? "bg-[#7BAEB8] text-white shadow-sm" : "text-white hover:bg-[#2D6470]"
               }`}
               title="Menús"
             >
@@ -266,7 +281,7 @@ export function AppSidebar() {
               <button
                 onClick={() => handleNavigationClick("/control-usuarios")}
                 className={`w-full flex flex-col items-center gap-1 p-2 rounded-md transition-colors ${
-                  isActive("/control-usuarios") ? "bg-[#56706e] text-white" : "text-white hover:bg-[#56706e]"
+                  isActive("/control-usuarios") ? "bg-[#7BAEB8] text-white shadow-sm" : "text-white hover:bg-[#2D6470]"
                 }`}
                 title="Control de Usuarios"
               >
@@ -278,7 +293,7 @@ export function AppSidebar() {
             {/*<button
               onClick={() => handleNavigationClick("/ingredientes")}
               className={`w-full flex justify-center items-center p-3 rounded-md transition-colors ${
-                isActive("/ingredientes") ? "bg-[#56706e] text-white" : "text-white hover:bg-[#56706e]"
+                isActive("/ingredientes") ? "bg-[#7BAEB8] text-white shadow-sm" : "text-white hover:bg-[#2D6470]"
               }`}
               title="Ingredientes"
             >
@@ -289,7 +304,7 @@ export function AppSidebar() {
             <button
               onClick={() => handleNavigationClick("/platillos")}
               className={`w-full flex justify-center items-center p-3 rounded-md transition-colors ${
-                isActive("/platillos") ? "bg-[#56706e] text-white" : "text-white hover:bg-[#56706e]"
+                isActive("/platillos") ? "bg-[#7BAEB8] text-white shadow-sm" : "text-white hover:bg-[#2D6470]"
               }`}
               title="Recetas"
             >
@@ -299,7 +314,7 @@ export function AppSidebar() {
             <button
               onClick={() => handleNavigationClick("/recetas")}
               className={`w-full flex justify-center items-center p-3 rounded-md transition-colors ${
-                isActive("/recetas") ? "bg-[#56706e] text-white" : "text-white hover:bg-[#56706e]"
+                isActive("/recetas") ? "bg-[#7BAEB8] text-white shadow-sm" : "text-white hover:bg-[#2D6470]"
               }`}
               title="Sub-Recetas"
             >
@@ -309,7 +324,7 @@ export function AppSidebar() {
             <button
               onClick={() => handleNavigationClick("/perfil")}
               className={`w-full flex justify-center items-center p-3 rounded-md transition-colors ${
-                isActive("/perfil") ? "bg-[#56706e] text-white" : "text-white hover:bg-[#56706e]"
+                isActive("/perfil") ? "bg-[#7BAEB8] text-white shadow-sm" : "text-white hover:bg-[#2D6470]"
               }`}
               title="Perfil"
             >

@@ -2,6 +2,8 @@
 
 import { supabase } from "@/lib/supabase"
 import { revalidatePath } from "next/cache"
+import { registrarBitacora } from "@/app/actions/bitacora-actions"
+import { BITACORA_ACTIVIDADES, BITACORA_MODULOS } from "@/lib/bitacora-actividades"
 
 export interface ReporteMenuRow {
   hotel: string
@@ -104,6 +106,14 @@ export async function crearMenu(menuData: {
     }
 
     revalidatePath("/menus")
+
+    await registrarBitacora({
+      actividad: BITACORA_ACTIVIDADES.CREAR_MENU,
+      observaciones: `Creó menú «${menuData.nombre}» (id ${data.id}) en restaurante ${menuData.restauranteid}.`,
+      modulo: BITACORA_MODULOS.MENUS,
+      recursoid: Number(data.id),
+    })
+
     return { data, success: true, error: null }
   } catch (error: any) {
     console.error("Error en crearMenu:", error)
@@ -138,6 +148,14 @@ export async function actualizarMenu(
     }
 
     revalidatePath("/menus")
+
+    await registrarBitacora({
+      actividad: BITACORA_ACTIVIDADES.ACTUALIZAR_MENU,
+      observaciones: `Actualizó menú «${data?.nombre ?? menuData.nombre ?? ""}» (id ${id}).`,
+      modulo: BITACORA_MODULOS.MENUS,
+      recursoid: id,
+    })
+
     return { data, error: null }
   } catch (error: any) {
     console.error("Error en actualizarMenu:", error)
@@ -177,6 +195,13 @@ export async function obtenerMenuPorId(id: number) {
 
 export async function eliminarMenu(menuId: string) {
   try {
+    // Capturar nombre del menú antes de eliminarlo para el log de bitácora.
+    const { data: prevMenu } = await supabase
+      .from("menus")
+      .select("nombre")
+      .eq("id", menuId)
+      .single()
+
     // 1. Eliminar las relaciones en menu_platillos
     const { error: deleteMenuPlatillosError } = await supabase.from("menu_platillos").delete().eq("menu_id", menuId)
 
@@ -205,6 +230,15 @@ export async function eliminarMenu(menuId: string) {
     }
 
     revalidatePath("/menus")
+
+    const nomMenu = (prevMenu as any)?.nombre ?? "(sin nombre)"
+    await registrarBitacora({
+      actividad: BITACORA_ACTIVIDADES.ELIMINAR_MENU,
+      observaciones: `Eliminó menú «${nomMenu}» (id ${menuId}) y sus relaciones (menu_platillos, restaurante_menus).`,
+      modulo: BITACORA_MODULOS.MENUS,
+      recursoid: Number(menuId),
+    })
+
     return { success: true }
   } catch (error: any) {
     console.error("Error en eliminarMenu:", error)

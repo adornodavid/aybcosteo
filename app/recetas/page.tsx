@@ -3,7 +3,7 @@
 /* ==================================================
   Imports
 ================================================== */
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,7 +11,8 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Loader2, BookOpen, Search, RotateCcw, Eye, Edit, Power, PowerOff, AlertCircle, X } from "lucide-react"
+import { Loader2, BookOpen, Search, RotateCcw, Eye, Edit, Power, PowerOff, AlertCircle, X, Download } from "lucide-react"
+import * as XLSX from "xlsx"
 import { getSession } from "@/app/actions/session-actions"
 import { supabase } from "@/lib/supabase"
 import { useRouter } from "next/navigation"
@@ -101,6 +102,8 @@ export default function RecetasPage() {
 
   // Estados de paginación
   const [currentPage, setCurrentPage] = useState(1)
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null)
+  const [isDownloading, setIsDownloading] = useState(false)
   const [totalPages, setTotalPages] = useState(1)
   const itemsPerPage = 20
 
@@ -400,6 +403,169 @@ export default function RecetasPage() {
     await ejecutarBusqueda(txtRecetaNombre, hotelFilterId, ddlEstatusReceta, 1)
   }
 
+  const handleDownloadReport = async () => {
+    if (!sesion) {
+      toast.error("Sesión no disponible.")
+      return
+    }
+    if (recetas.length === 0) {
+      toast.error("No hay sub-recetas para descargar.")
+      return
+    }
+
+    setIsDownloading(true)
+    try {
+      const rolId = Number.parseInt(sesion.RolId?.toString() || "0", 10)
+      const hotelIdSesion = Number.parseInt(sesion.HotelId?.toString() || "0", 10)
+      const hotelFilterId = ddlHotelReceta ? Number.parseInt(ddlHotelReceta, 10) : -1
+      const finalHotelFilterId = ![1, 2, 3, 4].includes(rolId)
+        ? hotelIdSesion
+        : hotelFilterId !== -1
+        ? hotelFilterId
+        : -1
+
+      // 1) Traer TODAS las sub-recetas (sin paginación) con los filtros actuales
+      let allQuery = supabase
+        .from("recetas")
+        .select(`
+          id, nombre, notaspreparacion, costo, activo, hotelid,
+          hoteles!inner(id, nombre)
+        `)
+        .eq("activo", ddlEstatusReceta === "true")
+
+      if (txtRecetaNombre.trim()) allQuery = allQuery.ilike("nombre", `%${txtRecetaNombre.trim()}%`)
+      if (finalHotelFilterId !== -1) allQuery = allQuery.eq("hotelid", finalHotelFilterId)
+      allQuery = allQuery.order("nombre", { ascending: true })
+
+      const { data: allRecetas, error: allError } = await allQuery
+      if (allError) throw allError
+      if (!allRecetas || allRecetas.length === 0) {
+        toast.error("No hay sub-recetas que coincidan con los filtros.")
+        return
+      }
+
+      const recetaIds = allRecetas.map((r: any) => r.id)
+
+      // 2) Traer todos los componentes (ingredientes y sub-recetas anidadas)
+      const { data: componentes, error: compError } = await supabase
+        .from("ingredientesxreceta")
+        .select("recetaid, elementoid, tiposegmentoid, cantidad, ingredientecostoparcial")
+        .in("recetaid", recetaIds)
+      if (compError) throw compError
+
+      const ingredienteIds = [
+        ...new Set((componentes || []).filter((c: any) => c.tiposegmentoid === 1).map((c: any) => c.elementoid)),
+      ]
+      const subRecetaIds = [
+        ...new Set((componentes || []).filter((c: any) => c.tiposegmentoid === 2).map((c: any) => c.elementoid)),
+      ]
+
+      const [ingResult, subResult] = await Promise.all([
+        ingredienteIds.length > 0
+          ? supabase
+              .from("ingredientes")
+              .select("id, nombre, costo, tipounidadmedida(descripcion)")
+              .in("id", ingredienteIds)
+          : Promise.resolve({ data: [], error: null }),
+        subRecetaIds.length > 0
+          ? supabase.from("recetas").select("id, nombre").in("id", subRecetaIds)
+          : Promise.resolve({ data: [], error: null }),
+      ])
+
+      const ingredienteMap: Record<number, any> = {}
+      for (const i of ingResult.data || []) ingredienteMap[i.id] = i
+
+      const subRecetaMap: Record<number, any> = {}
+      for (const s of subResult.data || []) subRecetaMap[s.id] = s
+
+      const componentesByReceta: Record<number, any[]> = {}
+      for (const c of componentes || []) {
+        if (!componentesByReceta[c.recetaid]) componentesByReceta[c.recetaid] = []
+        componentesByReceta[c.recetaid].push(c)
+      }
+
+      // 3) Armar filas del reporte (una fila por componente, base info repetida)
+      const reporteData: any[] = []
+      for (const r of allRecetas) {
+        const comps = componentesByReceta[(r as any).id] || []
+        const baseRow = {
+          ID: (r as any).id,
+          "Sub-Receta": (r as any).nombre,
+          Notas: (r as any).notaspreparacion || "",
+          Hotel: (r as any).hoteles?.nombre || "Sin Hotel",
+          "Costo Total Sub-Receta": (r as any).costo || 0,
+          Estado: (r as any).activo ? "Activo" : "Inactivo",
+        }
+
+        if (comps.length === 0) {
+          reporteData.push({
+            ...baseRow,
+            Tipo: "",
+            "Nombre Componente": "Sin componentes",
+            "Costo Unitario": "",
+            "Unidad de Medida": "",
+            Cantidad: "",
+            "Costo Parcial": "",
+          })
+          continue
+        }
+
+        for (const c of comps) {
+          if (c.tiposegmentoid === 1) {
+            const ing = ingredienteMap[c.elementoid]
+            reporteData.push({
+              ...baseRow,
+              Tipo: "Ingrediente",
+              "Nombre Componente": ing?.nombre || "(no encontrado)",
+              "Costo Unitario": ing?.costo || 0,
+              "Unidad de Medida": ing?.tipounidadmedida?.descripcion || "N/A",
+              Cantidad: c.cantidad,
+              "Costo Parcial": c.ingredientecostoparcial,
+            })
+          } else if (c.tiposegmentoid === 2) {
+            const sub = subRecetaMap[c.elementoid]
+            reporteData.push({
+              ...baseRow,
+              Tipo: "Sub-Receta",
+              "Nombre Componente": sub?.nombre || "(no encontrada)",
+              "Costo Unitario": c.cantidad ? c.ingredientecostoparcial / c.cantidad : 0,
+              "Unidad de Medida": "N/A",
+              Cantidad: c.cantidad,
+              "Costo Parcial": c.ingredientecostoparcial,
+            })
+          }
+        }
+      }
+
+      const wb = XLSX.utils.book_new()
+      const ws = XLSX.utils.json_to_sheet(reporteData)
+      ws["!cols"] = [
+        { wch: 8 },  // ID
+        { wch: 28 }, // Sub-Receta
+        { wch: 30 }, // Notas
+        { wch: 22 }, // Hotel
+        { wch: 18 }, // Costo Total
+        { wch: 10 }, // Estado
+        { wch: 12 }, // Tipo
+        { wch: 28 }, // Nombre Componente
+        { wch: 14 }, // Costo Unitario
+        { wch: 16 }, // Unidad
+        { wch: 10 }, // Cantidad
+        { wch: 14 }, // Costo Parcial
+      ]
+      XLSX.utils.book_append_sheet(wb, ws, "Reporte Sub-Recetas")
+
+      const today = new Date().toISOString().slice(0, 10)
+      XLSX.writeFile(wb, `Reporte_SubRecetas_${today}.xlsx`)
+      toast.success("Reporte descargado exitosamente.")
+    } catch (error: any) {
+      console.error("Error al generar reporte:", error)
+      toast.error("Error al generar el reporte: " + (error?.message || ""))
+    } finally {
+      setIsDownloading(false)
+    }
+  }
+
   // Funciones específicas para navegación de páginas
   const irAPaginaAnterior = async () => {
     if (currentPage > 1) {
@@ -418,6 +584,13 @@ export default function RecetasPage() {
       await ejecutarBusqueda(txtRecetaNombre, hotelFilterId, ddlEstatusReceta, nuevaPagina)
     }
   }
+
+  // Reset scroll al inicio cuando cambia la página o termina la búsqueda
+  useEffect(() => {
+    if (!searching && scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = 0
+    }
+  }, [currentPage, searching])
 
   const clearPlatillosBusqueda = () => {
     setTxtRecetaNombre("")
@@ -534,26 +707,21 @@ export default function RecetasPage() {
         )}
       </div>
 
-      {/* Estadísticas */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total de Sub-Recetas</CardTitle>
-            <BookOpen className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalRecetas}</div>
-          </CardContent>
-        </Card>
-      </div>
-
       {/* Filtros */}
       <Card className="mb-6">
         <CardHeader>
           <CardTitle>Filtros de Búsqueda</CardTitle>
         </CardHeader>
         <CardContent>
-          <form id="frmRecetasBuscar" name="frmRecetasBuscar" className="flex flex-wrap items-end gap-4">
+          <form
+            id="frmRecetasBuscar"
+            name="frmRecetasBuscar"
+            className="flex flex-wrap items-end gap-4"
+            onSubmit={(e) => {
+              e.preventDefault()
+              btnRecetaBuscar()
+            }}
+          >
             <div className="flex-1 min-w-[200px]">
               <Label htmlFor="txtRecetaNombre">Nombre</Label>
               <Input
@@ -615,8 +783,7 @@ export default function RecetasPage() {
             <Button
               id="btnRecetaBuscar"
               name="btnRecetaBuscar"
-              type="button"
-              onClick={btnRecetaBuscar}
+              type="submit"
               disabled={searching}
               className="bg-[#4a4a4a] text-white hover:bg-[#333333]"
               style={{ fontSize: "12px" }}
@@ -630,11 +797,24 @@ export default function RecetasPage() {
 
       {/* Tabla de resultados */}
       <Card>
-        <CardHeader>
-          <CardTitle>Listado de Sub-Recetas</CardTitle>
-          <CardDescription>
-            Mostrando página {currentPage} de {totalPages} ({recetas.length} sub-recetas en esta página)
-          </CardDescription>
+        <CardHeader className="flex flex-row items-start justify-between gap-4">
+          <div>
+            <CardTitle>Listado de Sub-Recetas</CardTitle>
+            <CardDescription>
+              Mostrando página {currentPage} de {totalPages} ({recetas.length} sub-recetas en esta página)
+            </CardDescription>
+          </div>
+          <Button
+            id="btnDescargarReporteRecetas"
+            name="btnDescargarReporteRecetas"
+            type="button"
+            onClick={handleDownloadReport}
+            disabled={isDownloading || searching || recetas.length === 0}
+            className="bg-green-700 hover:bg-green-800 text-white"
+          >
+            {isDownloading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+            Descargar Reporte
+          </Button>
         </CardHeader>
         <CardContent>
           {searching ? (
@@ -645,8 +825,9 @@ export default function RecetasPage() {
               </div>
             </div>
           ) : (
+            <div ref={scrollContainerRef} className="rounded-md border max-h-[60vh] overflow-y-auto">
             <Table id="tblRecetaResultados">
-              <TableHeader>
+              <TableHeader className="sticky top-0 bg-white z-10 shadow-sm">
                 <TableRow>
                   <TableHead>Folio</TableHead>
                   <TableHead>Sub-Receta</TableHead>
@@ -658,13 +839,17 @@ export default function RecetasPage() {
               </TableHeader>
               <TableBody>
                 {recetas.map((receta) => (
-                  <TableRow key={receta.folio}>
+                  <TableRow
+                    key={receta.folio}
+                    className="cursor-pointer hover:bg-gray-50 [&>td]:py-2"
+                    onClick={() => router.push(`/recetas/${receta.folio}/ver`)}
+                  >
                     <TableCell>{receta.folio}</TableCell>
                     <TableCell>{receta.receta}</TableCell>
                     <TableCell>{receta.notaspreparacion}</TableCell>
                     <TableCell>${receta.costo.toFixed(2)}</TableCell>
                     <TableCell>{receta.hotel}</TableCell>
-                    <TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
                       <div className="flex space-x-2">
                         {sesion && [1, 2, 3, 4].includes(Number.parseInt(sesion.RolId?.toString() || "0", 10)) && (
                           <Button
@@ -694,6 +879,7 @@ export default function RecetasPage() {
                 ))}
               </TableBody>
             </Table>
+            </div>
           )}
 
           {/* Paginación */}

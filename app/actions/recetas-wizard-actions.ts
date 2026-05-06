@@ -2,6 +2,8 @@
 
 import { createClient } from "@supabase/supabase-js"
 import { revalidatePath } from "next/cache"
+import { registrarBitacora } from "@/app/actions/bitacora-actions"
+import { BITACORA_ACTIVIDADES, BITACORA_MODULOS } from "@/lib/bitacora-actividades"
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -97,9 +99,88 @@ export async function registrarRecetaConImagen(formData: FormData) {
     }
 
     revalidatePath("/recetas/nuevo")
+
+    await registrarBitacora({
+      actividad: BITACORA_ACTIVIDADES.CREAR_RECETA,
+      observaciones: `Registró receta «${nombre}» (id ${insertData.id}) en hotel ${hotelId}.`,
+      modulo: BITACORA_MODULOS.RECETAS,
+      recursoid: Number(insertData.id),
+    })
+
     return { success: true, recetaId: insertData.id, imgUrl: imgUrl }
   } catch (error: any) {
     console.error("Error inesperado al registrar receta:", error)
+    return { success: false, error: `Error inesperado: ${error.message}` }
+  }
+}
+
+export async function actualizarRecetaConImagen(formData: FormData) {
+  const recetaId = formData.get("recetaId") as string
+  const nombre = formData.get("nombre") as string
+  const notaspreparacion = formData.get("notaspreparacion") as string
+  const hotelId = formData.get("hotelId") as string
+  const cantidad = formData.get("cantidad") as string
+  const unidadBaseId = formData.get("unidadBaseId") as string
+  const imagenFile = formData.get("imagen") as File | null
+  const imagenUrlActual = formData.get("imagenUrlActual") as string | null
+
+  if (!recetaId || !nombre || !notaspreparacion || !hotelId) {
+    return { success: false, error: "Faltan campos obligatorios." }
+  }
+
+  let imgUrl: string | null = imagenUrlActual || null
+
+  if (imagenFile && imagenFile.size > 0) {
+    const bucketName = "imagenes"
+    const timestamp = Date.now()
+    const randomString = Math.random().toString(36).substring(2, 15)
+    const fileExtension = imagenFile.name.split(".").pop()
+    const filePath = `Recetas/receta_${timestamp}_${randomString}.${fileExtension}`
+
+    const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+      .from(bucketName)
+      .upload(filePath, imagenFile, { cacheControl: "3600", upsert: false })
+
+    if (uploadError) {
+      console.error("Error al subir imagen:", uploadError)
+      return { success: false, error: `Error al subir imagen: ${uploadError.message}` }
+    }
+
+    const { data: publicUrlData } = supabaseAdmin.storage.from(bucketName).getPublicUrl(uploadData.path)
+    imgUrl = publicUrlData.publicUrl
+  }
+
+  try {
+    const { error: updateError } = await supabaseAdmin
+      .from("recetas")
+      .update({
+        nombre,
+        notaspreparacion,
+        hotelid: Number(hotelId),
+        imgurl: imgUrl,
+        cantidad: Number(cantidad) || null,
+        unidadbaseid: Number(unidadBaseId) || null,
+      })
+      .eq("id", recetaId)
+
+    if (updateError) {
+      console.error("Error al actualizar receta en DB:", updateError)
+      return { success: false, error: `Error al actualizar receta: ${updateError.message}` }
+    }
+
+    revalidatePath("/recetas/nuevo")
+    revalidatePath(`/recetas/${recetaId}/editar`)
+
+    await registrarBitacora({
+      actividad: BITACORA_ACTIVIDADES.ACTUALIZAR_RECETA,
+      observaciones: `Actualizó información básica de receta «${nombre}» (id ${recetaId}).`,
+      modulo: BITACORA_MODULOS.RECETAS,
+      recursoid: Number(recetaId),
+    })
+
+    return { success: true, imgUrl }
+  } catch (error: any) {
+    console.error("Error inesperado al actualizar receta:", error)
     return { success: false, error: `Error inesperado: ${error.message}` }
   }
 }

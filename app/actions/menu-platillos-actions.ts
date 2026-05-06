@@ -3,6 +3,26 @@
 import { supabase } from "@/lib/supabase"
 import { revalidatePath } from "next/cache"
 import type { MenuPlatillo, Platillo, ApiResponse } from "@/lib/types-sistema-costeo"
+import { registrarBitacora } from "@/app/actions/bitacora-actions"
+import { BITACORA_ACTIVIDADES, BITACORA_MODULOS } from "@/lib/bitacora-actividades"
+
+// Helpers para enriquecer observaciones de bitácora con nombres legibles.
+async function _nombrePlatillo(platilloid: number): Promise<string> {
+  try {
+    const { data } = await supabase.from("platillos").select("nombre").eq("id", platilloid).single()
+    return (data as any)?.nombre ?? "(sin nombre)"
+  } catch {
+    return "(sin nombre)"
+  }
+}
+async function _nombreMenu(menuid: number): Promise<string> {
+  try {
+    const { data } = await supabase.from("menus").select("nombre").eq("id", menuid).single()
+    return (data as any)?.nombre ?? "(sin nombre)"
+  } catch {
+    return "(sin nombre)"
+  }
+}
 
 interface AgregarPlatilloData {
   menuid: number
@@ -187,6 +207,17 @@ export async function agregarPlatilloAMenu(data: AgregarPlatilloData) {
     }
     // --- FIN: Lógica de Histórico para agregarPlatilloAMenu ---
 
+    const [nomPlat, nomMenu] = await Promise.all([
+      _nombrePlatillo(data.platilloid),
+      _nombreMenu(data.menuid),
+    ])
+    await registrarBitacora({
+      actividad: BITACORA_ACTIVIDADES.ACTUALIZAR_MENU,
+      observaciones: `Agregó platillo «${nomPlat}» (id ${data.platilloid}) al menú «${nomMenu}» (id ${data.menuid}) con precio venta ${data.precioventa}.`,
+      modulo: BITACORA_MODULOS.MENUS,
+      recursoid: data.menuid,
+    })
+
     return { data: result, error: null }
   } catch (error: any) {
     console.error("Error en agregarPlatilloAMenu:", error)
@@ -216,6 +247,18 @@ export async function eliminarPlatilloDeMenu(data: {
     revalidatePath(`/menus/${data.menuid}/agregar`) // Revalidar la página de agregar
     revalidatePath("/menus")
     revalidatePath("/platillos")
+
+    const [nomPlat, nomMenu] = await Promise.all([
+      _nombrePlatillo(data.platilloid),
+      _nombreMenu(data.menuid),
+    ])
+    await registrarBitacora({
+      actividad: BITACORA_ACTIVIDADES.ACTUALIZAR_MENU,
+      observaciones: `Quitó platillo «${nomPlat}» (id ${data.platilloid}) del menú «${nomMenu}» (id ${data.menuid}).`,
+      modulo: BITACORA_MODULOS.MENUS,
+      recursoid: data.menuid,
+    })
+
     return { success: true, error: null }
   } catch (error: any) {
     console.error("Error en eliminarPlatilloDeMenu:", error)
@@ -248,6 +291,18 @@ export async function actualizarDisponibilidadPlatillo(data: {
     revalidatePath(`/menus/${data.menuid}/agregar`) // Revalidar la página de agregar
     revalidatePath("/menus")
     revalidatePath("/platillos")
+
+    const [nomPlat, nomMenu] = await Promise.all([
+      _nombrePlatillo(data.platilloid),
+      _nombreMenu(data.menuid),
+    ])
+    await registrarBitacora({
+      actividad: BITACORA_ACTIVIDADES.ACTUALIZAR_MENU,
+      observaciones: `Cambió disponibilidad del platillo «${nomPlat}» (id ${data.platilloid}) en menú «${nomMenu}» (id ${data.menuid}): ${data.activo ? "activo" : "inactivo"}.`,
+      modulo: BITACORA_MODULOS.MENUS,
+      recursoid: data.menuid,
+    })
+
     return { data: result, error: null }
   } catch (error: any) {
     console.error("Error en actualizarDisponibilidadPlatillo:", error)
@@ -410,6 +465,17 @@ export async function actualizarPrecioVenta(data: ActualizarPrecioVentaData) {
       }
     }
     // --- FIN: Lógica de Histórico ---
+
+    const [nomPlat, nomMenu] = await Promise.all([
+      _nombrePlatillo(data.platilloid),
+      _nombreMenu(data.menuid),
+    ])
+    await registrarBitacora({
+      actividad: BITACORA_ACTIVIDADES.ACTUALIZAR_MENU,
+      observaciones: `Cambió precio de venta del platillo «${nomPlat}» (id ${data.platilloid}) en menú «${nomMenu}» (id ${data.menuid}) a ${data.precioventa}.`,
+      modulo: BITACORA_MODULOS.MENUS,
+      recursoid: data.menuid,
+    })
 
     return { data: result, error: null }
   } catch (error: any) {

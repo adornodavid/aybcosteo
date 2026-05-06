@@ -2,6 +2,8 @@
 import { cookies } from "next/headers"
 import { createServerClient } from "@supabase/ssr"
 import { revalidatePath } from "next/cache"
+import { registrarBitacora } from "@/app/actions/bitacora-actions"
+import { BITACORA_ACTIVIDADES, BITACORA_MODULOS } from "@/lib/bitacora-actividades"
 
 function createServerSupabaseClient() {
   const cookieStore = cookies()
@@ -73,6 +75,14 @@ export async function crearIngrediente(prevState: any, formData: FormData) {
     }
 
     revalidatePath("/ingredientes")
+
+    await registrarBitacora({
+      actividad: BITACORA_ACTIVIDADES.CREAR_INGREDIENTE,
+      observaciones: `Creó insumo «${descripcion.trim()}» (clave «${clave.trim()}», id ${data?.id ?? "?"}).`,
+      modulo: BITACORA_MODULOS.INGREDIENTES,
+      recursoid: data?.id ? Number(data.id) : null,
+    })
+
     return { success: true, message: `Ingrediente "${descripcion}" creado exitosamente.`, data }
   } catch (error: any) {
     console.error("Error en crearIngrediente:", error)
@@ -144,6 +154,14 @@ export async function actualizarIngrediente(id: number, prevState: any, formData
     }
 
     revalidatePath("/ingredientes")
+
+    await registrarBitacora({
+      actividad: BITACORA_ACTIVIDADES.ACTUALIZAR_INGREDIENTE,
+      observaciones: `Actualizó insumo «${descripcion.trim()}» (clave «${clave.trim()}», id ${id}).`,
+      modulo: BITACORA_MODULOS.INGREDIENTES,
+      recursoid: id,
+    })
+
     return { success: true, message: `Ingrediente "${descripcion}" actualizado exitosamente.` }
   } catch (error: any) {
     console.error("Error en actualizarIngrediente:", error)
@@ -154,6 +172,14 @@ export async function actualizarIngrediente(id: number, prevState: any, formData
 export async function eliminarIngrediente(id: number) {
   try {
     const supabase = createServerSupabaseClient()
+
+    // Capturar nombre antes del soft-delete para que el log sea legible.
+    const { data: prev } = await supabase
+      .from("ingredientes")
+      .select("descripcion, clave")
+      .eq("id", id)
+      .single()
+
     const { error } = await supabase.from("ingredientes").update({ activo: false }).eq("id", id)
 
     if (error) {
@@ -162,6 +188,16 @@ export async function eliminarIngrediente(id: number) {
     }
 
     revalidatePath("/ingredientes")
+
+    const desc = (prev as any)?.descripcion ?? "(sin descripción)"
+    const clave = (prev as any)?.clave ?? ""
+    await registrarBitacora({
+      actividad: BITACORA_ACTIVIDADES.ELIMINAR_INGREDIENTE,
+      observaciones: `Eliminó (desactivó) insumo «${desc}»${clave ? ` (clave «${clave}»)` : ""} (id ${id}).`,
+      modulo: BITACORA_MODULOS.INGREDIENTES,
+      recursoid: id,
+    })
+
     return { success: true, message: "Ingrediente eliminado exitosamente." }
   } catch (error: any) {
     console.error("Error en eliminarIngrediente:", error)

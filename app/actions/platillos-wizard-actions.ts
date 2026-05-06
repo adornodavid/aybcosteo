@@ -4,6 +4,24 @@ import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 import { v4 as uuidv4 } from "uuid"
 import { obtenerVariablesSesion as getSessionData } from "./session-actions-with-expiration"
+import { registrarBitacora } from "@/app/actions/bitacora-actions"
+import { BITACORA_ACTIVIDADES, BITACORA_MODULOS } from "@/lib/bitacora-actividades"
+
+// Helper local: obtiene el nombre del platillo en una sola consulta para enriquecer
+// las observaciones de la bitácora. Devuelve "(sin nombre)" si no se encuentra.
+async function _nombrePlatillo(platilloId: number): Promise<string> {
+  try {
+    const supabase = createServerSupabaseClient()
+    const { data } = await supabase
+      .from("platillos")
+      .select("nombre")
+      .eq("id", platilloId)
+      .single()
+    return (data as any)?.nombre ?? "(sin nombre)"
+  } catch {
+    return "(sin nombre)"
+  }
+}
 
 function createServerSupabaseClient() {
   const cookieStore = cookies()
@@ -422,6 +440,13 @@ export async function actualizarPlatilloBasico(platilloId: number, formData: For
 
     if (updateError) throw updateError
 
+    await registrarBitacora({
+      actividad: BITACORA_ACTIVIDADES.ACTUALIZAR_PLATILLO,
+      observaciones: `Actualizó datos básicos del platillo «${nombre}» (id ${platilloId}).`,
+      modulo: BITACORA_MODULOS.PLATILLOS,
+      recursoid: platilloId,
+    })
+
     return { success: true, imgUrl }
   } catch (e: any) {
     console.error("Error en actualizarPlatilloBasico:", e)
@@ -466,7 +491,7 @@ export async function agregarIngrediente(
     // Obtener costo del ingrediente y factor de conversión de la unidad
     const { data: ingredienteData, error: ingredienteError } = await supabase
       .from("ingredientes")
-      .select("costo, tipounidadmedida(descripcion)") // Añadido tipounidadmedida(descripcion)
+      .select("nombre, costo, tipounidadmedida(descripcion)")
       .eq("id", ingredienteId)
       .single()
     if (ingredienteError || !ingredienteData) throw new Error("No se encontró el ingrediente o su costo.")
@@ -508,6 +533,15 @@ export async function agregarIngrediente(
       unidad: i.ingredientes?.tipounidadmedida?.descripcion || "N/A", // Mapear la descripción de la unidad
     }))
 
+    const nombrePlat = await _nombrePlatillo(platilloId)
+    const nombreIng = (ingredienteData as any)?.nombre ?? `id ${ingredienteId}`
+    await registrarBitacora({
+      actividad: BITACORA_ACTIVIDADES.ACTUALIZAR_PLATILLO,
+      observaciones: `Agregó ingrediente «${nombreIng}» (cantidad ${cantidad}) al platillo «${nombrePlat}» (id ${platilloId}).`,
+      modulo: BITACORA_MODULOS.PLATILLOS,
+      recursoid: platilloId,
+    })
+
     return { success: true, ingredientes }
   } catch (e: any) {
     console.error("Error en agregarIngrediente:", e)
@@ -542,7 +576,7 @@ export async function agregarReceta(platilloId: number, recetaId: number, cantid
     // Obtener costo y cantidad base de la receta
     const { data: recetaData, error: recetaError } = await supabase
       .from("recetas")
-      .select("costo, cantidad") // Asegúrate de que 'costo' y 'cantidad' existan en tu tabla 'recetas'
+      .select("nombre, costo, cantidad")
       .eq("id", recetaId)
       .single()
     if (recetaError || !recetaData) throw new Error("No se encontró la receta o su costo/cantidad base.")
@@ -577,6 +611,15 @@ export async function agregarReceta(platilloId: number, recetaId: number, cantid
       recetacostoparcial: r.recetacostoparcial,
       cantidad: r.cantidad, // Mapear la cantidad
     }))
+
+    const nombrePlat = await _nombrePlatillo(platilloId)
+    const nombreRec = (recetaData as any)?.nombre ?? `id ${recetaId}`
+    await registrarBitacora({
+      actividad: BITACORA_ACTIVIDADES.ACTUALIZAR_PLATILLO,
+      observaciones: `Agregó sub-receta «${nombreRec}» (cantidad ${cantidadIngresada}) al platillo «${nombrePlat}» (id ${platilloId}).`,
+      modulo: BITACORA_MODULOS.PLATILLOS,
+      recursoid: platilloId,
+    })
 
     return { success: true, recetas }
   } catch (e: any) {
@@ -737,6 +780,14 @@ export async function finalizarRegistro(
       if (historicoIngredientesInsertError) throw historicoIngredientesInsertError
     }
 
+    const nombrePlat = await _nombrePlatillo(platilloId)
+    await registrarBitacora({
+      actividad: BITACORA_ACTIVIDADES.CREAR_PLATILLO,
+      observaciones: `Registró platillo «${nombrePlat}» (id ${platilloId}) — menú ${menuId}, hotel ${hotelId}, precio venta ${precioVenta}.`,
+      modulo: BITACORA_MODULOS.PLATILLOS,
+      recursoid: platilloId,
+    })
+
     return { success: true }
   } catch (e: any) {
     console.error("Error en finalizarRegistro:", e)
@@ -811,6 +862,14 @@ export async function eliminarIngredienteDePlatillo(platilloId: number, ingredie
       console.error("Error al eliminar ingrediente de platillo:", error)
       throw error
     }
+
+    const nombrePlat = await _nombrePlatillo(platilloId)
+    await registrarBitacora({
+      actividad: BITACORA_ACTIVIDADES.ACTUALIZAR_PLATILLO,
+      observaciones: `Quitó un ingrediente del platillo «${nombrePlat}» (id ${platilloId}).`,
+      modulo: BITACORA_MODULOS.PLATILLOS,
+      recursoid: platilloId,
+    })
     return { success: true }
   } catch (e: any) {
     console.error("Error en eliminarIngredienteDePlatillo:", e)
@@ -830,6 +889,14 @@ export async function eliminarRecetaDePlatillo(platilloId: number, Id: number) {
       throw error
     }
     console.log("no ocurrio un error para elminiar la receta de la receta para la receta")
+
+    const nombrePlat = await _nombrePlatillo(platilloId)
+    await registrarBitacora({
+      actividad: BITACORA_ACTIVIDADES.ACTUALIZAR_PLATILLO,
+      observaciones: `Quitó una sub-receta del platillo «${nombrePlat}» (id ${platilloId}).`,
+      modulo: BITACORA_MODULOS.PLATILLOS,
+      recursoid: platilloId,
+    })
     return { success: true }
   } catch (e: any) {
     console.error("Error en eliminarRecetaDePlatillo:", e)

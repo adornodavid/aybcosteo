@@ -4,10 +4,40 @@ import { createClient } from "@/lib/supabase"
 import { revalidatePath } from "next/cache"
 import { cookies } from "next/headers"
 import type { IngredienteReceta } from "@/lib/types-sistema-costeo"
+import { registrarBitacora } from "@/app/actions/bitacora-actions"
+import { BITACORA_ACTIVIDADES, BITACORA_MODULOS } from "@/lib/bitacora-actividades"
 
 // Helper to get Supabase client with cookies
 const getSupabaseClient = () => {
   return createClient(cookies())
+}
+
+async function _nombreReceta(recetaId: number | string): Promise<string> {
+  try {
+    const supabase = getSupabaseClient()
+    const { data } = await supabase
+      .from("recetas")
+      .select("nombre")
+      .eq("id", recetaId)
+      .single()
+    return (data as any)?.nombre ?? "(sin nombre)"
+  } catch {
+    return "(sin nombre)"
+  }
+}
+
+async function _nombreIngrediente(ingredienteId: number): Promise<string> {
+  try {
+    const supabase = getSupabaseClient()
+    const { data } = await supabase
+      .from("ingredientes")
+      .select("nombre")
+      .eq("id", ingredienteId)
+      .single()
+    return (data as any)?.nombre ?? "(sin nombre)"
+  } catch {
+    return "(sin nombre)"
+  }
 }
 
 // Función para obtener detalles de una receta específica
@@ -52,6 +82,14 @@ export async function updateRecetaBasicInfo(
     }
     revalidatePath(`/recetas/${recetaId}/editar`)
     revalidatePath("/recetas")
+
+    await registrarBitacora({
+      actividad: BITACORA_ACTIVIDADES.ACTUALIZAR_RECETA,
+      observaciones: `Actualizó datos básicos de la receta «${nombre}» (id ${recetaId}).`,
+      modulo: BITACORA_MODULOS.RECETAS,
+      recursoid: Number(recetaId),
+    })
+
     return { success: true, data, error: null }
   } catch (e: any) {
     console.error("Exception updating receta basic info:", e)
@@ -289,6 +327,18 @@ export async function addIngredienteToReceta(
       return { success: false, error }
     }
     revalidatePath(`/recetas/${recetaId}/editar`)
+
+    const [nombreRec, nombreIng] = await Promise.all([
+      _nombreReceta(recetaId),
+      _nombreIngrediente(ingredienteId),
+    ])
+    await registrarBitacora({
+      actividad: BITACORA_ACTIVIDADES.ACTUALIZAR_RECETA,
+      observaciones: `Agregó ingrediente «${nombreIng}» (id ${ingredienteId}, cantidad ${cantidad}) a la receta «${nombreRec}» (id ${recetaId}).`,
+      modulo: BITACORA_MODULOS.RECETAS,
+      recursoid: Number(recetaId),
+    })
+
     return { success: true, data, error: null }
   } catch (e: any) {
     console.error("Exception adding ingrediente to receta:", e)
@@ -312,9 +362,159 @@ export async function deleteIngredienteFromReceta(elementoId: number, recetaId: 
       return { success: false, error }
     }
     revalidatePath(`/recetas/${recetaId}/editar`)
+
+    const [nombreRec, nombreIng] = await Promise.all([
+      _nombreReceta(recetaId),
+      _nombreIngrediente(elementoId),
+    ])
+    await registrarBitacora({
+      actividad: BITACORA_ACTIVIDADES.ACTUALIZAR_RECETA,
+      observaciones: `Quitó ingrediente «${nombreIng}» (id ${elementoId}) de la receta «${nombreRec}» (id ${recetaId}).`,
+      modulo: BITACORA_MODULOS.RECETAS,
+      recursoid: Number(recetaId),
+    })
+
     return { success: true, error: null }
   } catch (e: any) {
     console.error("Exception deleting ingrediente from receta:", e)
+    return { success: false, error: { message: e.message || "An unexpected error occurred" } }
+  }
+}
+
+// Actualizar la cantidad de un ingrediente en una receta y recalcular su costoparcial
+export async function updateIngredienteCantidadEnReceta(
+  recetaId: string,
+  ingredienteId: number,
+  nuevaCantidad: number,
+) {
+  const supabase = getSupabaseClient()
+  try {
+    if (!Number.isFinite(nuevaCantidad) || nuevaCantidad <= 0) {
+      return { success: false, error: { message: "Cantidad inválida." } }
+    }
+
+    const { data: ingActual, error: ingErr } = await supabase
+      .from("ingredientes")
+      .select("costo, unidadmedidaid")
+      .eq("id", ingredienteId)
+      .single()
+    if (ingErr || !ingActual) {
+      return { success: false, error: { message: "No se encontró el ingrediente." } }
+    }
+
+    const { data: unidadData, error: unidadErr } = await supabase
+      .from("tipounidadmedida")
+      .select("calculoconversion")
+      .eq("id", (ingActual as any).unidadmedidaid)
+      .single()
+    if (unidadErr || !unidadData) {
+      return { success: false, error: { message: "No se encontró la unidad de medida." } }
+    }
+
+    const costoUnitario = (ingActual as any).costo ?? 0
+    const calculoConversion = (unidadData as any).calculoconversion || 1
+    const nuevoParcial = nuevaCantidad * calculoConversion * costoUnitario
+
+    const { error: updateErr } = await supabase
+      .from("ingredientesxreceta")
+      .update({
+        cantidad: nuevaCantidad,
+        ingredientecostoparcial: nuevoParcial,
+        fechamodificacion: new Date().toISOString(),
+      })
+      .eq("recetaid", recetaId)
+      .eq("elementoid", ingredienteId)
+      .eq("tiposegmentoid", 1)
+
+    if (updateErr) {
+      console.error("Error actualizando cantidad de ingrediente:", updateErr.message)
+      return { success: false, error: updateErr }
+    }
+
+    revalidatePath(`/recetas/${recetaId}/editar`)
+
+    const [nombreRec, nombreIng] = await Promise.all([
+      _nombreReceta(recetaId),
+      _nombreIngrediente(ingredienteId),
+    ])
+    await registrarBitacora({
+      actividad: BITACORA_ACTIVIDADES.ACTUALIZAR_RECETA,
+      observaciones: `Actualizó cantidad de ingrediente «${nombreIng}» (id ${ingredienteId}) en receta «${nombreRec}» (id ${recetaId}) → ${nuevaCantidad}.`,
+      modulo: BITACORA_MODULOS.RECETAS,
+      recursoid: Number(recetaId),
+    })
+
+    return { success: true, nuevoParcial, costoUnitario, error: null }
+  } catch (e: any) {
+    console.error("Exception updating ingrediente cantidad:", e)
+    return { success: false, error: { message: e.message || "An unexpected error occurred" } }
+  }
+}
+
+// Actualizar la cantidad de una sub-receta dentro de una receta y recalcular su costoparcial
+export async function updateSubRecetaCantidadEnReceta(
+  recetaId: string,
+  subRecetaId: number,
+  nuevaCantidad: number,
+) {
+  const supabase = getSupabaseClient()
+  try {
+    if (!Number.isFinite(nuevaCantidad) || nuevaCantidad <= 0) {
+      return { success: false, error: { message: "Cantidad inválida." } }
+    }
+
+    const { data: recActual, error: recErr } = await supabase
+      .from("recetas")
+      .select("costo, cantidad")
+      .eq("id", subRecetaId)
+      .single()
+    if (recErr || !recActual) {
+      return { success: false, error: { message: "No se encontró la sub-receta." } }
+    }
+
+    const costoSubReceta = (recActual as any).costo ?? 0
+    const cantidadMaxima =
+      (recActual as any).cantidad && (recActual as any).cantidad > 0 ? (recActual as any).cantidad : 1
+
+    if (nuevaCantidad > cantidadMaxima) {
+      return {
+        success: false,
+        error: { message: `La cantidad (${nuevaCantidad}) supera el tope (${cantidadMaxima}) de la sub-receta.` },
+        cantidadMaxima,
+      }
+    }
+
+    const nuevoParcial = (costoSubReceta / cantidadMaxima) * nuevaCantidad
+
+    const { error: updateErr } = await supabase
+      .from("ingredientesxreceta")
+      .update({
+        cantidad: nuevaCantidad,
+        ingredientecostoparcial: nuevoParcial,
+        fechamodificacion: new Date().toISOString(),
+      })
+      .eq("recetaid", recetaId)
+      .eq("elementoid", subRecetaId)
+      .eq("tiposegmentoid", 2)
+
+    if (updateErr) {
+      console.error("Error actualizando cantidad de sub-receta:", updateErr.message)
+      return { success: false, error: updateErr }
+    }
+
+    revalidatePath(`/recetas/${recetaId}/editar`)
+
+    const nombreRec = await _nombreReceta(recetaId)
+    await registrarBitacora({
+      actividad: BITACORA_ACTIVIDADES.ACTUALIZAR_RECETA,
+      observaciones: `Actualizó cantidad de sub-receta (id ${subRecetaId}) en receta «${nombreRec}» (id ${recetaId}) → ${nuevaCantidad}.`,
+      modulo: BITACORA_MODULOS.RECETAS,
+      recursoid: Number(recetaId),
+    })
+
+    return { success: true, nuevoParcial, costoSubReceta, cantidadMaxima, error: null }
+  } catch (e: any) {
+    console.error("Exception updating sub-receta cantidad:", e)
     return { success: false, error: { message: e.message || "An unexpected error occurred" } }
   }
 }
@@ -493,6 +693,18 @@ export async function addSubRecetaToReceta(
       return { success: false, error }
     }
     revalidatePath(`/recetas/${recetaId}/editar`)
+
+    const [nombreRec, nombreSub] = await Promise.all([
+      _nombreReceta(recetaId),
+      _nombreReceta(subRecetaId),
+    ])
+    await registrarBitacora({
+      actividad: BITACORA_ACTIVIDADES.ACTUALIZAR_RECETA,
+      observaciones: `Agregó sub-receta «${nombreSub}» (id ${subRecetaId}, cantidad ${cantidad}) a la receta «${nombreRec}» (id ${recetaId}).`,
+      modulo: BITACORA_MODULOS.RECETAS,
+      recursoid: Number(recetaId),
+    })
+
     return { success: true, data, error: null }
   } catch (e: any) {
     console.error("Exception adding sub-receta to receta:", e)
@@ -516,6 +728,18 @@ export async function deleteSubRecetaFromReceta(subRecetaId: number, recetaId: s
       return { success: false, error }
     }
     revalidatePath(`/recetas/${recetaId}/editar`)
+
+    const [nombreRec, nombreSub] = await Promise.all([
+      _nombreReceta(recetaId),
+      _nombreReceta(subRecetaId),
+    ])
+    await registrarBitacora({
+      actividad: BITACORA_ACTIVIDADES.ACTUALIZAR_RECETA,
+      observaciones: `Quitó sub-receta «${nombreSub}» (id ${subRecetaId}) de la receta «${nombreRec}» (id ${recetaId}).`,
+      modulo: BITACORA_MODULOS.RECETAS,
+      recursoid: Number(recetaId),
+    })
+
     return { success: true, error: null }
   } catch (e: any) {
     console.error("Exception deleting sub-receta from receta:", e)

@@ -3,6 +3,8 @@
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 import { revalidatePath } from "next/cache"
+import { registrarBitacora } from "@/app/actions/bitacora-actions"
+import { BITACORA_ACTIVIDADES, BITACORA_MODULOS } from "@/lib/bitacora-actividades"
 
 function createServerSupabaseClientWrapper() {
   const cookieStore = cookies()
@@ -124,6 +126,14 @@ export async function crearHotel(hotelData: {
     }
 
     revalidatePath("/hoteles")
+
+    await registrarBitacora({
+      actividad: BITACORA_ACTIVIDADES.CREAR_HOTEL,
+      observaciones: `Creó hotel «${hotelData.nombre}»${hotelData.acronimo ? ` (acrónimo «${hotelData.acronimo}»)` : ""}.`,
+      modulo: BITACORA_MODULOS.HOTELES,
+      recursoid: data?.id ? Number(data.id) : null,
+    })
+
     return { data, error: null }
   } catch (error: any) {
     console.error("Error en crearHotel:", error)
@@ -153,6 +163,14 @@ export async function actualizarHotel(
     }
 
     revalidatePath("/hoteles")
+
+    await registrarBitacora({
+      actividad: BITACORA_ACTIVIDADES.ACTUALIZAR_HOTEL,
+      observaciones: `Actualizó hotel «${data?.nombre ?? hotelData.nombre ?? "?"}» (id ${id}).`,
+      modulo: BITACORA_MODULOS.HOTELES,
+      recursoid: id,
+    })
+
     return { data, error: null }
   } catch (error: any) {
     console.error("Error en actualizarHotel:", error)
@@ -163,6 +181,13 @@ export async function actualizarHotel(
 export async function eliminarHotel(id: number) {
   const supabase = createServerSupabaseClientWrapper()
   try {
+    // Capturar nombre del hotel antes de eliminarlo para que el log sea legible.
+    const { data: prevHotel } = await supabase
+      .from("hoteles")
+      .select("nombre, acronimo")
+      .eq("id", id)
+      .single()
+
     // Check for associated restaurants first
     const { data: restaurantes, error: restaurantesError } = await supabase
       .from("restaurantes")
@@ -189,6 +214,16 @@ export async function eliminarHotel(id: number) {
     }
 
     revalidatePath("/hoteles")
+
+    const nomHotel = (prevHotel as any)?.nombre ?? "(sin nombre)"
+    const acrHotel = (prevHotel as any)?.acronimo ?? ""
+    await registrarBitacora({
+      actividad: BITACORA_ACTIVIDADES.ELIMINAR_HOTEL,
+      observaciones: `Eliminó hotel «${nomHotel}»${acrHotel ? ` (acrónimo «${acrHotel}»)` : ""} (id ${id}).`,
+      modulo: BITACORA_MODULOS.HOTELES,
+      recursoid: id,
+    })
+
     return { success: true }
   } catch (error: any) {
     console.error("Error en eliminarHotel:", error)

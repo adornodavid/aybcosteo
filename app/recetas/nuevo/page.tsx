@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Progress } from "@/components/ui/progress"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
@@ -27,11 +28,15 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Loader2, ArrowLeft, Plus, CheckCircle, ImageIcon, X, Trash2, HelpCircle } from "lucide-react"
+import { Loader2, ArrowLeft, Plus, CheckCircle, ImageIcon, X, Trash2, HelpCircle, ChefHat, ListChecks, Receipt, Lock, CheckCircle2 } from "lucide-react"
 import { getSession } from "@/app/actions/session-actions"
 import { toast } from "sonner"
 import { useNavigationGuard } from "@/contexts/navigation-guard-context"
-import { getUnidadMedidaForRecetaIngrediente, registrarRecetaConImagen } from "@/app/actions/recetas-wizard-actions"
+import { getUnidadMedidaForRecetaIngrediente, registrarRecetaConImagen, actualizarRecetaConImagen } from "@/app/actions/recetas-wizard-actions"
+import {
+  updateIngredienteCantidadEnReceta,
+  updateSubRecetaCantidadEnReceta,
+} from "@/app/actions/recetas-actions"
 import Image from "next/image"
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -94,7 +99,20 @@ export default function NuevaRecetaPage() {
   const [showErrorDialog, setShowErrorDialog] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
 
+  // Estado para modal de éxito
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false)
+  const [successMessage, setSuccessMessage] = useState("")
+
   const [etapaActual, setEtapaActual] = useState(1)
+  const [maxEtapaAlcanzada, setMaxEtapaAlcanzada] = useState(1)
+
+  const goToEtapa = (target: number) => {
+    if (target <= maxEtapaAlcanzada) setEtapaActual(target)
+  }
+  const advanceToEtapa = (target: number) => {
+    setEtapaActual(target)
+    setMaxEtapaAlcanzada((prev) => Math.max(prev, target))
+  }
   const recetaId = useRef<number | null>(null)
   const urlName = useRef<string | null>(null)
   const [validaRegistroId, setValidaRegistroId] = useState(0)
@@ -109,6 +127,8 @@ export default function NuevaRecetaPage() {
   const [ingredientes, setIngredientes] = useState<Ingrediente[]>([])
   const [unidadesMedida, setUnidadesMedida] = useState<UnidadMedida[]>([])
   const [ingredientesReceta, setIngredientesReceta] = useState<IngredienteRecetaDisplay[]>([])
+  const [editingIngCantidad, setEditingIngCantidad] = useState<Record<number, string>>({})
+  const [editingSubCantidad, setEditingSubCantidad] = useState<Record<number, string>>({})
 
   // Estados para sub-recetas (después de los estados de ingredientes)
   const [recetas, setRecetas] = useState<Receta[]>([])
@@ -466,11 +486,44 @@ export default function NuevaRecetaPage() {
       if (result.success && result.recetaId) {
         recetaId.current = result.recetaId
         urlName.current = result.imgUrl || null
-        setEtapa1Bloqueada(true)
-        setEtapaActual(2)
+        advanceToEtapa(2)
         toast.success("Información básica registrada. Agregue los ingredientes.")
       } else {
         throw new Error(result.error || "Error al registrar receta.")
+      }
+    } catch (error: any) {
+      toast.error(error.message)
+    }
+  }
+
+  const btnGuardarCambiosReceta = async () => {
+    if (!recetaId.current) return
+    if (!txtNombreRecetaNuevo.trim() || !txtNotasReceta.trim() || !ddlHotel) {
+      setErrorMessage("Favor de llenar la información faltante.")
+      setShowErrorDialog(true)
+      return
+    }
+
+    try {
+      const formData = new FormData()
+      formData.append("recetaId", String(recetaId.current))
+      formData.append("nombre", txtNombreRecetaNuevo)
+      formData.append("notaspreparacion", txtNotasReceta)
+      formData.append("hotelId", ddlHotel)
+      formData.append("cantidad", txtCantidadSubReceta || "0")
+      formData.append("unidadBaseId", ddlUnidadBaseSubReceta || "0")
+      if (imagenFile) formData.append("imagen", imagenFile)
+      if (urlName.current) formData.append("imagenUrlActual", urlName.current)
+
+      const result = await actualizarRecetaConImagen(formData)
+
+      if (result.success) {
+        if (result.imgUrl) urlName.current = result.imgUrl
+        setSuccessMessage("La información de la sub-receta se actualizó correctamente.")
+        setShowSuccessDialog(true)
+        setTimeout(() => setShowSuccessDialog(false), 2500)
+      } else {
+        throw new Error(result.error || "Error al actualizar receta.")
       }
     } catch (error: any) {
       toast.error(error.message)
@@ -948,6 +1001,106 @@ export default function NuevaRecetaPage() {
     if (etapaActual > 1) setEtapaActual(etapaActual - 1)
   }
 
+  // ===== Edición inline de cantidad de ingredientes =====
+  const handleIngCantidadChange = (ingredienteId: number, value: string) => {
+    setEditingIngCantidad((prev) => ({ ...prev, [ingredienteId]: value }))
+  }
+
+  const handleIngCantidadBlur = async (ingredienteId: number) => {
+    const draft = editingIngCantidad[ingredienteId]
+    if (draft === undefined || !recetaId.current) return
+    const num = Number.parseFloat(draft)
+    const ing = ingredientesReceta.find((i) => i.ingredienteId === ingredienteId)
+    if (!ing) return
+    if (Number.isNaN(num) || num <= 0) {
+      toast.error("Cantidad inválida.")
+      setEditingIngCantidad((prev) => {
+        const { [ingredienteId]: _omit, ...rest } = prev
+        return rest
+      })
+      return
+    }
+    if (num === ing.cantidad) {
+      setEditingIngCantidad((prev) => {
+        const { [ingredienteId]: _omit, ...rest } = prev
+        return rest
+      })
+      return
+    }
+
+    const result = await updateIngredienteCantidadEnReceta(String(recetaId.current), ingredienteId, num)
+    if (!result.success) {
+      toast.error("Error al actualizar cantidad: " + (result.error?.message || ""))
+      setEditingIngCantidad((prev) => {
+        const { [ingredienteId]: _omit, ...rest } = prev
+        return rest
+      })
+      return
+    }
+    setIngredientesReceta((prev) =>
+      prev.map((i) =>
+        i.ingredienteId === ingredienteId
+          ? { ...i, cantidad: num, ingredientecostoparcial: result.nuevoParcial ?? i.ingredientecostoparcial }
+          : i,
+      ),
+    )
+    setEditingIngCantidad((prev) => {
+      const { [ingredienteId]: _omit, ...rest } = prev
+      return rest
+    })
+    toast.success("Cantidad de ingrediente actualizada.")
+  }
+
+  // ===== Edición inline de cantidad de sub-recetas =====
+  const handleSubCantidadChange = (subRecetaId: number, value: string) => {
+    setEditingSubCantidad((prev) => ({ ...prev, [subRecetaId]: value }))
+  }
+
+  const handleSubCantidadBlur = async (subRecetaId: number) => {
+    const draft = editingSubCantidad[subRecetaId]
+    if (draft === undefined || !recetaId.current) return
+    const num = Number.parseFloat(draft)
+    const sub = recetasSeleccionadas.find((s) => s.recetaId === subRecetaId)
+    if (!sub) return
+    if (Number.isNaN(num) || num <= 0) {
+      toast.error("Cantidad inválida.")
+      setEditingSubCantidad((prev) => {
+        const { [subRecetaId]: _omit, ...rest } = prev
+        return rest
+      })
+      return
+    }
+    if (num === sub.cantidad) {
+      setEditingSubCantidad((prev) => {
+        const { [subRecetaId]: _omit, ...rest } = prev
+        return rest
+      })
+      return
+    }
+
+    const result = await updateSubRecetaCantidadEnReceta(String(recetaId.current), subRecetaId, num)
+    if (!result.success) {
+      toast.error("Error al actualizar cantidad: " + (result.error?.message || ""))
+      setEditingSubCantidad((prev) => {
+        const { [subRecetaId]: _omit, ...rest } = prev
+        return rest
+      })
+      return
+    }
+    setRecetasSeleccionadas((prev) =>
+      prev.map((s) =>
+        s.recetaId === subRecetaId
+          ? { ...s, cantidad: num, ingredientecostoparcial: result.nuevoParcial ?? s.ingredientecostoparcial }
+          : s,
+      ),
+    )
+    setEditingSubCantidad((prev) => {
+      const { [subRecetaId]: _omit, ...rest } = prev
+      return rest
+    })
+    toast.success("Cantidad de sub-receta actualizada.")
+  }
+
   // Cargar ingredientes cuando se cambia a etapa 2
   useEffect(() => {
     if (etapaActual === 2 && recetaId.current) {
@@ -1004,6 +1157,31 @@ export default function NuevaRecetaPage() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogAction onClick={() => setShowErrorDialog(false)}>Aceptar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Modal de éxito */}
+      <AlertDialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <div className="mx-auto mb-2 flex h-14 w-14 items-center justify-center rounded-full bg-green-100">
+              <CheckCircle2 className="h-9 w-9 text-green-600" />
+            </div>
+            <AlertDialogTitle className="text-center text-xl text-green-700">
+              ¡Guardado exitoso!
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-center text-sm text-gray-600">
+              {successMessage}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="sm:justify-center">
+            <AlertDialogAction
+              onClick={() => setShowSuccessDialog(false)}
+              className="bg-green-700 hover:bg-green-800"
+            >
+              Aceptar
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -1080,25 +1258,79 @@ export default function NuevaRecetaPage() {
       </div>
 
       <div className="mb-8">
-        <div className="w-full bg-gray-200 rounded-full h-3">
-          <div
-            className="h-3 rounded-full transition-all duration-500"
-            style={{ width: `${(etapaActual / 3) * 100}%`, backgroundColor: "#ade06e" }}
-          />
+        <Progress value={(etapaActual / 3) * 100} className="h-2 [&>*]:bg-[#ade06e]" />
+        <div className="mt-4 grid grid-cols-3 gap-2">
+          {[
+            { num: 1, label: "Info. Básica", icon: ChefHat },
+            { num: 2, label: "Ingredientes", icon: ListChecks },
+            { num: 3, label: "Resumen", icon: Receipt },
+          ].map((tab) => {
+            const Icon = tab.icon
+            const isActive = etapaActual === tab.num
+            const isCompleted = etapaActual > tab.num
+            const isUnlocked = tab.num <= maxEtapaAlcanzada
+            const isLocked = !isUnlocked
+            return (
+              <button
+                key={tab.num}
+                type="button"
+                onClick={() => goToEtapa(tab.num)}
+                disabled={isLocked}
+                className={[
+                  "group relative flex flex-col items-center gap-1.5 rounded-xl border-2 px-3 py-3 transition-all duration-300",
+                  isActive
+                    ? "border-[#ade06e] bg-gradient-to-br from-[#ade06e]/15 to-[#ade06e]/5 shadow-lg shadow-[#ade06e]/20 scale-[1.03]"
+                    : isCompleted
+                      ? "border-[#5d8f72]/40 bg-[#5d8f72]/5 hover:border-[#5d8f72] hover:bg-[#5d8f72]/10 cursor-pointer"
+                      : isUnlocked
+                        ? "border-gray-200 bg-white hover:border-gray-300 cursor-pointer"
+                        : "border-gray-100 bg-gray-50 opacity-50 cursor-not-allowed",
+                ].join(" ")}
+              >
+                <div
+                  className={[
+                    "relative flex h-10 w-10 items-center justify-center rounded-full transition-all duration-300",
+                    isActive
+                      ? "bg-gradient-to-br from-[#ade06e] to-[#5d8f72] text-white shadow-md"
+                      : isCompleted
+                        ? "bg-[#5d8f72] text-white"
+                        : isUnlocked
+                          ? "bg-gray-200 text-gray-600"
+                          : "bg-gray-200 text-gray-400",
+                  ].join(" ")}
+                >
+                  {isCompleted && !isActive ? (
+                    <CheckCircle2 className="h-5 w-5" />
+                  ) : isLocked ? (
+                    <Lock className="h-4 w-4" />
+                  ) : (
+                    <Icon className="h-5 w-5" />
+                  )}
+                  {isActive && (
+                    <span className="absolute -inset-1 rounded-full border-2 border-[#ade06e] animate-ping opacity-40"></span>
+                  )}
+                </div>
+                <span
+                  className={[
+                    "text-xs font-semibold tracking-tight",
+                    isActive ? "text-[#5d8f72]" : isCompleted ? "text-[#5d8f72]" : "text-gray-500",
+                  ].join(" ")}
+                >
+                  {tab.label}
+                </span>
+                <span className="text-[10px] uppercase font-bold tracking-wider text-gray-400">
+                  Paso {tab.num}
+                </span>
+              </button>
+            )
+          })}
         </div>
-        <p className="text-right text-sm text-muted-foreground mt-1">Etapa {etapaActual} de 3</p>
       </div>
-
-      {etapaActual > 1 && (
-        <Button onClick={btnAnterior} variant="secondary" size="sm" className="mb-4">
-          Anterior
-        </Button>
-      )}
 
       {etapaActual === 1 && (
         <Card>
           <CardHeader>
-            <CardTitle>Etapa 1: Registrar información básica de la sub-receta</CardTitle>
+            <CardTitle>Información Básica de la Sub-Receta</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1197,15 +1429,26 @@ export default function NuevaRecetaPage() {
               </div>
             </div>
             <div className="flex justify-end">
-              <Button
-                type="button"
-                id="btnRegistrarReceta"
-                name="btnRegistrarReceta"
-                onClick={btnRegistrarReceta}
-                disabled={etapa1Bloqueada}
-              >
-                Registrar
-              </Button>
+              {!recetaId.current ? (
+                <Button
+                  type="button"
+                  id="btnRegistrarReceta"
+                  name="btnRegistrarReceta"
+                  onClick={btnRegistrarReceta}
+                >
+                  Registrar
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  id="btnGuardarCambiosReceta"
+                  name="btnGuardarCambiosReceta"
+                  onClick={btnGuardarCambiosReceta}
+                  className="bg-green-700 hover:bg-green-800 text-white"
+                >
+                  Guardar Cambios
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -1214,7 +1457,7 @@ export default function NuevaRecetaPage() {
       {etapaActual === 2 && (
         <Card>
           <CardHeader>
-            <CardTitle>Etapa 2: Registrar ingredientes</CardTitle>
+            <CardTitle>Ingredientes y Sub-Recetas</CardTitle>
             <CardDescription>Agregue al menos 2 ingredientes para poder continuar.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -1355,7 +1598,17 @@ export default function NuevaRecetaPage() {
                             <TableRow key={ingrediente.id}>
                               <TableCell>{ingrediente.id}</TableCell>
                               <TableCell>{ingrediente.nombre}</TableCell>
-                              <TableCell>{ingrediente.cantidad}</TableCell>
+                              <TableCell>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  value={editingIngCantidad[ingrediente.ingredienteId] ?? String(ingrediente.cantidad)}
+                                  onChange={(e) => handleIngCantidadChange(ingrediente.ingredienteId, e.target.value)}
+                                  onBlur={() => handleIngCantidadBlur(ingrediente.ingredienteId)}
+                                  className="h-8 w-24"
+                                />
+                              </TableCell>
                               <TableCell>${ingrediente.ingredientecostoparcial.toFixed(3)}</TableCell>
                               <TableCell className="text-right">
                                 <Button
@@ -1501,7 +1754,17 @@ export default function NuevaRecetaPage() {
                             <TableRow key={receta.id}>
                               <TableCell>{receta.id}</TableCell>
                               <TableCell>{receta.nombre}</TableCell>
-                              <TableCell>{receta.cantidad}</TableCell>
+                              <TableCell>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  value={editingSubCantidad[receta.recetaId] ?? String(receta.cantidad)}
+                                  onChange={(e) => handleSubCantidadChange(receta.recetaId, e.target.value)}
+                                  onBlur={() => handleSubCantidadBlur(receta.recetaId)}
+                                  className="h-8 w-24"
+                                />
+                              </TableCell>
                               <TableCell>${receta.ingredientecostoparcial.toFixed(3)}</TableCell>
                               <TableCell className="text-right">
                                 <Button
@@ -1532,7 +1795,7 @@ export default function NuevaRecetaPage() {
                     setMostrarModalFaltanDatosEtapa2(true)
                     return
                   }
-                  setEtapaActual(3)
+                  advanceToEtapa(3)
                 }}
                 disabled={ingredientesReceta.length < 1}
               >
@@ -1546,7 +1809,7 @@ export default function NuevaRecetaPage() {
       {etapaActual === 3 && (
         <Card>
           <CardHeader>
-            <CardTitle>Etapa 3: Resumen y Confirmación</CardTitle>
+            <CardTitle>Resumen y Confirmación</CardTitle>
             <CardDescription>Revise la información antes de finalizar el registro.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">

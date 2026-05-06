@@ -797,42 +797,6 @@ export default function PlatillosPage() {
         )}
       </div>
 
-      {/* 2. Estadísticas */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total de Recetas</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{estadisticas.totalPlatillos}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Costo Promedio</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(estadisticas.costoPromedio)}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Costo Total</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(estadisticas.costoTotal)}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Tiempo Promedio Prep.</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{estadisticas.tiempoPromedio}</div>
-          </CardContent>
-        </Card>
-      </div>
-
       {/* 3. Filtros */}
       <Card>
         <CardHeader>
@@ -960,9 +924,9 @@ export default function PlatillosPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="rounded-md border">
+          <div className="rounded-md border max-h-[60vh] overflow-y-auto">
             <Table id="tblPlatillosResultados">
-              <TableHeader>
+              <TableHeader className="sticky top-0 bg-white z-10 shadow-sm">
                 <TableRow>
                   <TableHead>Receta</TableHead>
                   <TableHead className="hidden md:table-cell">Hotel</TableHead>

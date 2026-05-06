@@ -42,6 +42,8 @@ import {
   recalcularCostosPlatillo,
   type RecalcularCostosResult,
 } from "@/app/actions/platillos-wizard-actions"
+import { registrarBitacora } from "@/app/actions/bitacora-actions"
+import { BITACORA_ACTIVIDADES, BITACORA_MODULOS } from "@/lib/bitacora-actividades"
 import { Label } from "@/components/ui/label"
 
 interface PlatilloData {
@@ -692,6 +694,13 @@ export default function EditarPlatilloPage() {
       setSelectedImageFile(null)
       setImagenPreview(finalImgUrl)
 
+      registrarBitacora({
+        actividad: BITACORA_ACTIVIDADES.ACTUALIZAR_PLATILLO,
+        observaciones: `Actualizó información general del platillo «${platilloData.nombre}» (id ${platilloId}).`,
+        modulo: BITACORA_MODULOS.PLATILLOS,
+        recursoid: platilloId,
+      })
+
       setShowSuccessDialog(true)
       setTimeout(() => setShowSuccessDialog(false), 2500)
     } catch (error: any) {
@@ -1059,6 +1068,12 @@ export default function EditarPlatilloPage() {
           },
         ])
         toast.success("Ingrediente agregado correctamente.")
+        registrarBitacora({
+          actividad: BITACORA_ACTIVIDADES.ACTUALIZAR_PLATILLO,
+          observaciones: `Agregó ingrediente «${data.ingredientes?.nombre ?? "(sin nombre)"}» (cantidad ${cantidadNum}) al platillo «${platilloData?.nombre ?? ""}» (id ${platilloId}).`,
+          modulo: BITACORA_MODULOS.PLATILLOS,
+          recursoid: platilloId,
+        })
         setSelectedIngredienteId("")
         setCantidadIngrediente("")
         setSelectedUnidadMedidaId("")
@@ -1090,6 +1105,12 @@ export default function EditarPlatilloPage() {
 
       setIngredientesPlatillo((prev) => prev.filter((ing) => ing.id !== ingredienteToDeletes))
       toast.success("Ingrediente eliminado correctamente.")
+      registrarBitacora({
+        actividad: BITACORA_ACTIVIDADES.ACTUALIZAR_PLATILLO,
+        observaciones: `Quitó un ingrediente del platillo «${platilloData?.nombre ?? ""}» (id ${platilloId}).`,
+        modulo: BITACORA_MODULOS.PLATILLOS,
+        recursoid: platilloId,
+      })
       setCostosLoaded(false)
     } catch (error) {
       console.error("Error inesperado al eliminar ingrediente:", error)
@@ -1182,6 +1203,12 @@ export default function EditarPlatilloPage() {
           },
         ])
         toast.success("Sub-Receta agregada correctamente.")
+        registrarBitacora({
+          actividad: BITACORA_ACTIVIDADES.ACTUALIZAR_PLATILLO,
+          observaciones: `Agregó sub-receta «${data.recetas?.nombre ?? "(sin nombre)"}» (cantidad ${cantidadIngresada}) al platillo «${platilloData?.nombre ?? ""}» (id ${platilloId}).`,
+          modulo: BITACORA_MODULOS.PLATILLOS,
+          recursoid: platilloId,
+        })
         setSelectedRecetaId("")
         setCostoReceta("")
         setSelectedRecetaCantidad("1")
@@ -1213,6 +1240,12 @@ export default function EditarPlatilloPage() {
 
       setRecetasPlatillo((prev) => prev.filter((rec) => rec.id !== recetaToDeletes))
       toast.success("Sub-Receta eliminada correctamente.")
+      registrarBitacora({
+        actividad: BITACORA_ACTIVIDADES.ACTUALIZAR_PLATILLO,
+        observaciones: `Quitó una sub-receta del platillo «${platilloData?.nombre ?? ""}» (id ${platilloId}).`,
+        modulo: BITACORA_MODULOS.PLATILLOS,
+        recursoid: platilloId,
+      })
       setCostosLoaded(false)
     } catch (error) {
       console.error("Error inesperado al eliminar sub-receta:", error)

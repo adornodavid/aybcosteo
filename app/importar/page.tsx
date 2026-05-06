@@ -300,55 +300,65 @@ export default function ImportarPage() {
                 </Card>
               </Link>
 
-              {/* Importar Recetas */}
-              <Link href="#">
-                <Card className="group relative h-full overflow-hidden cursor-pointer transition-all duration-300 hover:shadow-xl hover:scale-105 border-2 border-transparent hover:border-green-500">
-                  <div className="absolute inset-0 bg-gradient-to-br from-green-500/10 to-green-600/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                  <CardHeader className="relative pb-2">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <CardTitle className="text-xl font-bold text-slate-900 group-hover:text-green-600 transition-colors">
-                          Importar Recetas
-                        </CardTitle>
-                        <p className="text-sm text-slate-600 mt-2">
-                          Carga platillos y recetas desde un archivo Excel con sus ingredientes
-                        </p>
-                      </div>
-                      <div className="p-2 bg-green-100 rounded-lg group-hover:bg-green-200 transition-colors">
-                        <Upload className="h-6 w-6 text-green-600" />
-                      </div>
+              {/* Importar Recetas (En Desarrollo) */}
+              <Card
+                aria-disabled="true"
+                className="relative h-full overflow-hidden cursor-not-allowed border-2 border-slate-200 bg-slate-50/60 opacity-60 select-none"
+              >
+                <div className="absolute top-3 right-3 z-10">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 border border-amber-300 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800">
+                    En Desarrollo
+                  </span>
+                </div>
+                <CardHeader className="relative pb-2">
+                  <div className="flex items-start justify-between">
+                    <div className="pr-24">
+                      <CardTitle className="text-xl font-bold text-slate-500">
+                        Importar Recetas
+                      </CardTitle>
+                      <p className="text-sm text-slate-500 mt-2">
+                        Carga platillos y recetas desde un archivo Excel con sus ingredientes
+                      </p>
                     </div>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-xs text-slate-500">Haz clic para continuar →</p>
-                  </CardContent>
-                </Card>
-              </Link>
+                    <div className="p-2 bg-slate-200 rounded-lg">
+                      <Upload className="h-6 w-6 text-slate-400" />
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-xs text-slate-400 italic">Función no disponible — próximamente</p>
+                </CardContent>
+              </Card>
 
-              {/* Importar Subrecetas */}
-              <Link href="#">
-                <Card className="group relative h-full overflow-hidden cursor-pointer transition-all duration-300 hover:shadow-xl hover:scale-105 border-2 border-transparent hover:border-purple-500">
-                  <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-purple-600/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                  <CardHeader className="relative pb-2">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <CardTitle className="text-xl font-bold text-slate-900 group-hover:text-purple-600 transition-colors">
-                          Importar Subrecetas
-                        </CardTitle>
-                        <p className="text-sm text-slate-600 mt-2">
-                          Carga subrecetas y preparaciones desde un archivo Excel
-                        </p>
-                      </div>
-                      <div className="p-2 bg-purple-100 rounded-lg group-hover:bg-purple-200 transition-colors">
-                        <BarChart2 className="h-6 w-6 text-purple-600" />
-                      </div>
+              {/* Importar Subrecetas (En Desarrollo) */}
+              <Card
+                aria-disabled="true"
+                className="relative h-full overflow-hidden cursor-not-allowed border-2 border-slate-200 bg-slate-50/60 opacity-60 select-none"
+              >
+                <div className="absolute top-3 right-3 z-10">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 border border-amber-300 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800">
+                    En Desarrollo
+                  </span>
+                </div>
+                <CardHeader className="relative pb-2">
+                  <div className="flex items-start justify-between">
+                    <div className="pr-24">
+                      <CardTitle className="text-xl font-bold text-slate-500">
+                        Importar Subrecetas
+                      </CardTitle>
+                      <p className="text-sm text-slate-500 mt-2">
+                        Carga subrecetas y preparaciones desde un archivo Excel
+                      </p>
                     </div>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-xs text-slate-500">Haz clic para continuar →</p>
-                  </CardContent>
-                </Card>
-              </Link>
+                    <div className="p-2 bg-slate-200 rounded-lg">
+                      <BarChart2 className="h-6 w-6 text-slate-400" />
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-xs text-slate-400 italic">Función no disponible — próximamente</p>
+                </CardContent>
+              </Card>
             </div>
           </div>
         </div>

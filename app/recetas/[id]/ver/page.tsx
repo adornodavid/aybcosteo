@@ -925,8 +925,8 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Información de Sub-Receta</h1>
-          <p className="text-muted-foreground">Información completa de la sub-receta</p>
+          <h1 className="text-3xl font-bold tracking-tight">Consulta de Sub-Receta</h1>
+          <p className="text-muted-foreground">Vista de solo lectura — no editable</p>
         </div>
         <Button
           id="btnRegresarActRecetas"
@@ -1063,7 +1063,8 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
                 type="text"
                 maxLength={150}
                 value={recetaData.nombre || ""}
-                onChange={handleInputChange}
+                readOnly
+                disabled
                 placeholder="Nombre de la sub-receta"
               />
             </div>
@@ -1076,65 +1077,25 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
                 name="txtNotasRecetaActualizar"
                 maxLength={500}
                 value={recetaData.notaspreparacion || ""}
-                onChange={handleInputChange}
+                readOnly
+                disabled
                 placeholder="Instrucciones detalladas para la preparación"
                 className="min-h-[100px]"
               />
             </div>
-            <div>
-              <label htmlFor="ImagenFile" className="text-sm font-medium">
-                Cargar Imagen
-              </label>
-              <Input
-                id="ImagenFile"
-                name="ImagenFile"
-                type="file"
-                accept="image/jpeg, image/jpg, image/png, image/webp"
-                onChange={handleImageChange}
-                disabled={isUploadingImage}
-              />
-              {isUploadingImage && (
-                <div className="flex items-center text-sm text-muted-foreground">
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Subiendo imagen...
+            {imageUrl && (
+              <div>
+                <label className="text-sm font-medium">Imagen</label>
+                <div className="mt-2 relative w-24 h-24 border rounded-md overflow-hidden">
+                  <Image
+                    src={imageUrl || "/placeholder.svg"}
+                    alt="Imagen de la sub-receta"
+                    layout="fill"
+                    objectFit="cover"
+                  />
                 </div>
-              )}
-              {imageUrl && (
-                <div className="mt-4 flex items-center space-x-4">
-                  <div className="relative w-24 h-24 border rounded-md overflow-hidden">
-                    <Image
-                      src={imageUrl || "/placeholder.svg"}
-                      alt="Previsualización de imagen"
-                      layout="fill"
-                      objectFit="cover"
-                    />
-                    <Button
-                      variant="destructive"
-                      size="icon"
-                      className="absolute -top-2 -right-2 rounded-full h-6 w-6"
-                      onClick={handleDeleteImage}
-                      disabled={isUploadingImage}
-                    >
-                      <XCircle className="h-4 w-4" />
-                      <span className="sr-only">Eliminar imagen</span>
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="flex items-center pt-4 justify-end">
-              <Button
-                id="btnActualizarReceta"
-                name="btnActualizarReceta"
-                type="button"
-                onClick={handleSaveBasicInfo}
-                disabled={isSubmitting || isUploadingImage}
-                className="bg-black text-white hover:bg-gray-800"
-              >
-                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Guardar Información
-              </Button>
-            </div>
+              </div>
+            )}
           </CardContent>
         </Card>
         </TabsContent>
@@ -1144,105 +1105,9 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
           <Card>
             <CardHeader>
               <CardTitle>Ingredientes de la Sub-Receta</CardTitle>
-              <CardDescription>Agrega, actualiza o elimina ingredientes de tu sub-receta.</CardDescription>
+              <CardDescription>Listado de ingredientes (solo lectura).</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
-                <div className="md:col-span-2 relative">
-                  <label htmlFor="txtIngredienteSearch" className="text-sm font-medium">
-                    Ingrediente
-                  </label>
-                  <Input
-                    id="txtIngredienteSearch"
-                    name="txtIngredienteSearch"
-                    value={ingredienteSearchTerm}
-                    onChange={handleIngredienteSearchChange}
-                    onFocus={() => setShowIngredienteDropdown(true)}
-                    onBlur={() => setTimeout(() => setShowIngredienteDropdown(false), 100)}
-                    placeholder="Buscar por código o nombre..."
-                    disabled={isSubmitting}
-                    autoComplete="off"
-                  />
-                  {showIngredienteDropdown && filteredIngredientes.length > 0 && (
-                    <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-y-auto mt-1">
-                      {filteredIngredientes.map((ing) => (
-                        <div
-                          key={ing.id}
-                          className="px-4 py-2 cursor-pointer hover:bg-gray-100"
-                          onMouseDown={() => handleSelectIngredienteFromDropdown(ing)}
-                        >
-                          {ing.codigo} - {ing.nombre}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <label htmlFor="txtCantidadIngrediente" className="text-sm font-medium">
-                    Cantidad
-                  </label>
-                  <Input
-                    id="txtCantidadIngrediente"
-                    name="txtCantidadIngrediente"
-                    type="number"
-                    step="0.01"
-                    value={cantidadIngrediente}
-                    onChange={(e) => setCantidadIngrediente(e.target.value)}
-                    placeholder="Cantidad"
-                    disabled={isSubmitting}
-                  />
-                </div>
-                <div>
-                  <label htmlFor="ddlUnidadMedida" className="text-sm font-medium">
-                    Unidad de Medida
-                  </label>
-                  <Select
-                    name="ddlUnidadMedida"
-                    value={selectedUnidadMedidaId}
-                    onValueChange={setSelectedUnidadMedidaId}
-                    disabled={true}
-                  >
-                    <SelectTrigger id="ddlUnidadMedida">
-                      <SelectValue placeholder="Unidad de Medida" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {unidadesMedidaDropdown.map((um) => (
-                        <SelectItem key={um.id} value={um.id.toString()}>
-                          {um.descripcion}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <label htmlFor="txtCostoIngrediente" className="text-sm font-medium">
-                    Costo Unitario
-                  </label>
-                  <Input
-                    id="txtCostoIngrediente"
-                    name="txtCostoIngrediente"
-                    type="text"
-                    value={costoIngrediente}
-                    readOnly
-                    disabled={true}
-                    placeholder="Costo"
-                  />
-                </div>
-                <div className="lg:col-span-4 flex justify-end">
-                  <Button
-                    id="btnAgregarIngrediente"
-                    name="btnAgregarIngrediente"
-                    type="button"
-                    onClick={handleAddIngrediente}
-                    disabled={isSubmitting}
-                    className="bg-green-800 hover:bg-green-900 text-white"
-                  >
-                    <PlusCircle className="mr-2 h-4 w-4" />
-                    Agregar Ingrediente
-                  </Button>
-                </div>
-              </div>
-
               <div className="rounded-md border mt-6">
                 <Table>
                   <TableHeader>
@@ -1251,7 +1116,6 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
                       <TableHead>Cantidad</TableHead>
                       <TableHead>Unidad</TableHead>
                       <TableHead>Costo Parcial</TableHead>
-                      <TableHead className="text-right">Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1259,49 +1123,9 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
                       ingredientesReceta.map((ing) => (
                         <TableRow key={ing.id}>
                           <TableCell>{ing.nombre}</TableCell>
-                          <TableCell>
-                            <Input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              value={editingIngCantidad[ing.ingredienteid] ?? String(ing.cantidad)}
-                              onChange={(e) => handleIngCantidadChange(ing.ingredienteid, e.target.value)}
-                              onBlur={() => handleIngCantidadBlur(ing.ingredienteid)}
-                              className="h-8 w-24"
-                            />
-                          </TableCell>
+                          <TableCell>{ing.cantidad}</TableCell>
                           <TableCell>{ing.unidadmedidadescripcion}</TableCell>
                           <TableCell>{formatCurrency(ing.ingredientecostoparcial)}</TableCell>
-                          <TableCell className="text-right">
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button
-                                  variant="destructive"
-                                  size="icon"
-                                  title="Eliminar Ingrediente"
-                                  //onClick={() => setIngredienteToDelete(ing.ingredienteid)}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>¿Confirmar eliminación?</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    ¿Estás seguro de que deseas eliminar este ingrediente de la receta?
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel onClick={() => setIngredienteToDelete(null)}>
-                                    Cancelar
-                                  </AlertDialogCancel>
-                                  <AlertDialogAction onClick={() => handleDeleteIngrediente(ing.ingredienteid)}>
-                                    Confirmar
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          </TableCell>
                         </TableRow>
                       ))
                     ) : (
@@ -1323,134 +1147,10 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
           <Card>
             <CardHeader>
               <CardTitle>Sub-Recetas Anidadas</CardTitle>
-              <CardDescription>Agrega o elimina sub-recetas que componen esta sub-receta.</CardDescription>
+              <CardDescription>Listado de sub-recetas (solo lectura).</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-              <div>
-                <label htmlFor="ddlRecetas" className="text-sm font-medium">
-                  Sub-Receta
-                </label>
-                <Select name="ddlRecetas" value={ddlRecetas} onValueChange={setDdlRecetas}>
-                  <SelectTrigger id="ddlRecetas">
-                    <SelectValue placeholder="Seleccionar sub-receta" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {recetas.map((receta) => (
-                      <SelectItem key={receta.id} value={receta.id.toString()}>
-                        {receta.nombre} - {formatCurrency(receta.costo)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label htmlFor="txtCostoReceta" className="text-sm font-medium">
-                  Costo
-                </label>
-                <Input
-                  type="text"
-                  id="txtCostoReceta"
-                  name="txtCostoReceta"
-                  value={txtCostoReceta}
-                  disabled
-                  placeholder="Seleccione una sub-receta"
-                />
-              </div>
-              <div>
-                <label htmlFor="txtUnidadReceta" className="text-sm font-medium">
-                  Unidad
-                </label>
-                <Input
-                  type="text"
-                  id="txtUnidadReceta"
-                  name="txtUnidadReceta"
-                  value={txtUnidadReceta}
-                  disabled
-                  placeholder="Seleccione una sub-receta"
-                />
-              </div>
-            </div>
-
-            {ddlRecetas && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <div>
-                  <label htmlFor="txtCantidadReceta" className="text-sm font-medium">
-                    Cantidad
-                  </label>
-                  <Input
-                    type="number"
-                    id="txtCantidadReceta"
-                    name="txtCantidadReceta"
-                    value={txtCantidadReceta}
-                    onChange={handleCantidadRecetaChange}
-                    min="1"
-                    max={maxCantidadReceta}
-                    step="any"
-                    placeholder={`Máximo: ${maxCantidadReceta}`}
-                  />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <label htmlFor="cantidadRangoReceta" className="text-sm font-medium">
-                      Rango de Cantidad
-                    </label>
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <HelpCircle className="h-4 w-4 text-gray-500 cursor-help" />
-                        </TooltipTrigger>
-                        <TooltipContent className="max-w-xs">
-                          <p>
-                            Rango de cantidad, favor de seleccionar la cantidad requerida de la subreceta que utiliza
-                            para esta Receta, la línea define el rango de la cantidad mínima y máxima que se puede
-                            utilizar con esta subreceta.
-                          </p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </div>
-                  <div className="px-2 py-2">
-                    <Slider
-                      id="cantidadRangoReceta"
-                      min={1}
-                      max={maxCantidadReceta}
-                      step={0.1}
-                      value={cantidadRangoReceta}
-                      onValueChange={handleCantidadRangoRecetaChange}
-                      className="w-full"
-                    />
-                    <div className="flex justify-between items-center text-xs text-gray-500 mt-2">
-                      <span>
-                        <strong>
-                          {cantidadRangoReceta[0].toFixed(1)} / {maxCantidadReceta} {txtUnidadReceta}
-                        </strong>
-                      </span>
-                      <span className="font-semibold text-green-600">Costo: ${calcularCostoReceta().toFixed(2)}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className="flex justify-center">
-              <Button
-                type="button"
-                id="btnAgregarSubReceta"
-                name="btnAgregarSubReceta"
-                onClick={handleAddSubReceta}
-                disabled={isSubmitting}
-                className="bg-blue-800 hover:bg-blue-900 text-white"
-              >
-                <PlusCircle className="mr-2 h-4 w-4" />
-                Agregar Sub-Receta
-              </Button>
-            </div>
-
-            {/* Tabla de sub-recetas seleccionadas */}
-            {subRecetasSeleccionadas.length > 0 && (
-              <div className="mt-4">
-                <h4 className="font-medium mb-3">Sub-Recetas Agregadas</h4>
+              {subRecetasSeleccionadas.length > 0 ? (
                 <div className="rounded-md border">
                   <Table>
                     <TableHeader>
@@ -1458,55 +1158,22 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
                         <TableHead>Nombre</TableHead>
                         <TableHead>Cantidad</TableHead>
                         <TableHead>Costo Parcial</TableHead>
-                        <TableHead className="text-right">Acciones</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {subRecetasSeleccionadas.map((receta) => (
                         <TableRow key={receta.id}>
                           <TableCell>{receta.nombre}</TableCell>
-                          <TableCell>
-                            <Input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              value={editingSubCantidad[receta.recetaId] ?? String(receta.cantidad)}
-                              onChange={(e) => handleSubCantidadChange(receta.recetaId, e.target.value)}
-                              onBlur={() => handleSubCantidadBlur(receta.recetaId)}
-                              className="h-8 w-24"
-                            />
-                          </TableCell>
+                          <TableCell>{receta.cantidad}</TableCell>
                           <TableCell>{formatCurrency(receta.ingredientecostoparcial)}</TableCell>
-                          <TableCell className="text-right">
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button variant="destructive" size="icon" title="Eliminar Sub-Receta">
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>¿Confirmar eliminación?</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    ¿Estás seguro de que deseas eliminar esta sub-receta de la receta?
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                  <AlertDialogAction onClick={() => handleDeleteSubReceta(receta.recetaId)}>
-                                    Confirmar
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
                   </Table>
                 </div>
-              </div>
-            )}
+              ) : (
+                <p className="text-muted-foreground text-center py-4">No hay sub-recetas anidadas.</p>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -1612,22 +1279,20 @@ export default function RecetaEditPage({ params }: RecetaEditPageProps) {
               </div>
             </CardContent>
           </Card>
-
-          <div className="flex justify-end gap-4 mt-6">
-            <Button
-              id="btnActualizarCompletoReceta"
-              name="btnActualizarCompletoReceta"
-              type="button"
-              onClick={handleFinalUpdateReceta}
-              disabled={isSubmitting || !canFinalizeReceta}
-              className="bg-green-800 hover:bg-green-900 text-white"
-            >
-              {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Actualizar Sub-Receta Completa
-            </Button>
-          </div>
         </TabsContent>
       </Tabs>
+
+      <div className="flex justify-center mt-6">
+        <Button
+          id="btnEditarSubReceta"
+          name="btnEditarSubReceta"
+          type="button"
+          onClick={() => router.push(`/recetas/${recetaId}/editar`)}
+          className="bg-blue-700 hover:bg-blue-800 text-white"
+        >
+          Editar Sub-Receta
+        </Button>
+      </div>
 
       <AlertDialog open={showIngredienteExistsDialog} onOpenChange={setShowIngredienteExistsDialog}>
         <AlertDialogContent>

@@ -88,6 +88,7 @@ export default function MenusPage() {
   const [statusFilter, setStatusFilter] = useState<string>("true")
 
   const [currentPage, setCurrentPage] = useState(1)
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null)
   const itemsPerPage = 20
   const [loading, setLoading] = useState(true)
   const [searching, setSearching] = useState(false)
@@ -353,6 +354,13 @@ export default function MenusPage() {
     setCurrentPage(page)
     cargarMenus(menuNameFilter, selectedHotelId, selectedRestauranteId, statusFilter, page)
   }
+
+  // Reset scroll al inicio cuando cambia la página o termina la búsqueda
+  useEffect(() => {
+    if (!searching && scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = 0
+    }
+  }, [currentPage, searching])
 
   const handleStatusToggle = async (menuId: string, currentStatus: boolean) => {
     if (window.confirm(`¿Estás seguro de que deseas ${currentStatus ? "inactivar" : "activar"} este menú?`)) {
@@ -742,20 +750,6 @@ export default function MenusPage() {
         )}
       </div>
 
-      {/* Resumen de estadísticas */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total de Menús</CardTitle>
-            <Utensils className="h-4 w-4 text-gray-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalMenus}</div>
-            <p className="text-xs text-gray-500">Menús registrados en el sistema</p>
-          </CardContent>
-        </Card>
-      </div>
-
       {/* Filtros de búsqueda */}
       <Card className="mb-6">
         <CardHeader>
@@ -766,6 +760,10 @@ export default function MenusPage() {
             id="frmMenusBuscar"
             name="frmMenusBuscar"
             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 items-end"
+            onSubmit={(e) => {
+              e.preventDefault()
+              handleSearch()
+            }}
           >
             <div className="space-y-2">
               <label htmlFor="txtMenuNombre" className="text-sm font-medium">
@@ -856,8 +854,7 @@ export default function MenusPage() {
                 <RotateCcw className="mr-2 h-3 w-3" /> Limpiar filtros
               </Button>
               <Button
-                type="button"
-                onClick={handleSearch}
+                type="submit"
                 className="bg-[#4a4a4a] text-white hover:bg-[#333333]"
                 style={{ fontSize: "12px" }}
                 id="btnMenuBuscar"
@@ -896,9 +893,9 @@ export default function MenusPage() {
           ) : menus.length === 0 ? (
             <div className="text-center py-8 text-gray-500">No se encontraron menús.</div>
           ) : (
-            <div className="overflow-x-auto">
+            <div ref={scrollContainerRef} className="overflow-x-auto max-h-[60vh] overflow-y-auto rounded-md border">
               <table className="w-full">
-                <thead>
+                <thead className="sticky top-0 bg-white z-10 shadow-sm">
                   <tr className="border-b">
                     <th className="text-left p-4">Hotel</th>
                     <th className="text-left p-4">Restaurante</th>
@@ -910,7 +907,11 @@ export default function MenusPage() {
                 </thead>
                 <tbody>
                   {menus.map((menu) => (
-                    <tr key={menu.id} className="border-b hover:bg-gray-50">
+                    <tr
+                      key={menu.id}
+                      className="border-b hover:bg-gray-50 cursor-pointer"
+                      onClick={() => handleViewMenuDetails(menu.id)}
+                    >
                       <td className="p-4">{menu.restaurante?.hotel?.nombre || "N/A"}</td>
                       <td className="p-4">{menu.restaurante?.nombre || "N/A"}</td>
                       <td className="p-4 font-medium">{menu.nombre}</td>
@@ -922,16 +923,8 @@ export default function MenusPage() {
                           {menu.activo ? "Activo" : "Inactivo"}
                         </span>
                       </td>
-                      <td className="p-4 text-center">
+                      <td className="p-4 text-center" onClick={(e) => e.stopPropagation()}>
                         <div className="flex gap-2 justify-center">
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            title="Ver detalles"
-                            onClick={() => handleViewMenuDetails(menu.id)}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
                           <Button
                             size="icon"
                             variant="ghost"

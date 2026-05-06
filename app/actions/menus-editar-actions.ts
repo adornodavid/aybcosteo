@@ -2,6 +2,8 @@
 
 import { supabase } from "@/lib/supabase"
 import { revalidatePath } from "next/cache"
+import { registrarBitacora } from "@/app/actions/bitacora-actions"
+import { BITACORA_ACTIVIDADES, BITACORA_MODULOS } from "@/lib/bitacora-actividades"
 
 export async function getMenuDetails(id: number) {
   try {
@@ -119,6 +121,14 @@ export async function updateMenuBasicInfo(
     }
     revalidatePath(`/menus/${id}/editar`)
     revalidatePath("/menus")
+
+    await registrarBitacora({
+      actividad: BITACORA_ACTIVIDADES.ACTUALIZAR_MENU,
+      observaciones: `Actualizó datos básicos del menú «${data.nombre}» (id ${id}).`,
+      modulo: BITACORA_MODULOS.MENUS,
+      recursoid: id,
+    })
+
     return { success: true }
   } catch (error: any) {
     console.error("Error in updateMenuBasicInfo:", error.message)
@@ -160,6 +170,20 @@ export async function addPlatilloToMenu(menuId: number, platilloId: number, prec
       return { success: false, error: error.message }
     }
     revalidatePath(`/menus/${menuId}/editar`)
+
+    const [{ data: pData }, { data: mData }] = await Promise.all([
+      supabase.from("platillos").select("nombre").eq("id", platilloId).single(),
+      supabase.from("menus").select("nombre").eq("id", menuId).single(),
+    ])
+    const nomPlat = (pData as any)?.nombre ?? "(sin nombre)"
+    const nomMenu = (mData as any)?.nombre ?? "(sin nombre)"
+    await registrarBitacora({
+      actividad: BITACORA_ACTIVIDADES.ACTUALIZAR_MENU,
+      observaciones: `Agregó platillo «${nomPlat}» (id ${platilloId}) al menú «${nomMenu}» (id ${menuId}) con precio venta ${precioVenta}.`,
+      modulo: BITACORA_MODULOS.MENUS,
+      recursoid: menuId,
+    })
+
     return { success: true, data }
   } catch (error: any) {
     console.error("Error in addPlatilloToMenu:", error.message)
@@ -227,6 +251,13 @@ export async function updateMenu(menuId: string, formData: FormData) {
       console.error("Error updating menu:", error.message)
       return { success: false, error: error.message }
     }
+
+    await registrarBitacora({
+      actividad: BITACORA_ACTIVIDADES.ACTUALIZAR_MENU,
+      observaciones: `Actualizó menú «${nombre}» (id ${menuId}).`,
+      modulo: BITACORA_MODULOS.MENUS,
+      recursoid: Number(menuId),
+    })
 
     return { success: true, message: "Menú actualizado correctamente." }
   } catch (error: any) {
