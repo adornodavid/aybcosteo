@@ -921,6 +921,9 @@ export async function actualizarCostoUnitarioMasivo(
     costounitario: number | null;
     conversion?: number | null;
     porcentajemerma?: number | null;
+    // Cuando se provee, también se hace UPDATE en ingredientes.{costo,conversion,porcentajemerma}
+    // filtrando por este id — usado por la edición inline en /importar/importaringredientes.
+    ingredienteid?: number;
   }[]
 ) {
   try {
@@ -1057,14 +1060,51 @@ export async function actualizarCostoUnitarioMasivo(
       })
     }
 
-    console.log(`[DEBUG-COSTOUNITARIO] Updates: ${updates.length} solicitados, ${grupos.size} grupos, ${totalUpdated} actualizados, ${totalInserted} clonados, ${errores} errores`)
+    // Sincronizar también la tabla `ingredientes` para las filas que traen ingredienteid.
+    // Mapea: costo ← costounitario, conversion ← conversion, porcentajemerma ← porcentajemerma.
+    let ingActualizados = 0
+    let ingErrores = 0
+    const ingUpdates = updates.filter((u) => Number.isFinite(u.ingredienteid) && (u.ingredienteid as number) > 0)
+    if (ingUpdates.length > 0) {
+      const fechaHoy = new Date().toISOString().split("T")[0]
+      const ING_BATCH = 20
+      for (let i = 0; i < ingUpdates.length; i += ING_BATCH) {
+        const lote = ingUpdates.slice(i, i + ING_BATCH)
+        const promises = lote.map(async (u) => {
+          const updateObj: Record<string, any> = { fechamodificacion: fechaHoy }
+          if (u.costounitario !== null && u.costounitario !== undefined) updateObj.costo = u.costounitario
+          if (u.conversion !== undefined) updateObj.conversion = u.conversion
+          if (u.porcentajemerma !== undefined) updateObj.porcentajemerma = u.porcentajemerma
+          if (Object.keys(updateObj).length <= 1) return { ok: true } // solo fechamodificacion → no hay nada útil que actualizar
+
+          const { error } = await supabase
+            .from("ingredientes")
+            .update(updateObj)
+            .eq("id", u.ingredienteid as number)
+          if (error) {
+            console.error(`[DEBUG] Error update ingrediente id=${u.ingredienteid}:`, error.message)
+            return { ok: false }
+          }
+          return { ok: true }
+        })
+        const results = await Promise.all(promises)
+        results.forEach((r) => {
+          if (r.ok) ingActualizados++
+          else ingErrores++
+        })
+      }
+    }
+
+    console.log(`[DEBUG-COSTOUNITARIO] Updates: ${updates.length} solicitados, ${grupos.size} grupos, ${totalUpdated} actualizados, ${totalInserted} clonados, ${errores} errores | ingredientes: ${ingActualizados}/${ingUpdates.length} ok, ${ingErrores} errores`)
     return {
       success: true,
       count: totalUpdated,
       inserted: totalInserted,
       insertedRows,
       errores,
-      message: `${totalUpdated} actualizado(s)${totalInserted > 0 ? `, ${totalInserted} clonado(s) por duplicidad de codigosecundario` : ""}${errores > 0 ? ` (${errores} errores)` : ""}`,
+      ingActualizados,
+      ingErrores,
+      message: `${totalUpdated} actualizado(s)${totalInserted > 0 ? `, ${totalInserted} clonado(s) por duplicidad de codigosecundario` : ""}${errores > 0 ? ` (${errores} errores)` : ""}${ingActualizados > 0 ? ` | ingredientes: ${ingActualizados}` : ""}`,
     }
   } catch (error: any) {
     console.error("[v0] Error en actualizarCostoUnitarioMasivo:", error)

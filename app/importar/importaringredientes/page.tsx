@@ -594,7 +594,13 @@ export default function ImportarIngredientesPage() {
           } else {
             colsDisplayConSec.push("codigosecundario")
           }
-          const cols = [...colsDisplayConSec, "precio", "costo(actual)", "costounitario", "Cambio"]
+          // Reordenar: "conversion" después de "precio" y "porcentajemerma" después de "costounitario".
+          // Ambas son editables y recalculan costounitario al cambiar.
+          const colsSinEditables = colsDisplayConSec.filter(c => {
+            const cl = c.toLowerCase()
+            return cl !== "conversion" && cl !== "porcentajemerma"
+          })
+          const cols = [...colsSinEditables, "precio", "conversion", "costo(actual)", "costounitario", "porcentajemerma", "Cambio"]
 
           // Duplicidad REAL: misma combinación (codigorapsodia + codigosecundario).
           // Si codigorapsodia repite con codigosecundario distinto NO es duplicado (es cascade legítimo).
@@ -635,6 +641,14 @@ export default function ImportarIngredientesPage() {
             const precioStr = precioMap[cr] || ""
             filtrado.precio = precioStr
             filtrado["costo(actual)"] = row.costo ?? ""
+
+            // Display de porcentajemerma: BD almacena decimal (0.05) pero la UI lo muestra como
+            // porcentaje ("5"). Lo guardamos en un campo aparte para no romper otras lecturas
+            // que esperan el decimal en row.porcentajemerma.
+            const mermaDecimalInicial = parseFloat(String(filtrado.porcentajemerma ?? ""))
+            filtrado._porcentajemermaDisplay = isNaN(mermaDecimalInicial)
+              ? ""
+              : String(parseFloat((mermaDecimalInicial * 100).toFixed(6)))
 
             // Calcular costounitario
             const precio = parseFloat(precioStr)
@@ -698,6 +712,7 @@ export default function ImportarIngredientesPage() {
                 const num = parseFloat(String(r.costounitario ?? ""))
                 const conv = parseFloat(String(r.conversion ?? ""))
                 const merma = parseFloat(String(r.porcentajemerma ?? ""))
+                const ingId = Number(r.id)
                 return {
                   hotelid: Number(r.hotelid),
                   codigorapsodia: String(r.codigorapsodia).trim(), // valor matching (excel_carga_nuevo.codigo)
@@ -705,6 +720,8 @@ export default function ImportarIngredientesPage() {
                   costounitario: isNaN(num) ? null : num,
                   conversion: isNaN(conv) ? null : conv,
                   porcentajemerma: isNaN(merma) ? null : merma,
+                  // Propagar también a ingredientes.{costo,conversion,porcentajemerma}.
+                  ingredienteid: Number.isFinite(ingId) && ingId > 0 ? ingId : undefined,
                 }
               })
             if (updates.length > 0) {
@@ -1854,12 +1871,13 @@ export default function ImportarIngredientesPage() {
                                 const stickyWidthValues = [60, 100, 240]
                                 const isLastSticky = isSticky && stickyIndex === stickyColumns.length - 1
                                 const isGreen = col === "costounitario"
+                                const isEditableHeader = col === "conversion" || col === "porcentajemerma"
 
                                 return (
                                 <th
                                   key={col}
                                   className={`px-0 py-0 text-left text-xs font-semibold cursor-pointer transition-colors select-none ${
-                                    isGreen ? "bg-green-700 hover:bg-green-600 text-white" : "bg-slate-900 text-white hover:bg-slate-700"
+                                    isGreen ? "bg-green-700 hover:bg-green-600 text-white" : isEditableHeader ? "bg-amber-600 hover:bg-amber-500 text-white" : "bg-slate-900 text-white hover:bg-slate-700"
                                   } ${isSticky ? "sticky z-30" : ""} ${!isSticky ? "whitespace-nowrap px-2 py-1" : ""}`}
                                   style={isSticky ? {
                                     left: `${stickyLeftValues[stickyIndex]}px`,
@@ -1945,6 +1963,8 @@ export default function ImportarIngredientesPage() {
                                   const stickyWidthValues = [60, 100, 240]
                                   const isLastSticky = isSticky && stickyIndex === stickyColumns.length - 1
                                   const isGreen = col === "costounitario"
+                                  const isConversion = col === "conversion"
+                                  const isPorcentajeMerma = col === "porcentajemerma"
 
                                   const isCambio = col === "Cambio"
 
@@ -1954,6 +1974,7 @@ export default function ImportarIngredientesPage() {
                                     title={isSticky ? String(row[col] ?? "") : undefined}
                                     className={`text-xs ${!isSticky ? "px-2 py-1 whitespace-nowrap" : ""} ${
                                       isGreen ? "bg-green-50 text-green-800 font-semibold"
+                                      : (isConversion || isPorcentajeMerma) ? "bg-amber-50 text-amber-900 font-semibold"
                                       : isCambio ? "text-center"
                                       : isSticky ? (esDuplicado ? "bg-red-100" : rowBg) + " font-medium"
                                       : "text-slate-700"
@@ -1981,6 +2002,87 @@ export default function ImportarIngredientesPage() {
                                           : row[col] === "cambio"
                                             ? <span className="inline-block w-3 h-3 rounded-full bg-orange-400" />
                                             : null)
+                                      : (isConversion || isPorcentajeMerma)
+                                        ? (
+                                          <input
+                                            type="text"
+                                            value={isPorcentajeMerma
+                                              ? String(row._porcentajemermaDisplay ?? "")
+                                              : String(row[col] ?? "")}
+                                            onChange={(e) => {
+                                              const newVal = e.target.value
+                                              const newData = [...conversionData]
+                                              let updatedRow: any
+                                              if (isConversion) {
+                                                updatedRow = { ...newData[originalIndex], conversion: newVal }
+                                              } else {
+                                                // porcentajemerma: el usuario captura porcentaje ("50"),
+                                                // pero internamente y en BD se guarda como decimal (0.5).
+                                                const parsed = parseFloat(newVal)
+                                                const decimal = isNaN(parsed) ? "" : String(parsed / 100)
+                                                updatedRow = {
+                                                  ...newData[originalIndex],
+                                                  _porcentajemermaDisplay: newVal,
+                                                  porcentajemerma: decimal,
+                                                }
+                                              }
+
+                                              const precio = parseFloat(String(updatedRow.precio ?? ""))
+                                              const conv = parseFloat(String(updatedRow.conversion ?? ""))
+                                              const merma = parseFloat(String(updatedRow.porcentajemerma ?? ""))
+
+                                              let nuevoCU = ""
+                                              if (!isNaN(precio) && !isNaN(conv) && conv !== 0) {
+                                                if (!isNaN(merma) && merma !== 0) {
+                                                  nuevoCU = (precio / (conv * (1 - merma))).toFixed(6)
+                                                } else {
+                                                  nuevoCU = (precio / conv).toFixed(6)
+                                                }
+                                              }
+                                              updatedRow.costounitario = nuevoCU
+                                              updatedRow._costounitarioOriginal = nuevoCU
+                                              // Cualquier edición de conversion/porcentajemerma marca el registro como modificado manualmente (azul).
+                                              updatedRow.Cambio = "manual"
+
+                                              newData[originalIndex] = updatedRow
+                                              setConversionData(newData)
+                                              setCambiosCount(newData.filter((r: any) => r.Cambio === "cambio").length)
+                                              setCambiosCriticosCount(newData.filter((r: any) => r.Cambio === "critico").length)
+                                              setCambiosManualCount(newData.filter((r: any) => r.Cambio === "manual").length)
+
+                                              const ingredId = Number(updatedRow.id)
+                                              const hotelid = Number(updatedRow.hotelid)
+                                              const codigorapsodia = String(updatedRow.codigorapsodia ?? "").trim()
+                                              if (ingredId && hotelid && codigorapsodia) {
+                                                if (costoUpdateTimersRef.current[ingredId]) {
+                                                  clearTimeout(costoUpdateTimersRef.current[ingredId])
+                                                }
+                                                costoUpdateTimersRef.current[ingredId] = setTimeout(async () => {
+                                                  const convNum = parseFloat(String(updatedRow.conversion ?? ""))
+                                                  const mermaNum = parseFloat(String(updatedRow.porcentajemerma ?? ""))
+                                                  const cuNum = parseFloat(nuevoCU)
+                                                  const result = await actualizarCostoUnitarioMasivo([{
+                                                    hotelid,
+                                                    codigorapsodia,
+                                                    conversion: isNaN(convNum) ? null : convNum,
+                                                    porcentajemerma: isNaN(mermaNum) ? null : mermaNum,
+                                                    costounitario: isNaN(cuNum) ? null : cuNum,
+                                                    ingredienteid: ingredId,
+                                                  }])
+                                                  if (!result.success) {
+                                                    toast({
+                                                      title: "No se pudo guardar en BD",
+                                                      description: result.message,
+                                                      variant: "destructive",
+                                                    })
+                                                  }
+                                                  delete costoUpdateTimersRef.current[ingredId]
+                                                }, 600)
+                                              }
+                                            }}
+                                            className="w-full bg-transparent border-b border-amber-300 focus:border-amber-600 focus:outline-none text-xs text-amber-900 font-semibold px-0 py-0"
+                                          />
+                                        )
                                       : isGreen
                                         ? (
                                           <input
@@ -2042,10 +2144,15 @@ export default function ImportarIngredientesPage() {
                                                 }
                                                 costoUpdateTimersRef.current[ingredId] = setTimeout(async () => {
                                                   const num = parseFloat(valorActual)
+                                                  const convCur = parseFloat(String(updatedRow.conversion ?? ""))
+                                                  const mermaCur = parseFloat(String(updatedRow.porcentajemerma ?? ""))
                                                   const result = await actualizarCostoUnitarioMasivo([{
                                                     hotelid,
                                                     codigorapsodia,
                                                     costounitario: isNaN(num) ? null : num,
+                                                    conversion: isNaN(convCur) ? null : convCur,
+                                                    porcentajemerma: isNaN(mermaCur) ? null : mermaCur,
+                                                    ingredienteid: ingredId,
                                                   }])
                                                   if (!result.success) {
                                                     toast({
