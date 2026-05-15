@@ -557,6 +557,10 @@ export default function ImportarIngredientesPage() {
           // excel_carga_nuevo para "buscar por hotel"). En ambos casos las columnas
           // se llaman igual (year, mes), pero en Excel pueden venir con espacios.
           const yearMesMap: Record<string, { year: any; mes: any }> = {}
+          // Mapa codigorapsodia -> {conversion, porcentajemerma} desde excel_carga_nuevo
+          // (dataParam viene siempre de excel_carga_nuevo: tras carga de Excel guarda+lee, o vía
+          // buscar por hotel). La pestaña 2 muestra estos valores en vez de los de ingredientes.
+          const convMermaMap: Record<string, { conversion: any; porcentajemerma: any }> = {}
           dataParam.forEach((fila: any) => {
             // Priorizar "codigo" (donde está el rapsodia) sobre "codigosecundario" (corto)
             const codigoKey = Object.keys(fila).find(k =>
@@ -569,6 +573,11 @@ export default function ImportarIngredientesPage() {
             )
             const yearKey = Object.keys(fila).find(k => k.toLowerCase().trim() === "year")
             const mesKey = Object.keys(fila).find(k => k.toLowerCase().trim() === "mes")
+            const convKey = Object.keys(fila).find(k => k.toLowerCase().trim() === "conversion")
+            const mermaKey = Object.keys(fila).find(k => {
+              const kl = k.toLowerCase().trim()
+              return kl === "porcentajemerma" || kl === "merma"
+            })
             const codigo = codigoKey ? String(fila[codigoKey]).trim() : ""
             const precio = precioKey ? String(fila[precioKey]).trim() : ""
             if (codigo) {
@@ -576,6 +585,10 @@ export default function ImportarIngredientesPage() {
               yearMesMap[codigo] = {
                 year: yearKey !== undefined ? fila[yearKey] : null,
                 mes: mesKey !== undefined ? fila[mesKey] : null,
+              }
+              convMermaMap[codigo] = {
+                conversion: convKey !== undefined ? fila[convKey] : null,
+                porcentajemerma: mermaKey !== undefined ? fila[mermaKey] : null,
               }
             }
           })
@@ -638,9 +651,21 @@ export default function ImportarIngredientesPage() {
             filtrado.codigosecundario = row.codigo ?? ""
             // Mantener codigorapsodia en la fila para uso interno (matching, dupes, eliminar, edit)
             filtrado.codigorapsodia = row.codigorapsodia
+            // Year/mes vienen de excel_carga_nuevo (vía yearMesMap). Se mantienen en la
+            // fila para que los handlers de edit puedan filtrar por (hotel, codigo, year, mes).
+            filtrado.year = ymOverride?.year ?? null
+            filtrado.mes = ymOverride?.mes ?? null
             const precioStr = precioMap[cr] || ""
             filtrado.precio = precioStr
             filtrado["costo(actual)"] = row.costo ?? ""
+
+            // Override conversion + porcentajemerma desde excel_carga_nuevo (convMermaMap)
+            // en lugar de los de ingredientes. Si la fila de ECN no trae valor, queda vacío.
+            const ecnVals = convMermaMap[cr]
+            if (ecnVals) {
+              filtrado.conversion = ecnVals.conversion ?? ""
+              filtrado.porcentajemerma = ecnVals.porcentajemerma ?? ""
+            }
 
             // Display de porcentajemerma: BD almacena decimal (0.05) pero la UI lo muestra como
             // porcentaje ("5"). Lo guardamos en un campo aparte para no romper otras lecturas
@@ -650,10 +675,10 @@ export default function ImportarIngredientesPage() {
               ? ""
               : String(parseFloat((mermaDecimalInicial * 100).toFixed(6)))
 
-            // Calcular costounitario
+            // Calcular costounitario usando los valores de excel_carga_nuevo (no ingredientes)
             const precio = parseFloat(precioStr)
-            const conversion = parseFloat(String(row.conversion ?? ""))
-            const porcentajemerma = parseFloat(String(row.porcentajemerma ?? ""))
+            const conversion = parseFloat(String(filtrado.conversion ?? ""))
+            const porcentajemerma = parseFloat(String(filtrado.porcentajemerma ?? ""))
 
             if (!isNaN(precio) && !isNaN(conversion) && conversion !== 0) {
               if (!isNaN(porcentajemerma) && porcentajemerma !== 0) {
@@ -712,7 +737,8 @@ export default function ImportarIngredientesPage() {
                 const num = parseFloat(String(r.costounitario ?? ""))
                 const conv = parseFloat(String(r.conversion ?? ""))
                 const merma = parseFloat(String(r.porcentajemerma ?? ""))
-                const ingId = Number(r.id)
+                const yearNum = Number(r.year)
+                const mesNum = Number(r.mes)
                 return {
                   hotelid: Number(r.hotelid),
                   codigorapsodia: String(r.codigorapsodia).trim(), // valor matching (excel_carga_nuevo.codigo)
@@ -720,8 +746,8 @@ export default function ImportarIngredientesPage() {
                   costounitario: isNaN(num) ? null : num,
                   conversion: isNaN(conv) ? null : conv,
                   porcentajemerma: isNaN(merma) ? null : merma,
-                  // Propagar también a ingredientes.{costo,conversion,porcentajemerma}.
-                  ingredienteid: Number.isFinite(ingId) && ingId > 0 ? ingId : undefined,
+                  year: Number.isFinite(yearNum) && yearNum > 0 ? yearNum : null,
+                  mes: Number.isFinite(mesNum) && mesNum > 0 ? mesNum : null,
                 }
               })
             if (updates.length > 0) {
@@ -739,17 +765,14 @@ export default function ImportarIngredientesPage() {
             }
           }
 
-          // Enriquecer las filas existentes de Vista Previa con codigosecundario, conversion y
-          // porcentajemerma del primer ingrediente matcheado (los duplicados se appendean abajo).
-          const ingMap: Record<string, { codigo: string; conversion: any; porcentajemerma: any }> = {}
+          // Enriquecer las filas existentes de Vista Previa con codigosecundario del primer
+          // ingrediente matcheado. conversion y porcentajemerma NO se traen de ingredientes:
+          // la fuente autoritativa es excel_carga_nuevo (que ya viene en dataParam).
+          const ingMap: Record<string, { codigo: string }> = {}
           resultado.data.forEach((ing: any) => {
             const cr = String(ing.codigorapsodia ?? "").trim()
             if (cr && ingMap[cr] === undefined) {
-              ingMap[cr] = {
-                codigo: String(ing.codigo ?? ""),
-                conversion: ing.conversion,
-                porcentajemerma: ing.porcentajemerma,
-              }
+              ingMap[cr] = { codigo: String(ing.codigo ?? "") }
             }
           })
           const enrichedRows = dataParam.map((row: any) => {
@@ -759,8 +782,6 @@ export default function ImportarIngredientesPage() {
               return {
                 ...row,
                 codigosecundario: matched.codigo,
-                conversion: matched.conversion,
-                porcentajemerma: matched.porcentajemerma,
               }
             }
             return row
@@ -2061,13 +2082,16 @@ export default function ImportarIngredientesPage() {
                                                   const convNum = parseFloat(String(updatedRow.conversion ?? ""))
                                                   const mermaNum = parseFloat(String(updatedRow.porcentajemerma ?? ""))
                                                   const cuNum = parseFloat(nuevoCU)
+                                                  const yearNum = Number(updatedRow.year)
+                                                  const mesNum = Number(updatedRow.mes)
                                                   const result = await actualizarCostoUnitarioMasivo([{
                                                     hotelid,
                                                     codigorapsodia,
                                                     conversion: isNaN(convNum) ? null : convNum,
                                                     porcentajemerma: isNaN(mermaNum) ? null : mermaNum,
                                                     costounitario: isNaN(cuNum) ? null : cuNum,
-                                                    ingredienteid: ingredId,
+                                                    year: Number.isFinite(yearNum) && yearNum > 0 ? yearNum : null,
+                                                    mes: Number.isFinite(mesNum) && mesNum > 0 ? mesNum : null,
                                                   }])
                                                   if (!result.success) {
                                                     toast({
@@ -2146,13 +2170,16 @@ export default function ImportarIngredientesPage() {
                                                   const num = parseFloat(valorActual)
                                                   const convCur = parseFloat(String(updatedRow.conversion ?? ""))
                                                   const mermaCur = parseFloat(String(updatedRow.porcentajemerma ?? ""))
+                                                  const yearNum = Number(updatedRow.year)
+                                                  const mesNum = Number(updatedRow.mes)
                                                   const result = await actualizarCostoUnitarioMasivo([{
                                                     hotelid,
                                                     codigorapsodia,
                                                     costounitario: isNaN(num) ? null : num,
                                                     conversion: isNaN(convCur) ? null : convCur,
                                                     porcentajemerma: isNaN(mermaCur) ? null : mermaCur,
-                                                    ingredienteid: ingredId,
+                                                    year: Number.isFinite(yearNum) && yearNum > 0 ? yearNum : null,
+                                                    mes: Number.isFinite(mesNum) && mesNum > 0 ? mesNum : null,
                                                   }])
                                                   if (!result.success) {
                                                     toast({

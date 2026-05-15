@@ -921,6 +921,11 @@ export async function actualizarCostoUnitarioMasivo(
     costounitario: number | null;
     conversion?: number | null;
     porcentajemerma?: number | null;
+    // Filtros opcionales — cuando se proveen, el UPDATE solo afecta la fila del
+    // (year, mes) correspondiente. Sin estos, agarra la primera por id ascending
+    // (comportamiento legacy: rompía si había múltiples cargas mes-a-mes).
+    year?: number | null;
+    mes?: number | null;
     // Cuando se provee, también se hace UPDATE en ingredientes.{costo,conversion,porcentajemerma}
     // filtrando por este id — usado por la edición inline en /importar/importaringredientes.
     ingredienteid?: number;
@@ -959,13 +964,17 @@ export async function actualizarCostoUnitarioMasivo(
     const hotelMap: Record<number, string> = {}
     ;(hoteles || []).forEach((h: any) => { hotelMap[h.id] = h.acronimo })
 
-    // Agrupar por (hotelid, codigorapsodia) — si un mismo codigorapsodia trae múltiples
-    // codigosecundario distintos (ingredientes con misma rapsodia pero codigo distinto en BD),
-    // se hará 1 UPDATE para el primero y N-1 INSERTs clonando la fila original.
+    // Agrupar por (hotelid, codigorapsodia, year, mes) — si un mismo codigorapsodia trae
+    // múltiples codigosecundario distintos (ingredientes con misma rapsodia pero codigo
+    // distinto en BD), se hará 1 UPDATE para el primero y N-1 INSERTs clonando la fila
+    // original. El year/mes en la key evita que un update aplique a la fila incorrecta
+    // cuando hay múltiples cargas mes-a-mes para el mismo (hotel, codigo).
     const grupos = new Map<string, typeof updates>()
     updates.forEach((u) => {
       if (!u.codigorapsodia) return
-      const key = `${u.hotelid}|${u.codigorapsodia}`
+      const yearPart = u.year ?? ""
+      const mesPart = u.mes ?? ""
+      const key = `${u.hotelid}|${u.codigorapsodia}|${yearPart}|${mesPart}`
       if (!grupos.has(key)) grupos.set(key, [])
       grupos.get(key)!.push(u)
     })
@@ -981,21 +990,25 @@ export async function actualizarCostoUnitarioMasivo(
     for (let i = 0; i < grupoEntries.length; i += BATCH) {
       const lote = grupoEntries.slice(i, i + BATCH)
       const promises = lote.map(async ([key, ups]) => {
-        const [hotelidStr, codigorapsodia] = key.split("|")
+        const [hotelidStr, codigorapsodia, yearStr, mesStr] = key.split("|")
         const acronimo = hotelMap[Number(hotelidStr)]
         if (!acronimo) return { updated: 0, inserted: 0, errors: 0, newRows: [] as any[] }
 
-        // Obtener la fila original (debería haber 1 — la insertada en handleLoadFile)
-        const { data: originals, error: selErr } = await supabase
+        // Obtener la fila original — filtrando por year/mes cuando vienen, para que el
+        // update solo afecte la carga del mes correcto.
+        let selectQuery = supabase
           .from("excel_carga_nuevo")
           .select("*")
           .eq("hotel", acronimo)
           .eq("codigo", codigorapsodia)
+        if (yearStr !== "") selectQuery = selectQuery.eq("year", Number(yearStr))
+        if (mesStr !== "") selectQuery = selectQuery.eq("mes", Number(mesStr))
+        const { data: originals, error: selErr } = await selectQuery
           .order("id", { ascending: true })
           .limit(1)
 
         if (selErr) {
-          console.error(`[DEBUG] Error fetching ${acronimo}/${codigorapsodia}:`, selErr.message)
+          console.error(`[DEBUG] Error fetching ${acronimo}/${codigorapsodia} y=${yearStr} m=${mesStr}:`, selErr.message)
           return { updated: 0, inserted: 0, errors: 1, newRows: [] }
         }
         if (!originals || originals.length === 0) {
@@ -1304,6 +1317,92 @@ export async function guardarExcelCargaNuevo(filas: any[]) {
       }
       if (data) inserted.push(...data)
       console.log(`[DEBUG] Lote excel_carga_nuevo ${i + 1}-${i + lote.length}: ${data?.length || 0} insertados`)
+    }
+
+    // Hidratar conversion + porcentajemerma en excel_carga_nuevo desde ingredientes.
+    // Match: excel_carga_nuevo.codigo = ingredientes.codigorapsodia (con hotel resuelto a hotelid).
+    // Sobreescribe lo que vino del Excel (la fuente autoritativa son las recetas).
+    let hidratados = 0
+    try {
+      const acronimosIns = [...new Set(inserted.map((r: any) => r.hotel).filter(Boolean))]
+      if (acronimosIns.length > 0) {
+        const { data: hotelesIns, error: hotErr } = await supabase
+          .from("hoteles")
+          .select("id, acronimo")
+          .in("acronimo", acronimosIns)
+        if (!hotErr && hotelesIns && hotelesIns.length > 0) {
+          const acrToHotelid: Record<string, number> = {}
+          hotelesIns.forEach((h: any) => { if (h.acronimo) acrToHotelid[String(h.acronimo).trim()] = h.id })
+
+          // Agrupar codigos por hotelid para query batched a ingredientes
+          const codigosPorHotelid: Record<number, Set<string>> = {}
+          inserted.forEach((r: any) => {
+            const hid = acrToHotelid[String(r.hotel ?? "").trim()]
+            const cod = String(r.codigo ?? "").trim()
+            if (hid && cod) {
+              if (!codigosPorHotelid[hid]) codigosPorHotelid[hid] = new Set()
+              codigosPorHotelid[hid].add(cod)
+            }
+          })
+
+          // Lookup en ingredientes (key: hotelid|codigorapsodia → {conversion, porcentajemerma})
+          const ingMap: Record<string, { conversion: number | null; porcentajemerma: number | null }> = {}
+          const LOOKUP_BATCH = 200
+          for (const [hidStr, codSet] of Object.entries(codigosPorHotelid)) {
+            const hid = Number(hidStr)
+            const codigos = [...codSet]
+            for (let i = 0; i < codigos.length; i += LOOKUP_BATCH) {
+              const lote = codigos.slice(i, i + LOOKUP_BATCH)
+              const { data: ings, error: ingErr } = await supabase
+                .from("ingredientes")
+                .select("codigorapsodia, conversion, porcentajemerma")
+                .eq("hotelid", hid)
+                .in("codigorapsodia", lote)
+              if (ingErr) {
+                console.error(`[DEBUG] Error lookup ingredientes hotelid=${hid}:`, ingErr.message)
+                continue
+              }
+              ;(ings || []).forEach((ing: any) => {
+                const k = `${hid}|${String(ing.codigorapsodia ?? "").trim()}`
+                ingMap[k] = {
+                  conversion: ing.conversion ?? null,
+                  porcentajemerma: ing.porcentajemerma ?? null,
+                }
+              })
+            }
+          }
+
+          // UPDATE batched en excel_carga_nuevo por id con los valores de ingredientes
+          const UPDATE_BATCH = 20
+          for (let i = 0; i < inserted.length; i += UPDATE_BATCH) {
+            const lote = inserted.slice(i, i + UPDATE_BATCH)
+            const promises = lote.map(async (r: any) => {
+              const hid = acrToHotelid[String(r.hotel ?? "").trim()]
+              const cod = String(r.codigo ?? "").trim()
+              if (!hid || !cod) return false
+              const match = ingMap[`${hid}|${cod}`]
+              if (!match) return false
+              const { error } = await supabase
+                .from("excel_carga_nuevo")
+                .update({ conversion: match.conversion, porcentajemerma: match.porcentajemerma })
+                .eq("id", r.id)
+              if (error) {
+                console.error(`[DEBUG] Error hidratando id=${r.id}:`, error.message)
+                return false
+              }
+              // Reflejar el nuevo valor en el objeto inserted que devolvemos al cliente
+              r.conversion = match.conversion
+              r.porcentajemerma = match.porcentajemerma
+              return true
+            })
+            const res = await Promise.all(promises)
+            hidratados += res.filter(Boolean).length
+          }
+          console.log(`[DEBUG] Hidratados conversion+porcentajemerma desde ingredientes: ${hidratados}/${inserted.length}`)
+        }
+      }
+    } catch (hidErr: any) {
+      console.error("[DEBUG] Hidratación conversion+porcentajemerma falló (no bloquea carga):", hidErr.message)
     }
 
     await registrarBitacora({
