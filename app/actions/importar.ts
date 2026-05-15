@@ -718,11 +718,38 @@ export async function buscarRecetasAfectadas(ingredienteIds: number[], hotelIdsF
       }
     }
 
+    // Enriquecer cascadingPlatillos + directPlatillos con precioventa desde
+    // platillosxmenu (primer match por platilloid). Misma logica que en
+    // respaldarHistoricoRecetas: costoporcentual = (costo / precioventa) * 100.
+    // Se hace UNA sola query con todos los platilloIds unicos para reducir RTT.
+    const todosPlatilloIds = Array.from(new Set([
+      ...cascadingPlatillos.map((c: any) => c.platilloid),
+      ...directPlatillos.map((d: any) => d.platilloid),
+    ].filter((id: any) => id != null)))
+    const precioventaMap: Record<number, number> = {}
+    if (todosPlatilloIds.length > 0) {
+      const { data: pxmRows, error: pxmErr } = await supabase
+        .from("platillosxmenu")
+        .select("platilloid, precioventa")
+        .in("platilloid", todosPlatilloIds)
+      if (pxmErr) {
+        console.error("[DEBUG] Error buscando precioventa en platillosxmenu:", pxmErr)
+      } else if (pxmRows) {
+        for (const row of pxmRows as any[]) {
+          if (precioventaMap[row.platilloid] === undefined && row.precioventa != null) {
+            precioventaMap[row.platilloid] = Number(row.precioventa)
+          }
+        }
+      }
+    }
+    cascadingPlatillos.forEach((c: any) => { c.precioventa = precioventaMap[c.platilloid] ?? null })
+    directPlatillos.forEach((d: any) => { d.precioventa = precioventaMap[d.platilloid] ?? null })
+
     const recetasUnicas = new Set(resultados.map((r: any) => r.recetaid)).size
     const subrecetasCount = resultados.filter((r: any) => r.essubreceta).length
     const platillosUnicos = new Set(cascadingPlatillos.map((c: any) => c.platilloid)).size
     const platillosDirectosUnicos = new Set(directPlatillos.map((c: any) => c.platilloid)).size
-    console.log(`[DEBUG-RECETAS] FINAL: filas=${resultados.length}, recetas únicas=${recetasUnicas}, marcadas como subreceta=${subrecetasCount}, cascading_recetas=${cascading.length}, cascading_platillos=${cascadingPlatillos.length} (platillos únicos=${platillosUnicos}), direct_platillos=${directPlatillos.length} (platillos únicos=${platillosDirectosUnicos})`)
+    console.log(`[DEBUG-RECETAS] FINAL: filas=${resultados.length}, recetas únicas=${recetasUnicas}, marcadas como subreceta=${subrecetasCount}, cascading_recetas=${cascading.length}, cascading_platillos=${cascadingPlatillos.length} (platillos únicos=${platillosUnicos}), direct_platillos=${directPlatillos.length} (platillos únicos=${platillosDirectosUnicos}), precioventa_resuelto=${Object.keys(precioventaMap).length}/${todosPlatilloIds.length}`)
 
     return {
       success: true,

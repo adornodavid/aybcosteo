@@ -68,6 +68,15 @@ export default function ImportarIngredientesPage() {
   const [showValidationDialog, setShowValidationDialog] = useState(false)
   const [missingColumns, setMissingColumns] = useState<string[]>([])
   const [filtroCambio, setFiltroCambio] = useState<string>("todos")
+  // Pestaña Visualizar — filtro de costo% nuevo configurable. Solo aplica al
+  // sub-tab "recetas" (platillos top-level con precioventa). El usuario elige
+  // umbral + comparador (mayor/menor) y activa con el toggle.
+  const [filtroCostoPctActivo, setFiltroCostoPctActivo] = useState(false)
+  const [costoPctUmbral, setCostoPctUmbral] = useState<number>(30)
+  const [costoPctComparador, setCostoPctComparador] = useState<"gt" | "lt">("gt")
+  // Umbral fijo para el color de alerta en la tarjeta (independiente del
+  // filtro). Mantiene consistencia visual aunque el usuario cambie el filtro.
+  const COSTO_PCT_ALERTA = 30
   const [showHistoricoConfirm, setShowHistoricoConfirm] = useState(false)
   const [showHistoricoResult, setShowHistoricoResult] = useState(false)
   const [loadingHistorico, setLoadingHistorico] = useState(false)
@@ -1177,15 +1186,17 @@ export default function ImportarIngredientesPage() {
   }
 
   // Editar campo en una fila no-encontrada (codigosecundario / conversion /
-  // porcentajemerma). costounitario NO es editable: se recalcula automaticamente
-  // cuando cambian conversion o porcentajemerma. Tras aplicar el cambio, también
-  // se recalcula el flag _pendiente.
+  // porcentajemerma / costounitario). costounitario es editable como override
+  // manual; sigue recalculandose automaticamente cuando cambian conversion,
+  // porcentajemerma o precio (el ultimo cambio gana). Tras aplicar el cambio,
+  // tambien se recalcula el flag _pendiente.
   const handleEditarCampoNotFound = (idx: number, campo: string, valor: string) => {
     setConversionNotFoundData((prev) => {
       const next = [...prev]
       const updated = { ...next[idx], [campo]: valor }
-      // Recalcular costounitario si cambió un input de la fórmula.
       const campoLow = campo.toLowerCase()
+      // Recalcular costounitario si cambio un input de la formula (no si el
+      // usuario edito costounitario directamente: ese valor stands).
       if (campoLow === "conversion" || campoLow === "porcentajemerma" || campoLow === "precio") {
         updated.costounitario = calcularCostoUnitarioFila(updated)
       }
@@ -2285,7 +2296,7 @@ export default function ImportarIngredientesPage() {
                       <div className="flex items-start justify-between gap-3">
                         <div className="rounded-md bg-amber-50 border border-amber-200 p-3 flex-1">
                           <p className="text-xs text-amber-900">
-                            <span className="font-semibold">{conversionNotFoundData.length}</span> insumo(s) cargados no se encontraron en el catálogo. Completa <code className="bg-amber-100 px-1 rounded">codigosecundario</code> y <code className="bg-amber-100 px-1 rounded">conversion</code> (opcional <code className="bg-amber-100 px-1 rounded">porcentajemerma</code>); el <code className="bg-amber-100 px-1 rounded">costounitario</code> se calcula automáticamente como <code className="bg-amber-100 px-1 rounded">precio / (conversion · (1 - merma))</code>. La fila se marcará en verde cuando esté lista para registrar.
+                            <span className="font-semibold">{conversionNotFoundData.length}</span> insumo(s) cargados no se encontraron en el catálogo. Completa <code className="bg-amber-100 px-1 rounded">codigosecundario</code> y <code className="bg-amber-100 px-1 rounded">conversion</code> (opcional <code className="bg-amber-100 px-1 rounded">porcentajemerma</code> en formato porcentaje, ej. <code className="bg-amber-100 px-1 rounded">10</code> = 10%); el <code className="bg-amber-100 px-1 rounded">costounitario</code> se calcula automáticamente como <code className="bg-amber-100 px-1 rounded">precio / (conversion · (1 - merma))</code> pero puedes editarlo manualmente para sobrescribir el cálculo. La fila se marcará en verde cuando esté lista para registrar.
                             {q && (
                               <span className="ml-2 text-amber-800 font-medium">
                                 · Filtrando: {filteredNotFound.length} de {conversionNotFoundData.length}
@@ -2396,15 +2407,17 @@ export default function ImportarIngredientesPage() {
                           for (let i = visibleCols.length - 1; i >= 0; i--) {
                             if (isStickyCol(visibleCols[i])) { lastStickyCol = visibleCols[i]; break }
                           }
-                          // costounitario NO es editable: se calcula a partir de
-                          // precio, conversion y porcentajemerma.
-                          const EDITABLE_COLS = new Set(["codigosecundario", "conversion", "porcentajemerma"])
+                          // costounitario es editable como override manual del calculo
+                          // automatico (precio / (conversion · (1 - merma))). El calculo
+                          // sigue activo: si el usuario edita conversion/merma/precio
+                          // despues, costounitario se sobrescribe (ultimo cambio gana).
+                          const EDITABLE_COLS = new Set(["codigosecundario", "conversion", "porcentajemerma", "costounitario"])
                           const isEditableCol = (c: string) => EDITABLE_COLS.has(c.toLowerCase())
                           // Texto vs número según la columna (codigosecundario es texto;
-                          // conversion/porcentajemerma son numéricos).
+                          // conversion/porcentajemerma/costounitario son numéricos).
                           const editableType = (c: string) =>
                             c.toLowerCase() === "codigosecundario" ? "text" : "number"
-                          const isCalculatedCol = (c: string) => c.toLowerCase() === "costounitario"
+                          const isCalculatedCol = (_c: string) => false
                           // codigosecundario es la columna "ancla" que el usuario debe
                           // capturar manualmente — la diferenciamos visualmente del resto.
                           const isCodigoSecCol = (c: string) => c.toLowerCase() === "codigosecundario"
@@ -2456,6 +2469,38 @@ export default function ImportarIngredientesPage() {
                                     // Tinte de fondo para codigosecundario: si la fila ya está
                                     // pendiente (verde), no lo aplicamos para no romper el feedback.
                                     const csBg = isCs && !isPendiente ? "bg-sky-50" : ""
+                                    // porcentajemerma se captura como porcentaje (ej. 10 = 10%)
+                                    // pero internamente se almacena como decimal (0.10) para que
+                                    // el calculo y la BD usen el formato consistente.
+                                    const isPctCol = col.toLowerCase() === "porcentajemerma"
+                                    const inputValue = (() => {
+                                      if (!isPctCol) return String(row[col] ?? "")
+                                      const raw = row[col]
+                                      if (raw === "" || raw == null) return ""
+                                      const v = parseFloat(String(raw))
+                                      if (!Number.isFinite(v)) return String(raw)
+                                      // Convertir decimal -> porcentaje y normalizar (strip ceros).
+                                      return String(parseFloat((v * 100).toFixed(6)))
+                                    })()
+                                    const onEditableChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+                                      if (!isPctCol) {
+                                        handleEditarCampoNotFound(realIdx, col, e.target.value)
+                                        return
+                                      }
+                                      const raw = e.target.value
+                                      if (raw === "") {
+                                        handleEditarCampoNotFound(realIdx, col, "")
+                                        return
+                                      }
+                                      const v = parseFloat(raw)
+                                      if (!Number.isFinite(v)) {
+                                        // Conservar el string tal cual para que el usuario pueda
+                                        // seguir escribiendo (ej. "1." en transito a "1.5").
+                                        handleEditarCampoNotFound(realIdx, col, raw)
+                                        return
+                                      }
+                                      handleEditarCampoNotFound(realIdx, col, String(v / 100))
+                                    }
                                     return (
                                       <td
                                         key={col}
@@ -2469,13 +2514,27 @@ export default function ImportarIngredientesPage() {
                                         }}
                                       >
                                         {editable ? (
-                                          <input
-                                            type={editableType(col)}
-                                            step={editableType(col) === "number" ? "any" : undefined}
-                                            value={String(row[col] ?? "")}
-                                            onChange={(e) => handleEditarCampoNotFound(realIdx, col, e.target.value)}
-                                            className={`w-full bg-transparent border-b focus:outline-none text-xs font-semibold px-0 py-0 ${isCs ? "border-sky-400 focus:border-sky-700 text-sky-900" : "border-amber-300 focus:border-amber-600 text-amber-900"}`}
-                                          />
+                                          isPctCol ? (
+                                            <div className="flex items-center gap-1 w-full">
+                                              <input
+                                                type="number"
+                                                step="any"
+                                                value={inputValue}
+                                                onChange={onEditableChange}
+                                                className="flex-1 min-w-0 bg-transparent border-b focus:outline-none text-xs font-semibold px-0 py-0 border-amber-300 focus:border-amber-600 text-amber-900"
+                                                title="Ingresa el porcentaje (ej. 10 = 10%). Se guarda como decimal (0.10)."
+                                              />
+                                              <span className="text-amber-700 text-xs font-semibold select-none">%</span>
+                                            </div>
+                                          ) : (
+                                            <input
+                                              type={editableType(col)}
+                                              step={editableType(col) === "number" ? "any" : undefined}
+                                              value={inputValue}
+                                              onChange={onEditableChange}
+                                              className={`w-full bg-transparent border-b focus:outline-none text-xs font-semibold px-0 py-0 ${isCs ? "border-sky-400 focus:border-sky-700 text-sky-900" : "border-amber-300 focus:border-amber-600 text-amber-900"}`}
+                                            />
+                                          )
                                         ) : calculated ? (
                                           calcValue || <span className="text-slate-400 not-italic font-normal">—</span>
                                         ) : (
@@ -2523,6 +2582,12 @@ export default function ImportarIngredientesPage() {
                     ingredientes: Ingrediente[];
                     subrecetasCascade: SubrecetaCascade[];
                     totalNuevo: number; delta: number; deltaPct: number;
+                    // Solo aplica a platillos: precioventa desde platillosxmenu
+                    // (primer match) y costo% = (costo/precioventa)*100. null si
+                    // el platillo no esta en ningun menu o no tiene precio.
+                    precioventa: number | null;
+                    costoPctActual: number | null;
+                    costoPctNuevo: number | null;
                   }
 
                   // Key compuesta para evitar colisión recetaid vs platilloid
@@ -2544,6 +2609,7 @@ export default function ImportarIngredientesPage() {
                         ingredientes: [],
                         subrecetasCascade: [],
                         totalNuevo: 0, delta: 0, deltaPct: 0,
+                        precioventa: null, costoPctActual: null, costoPctNuevo: null,
                       }
                     }
                     grupos[k].ingredientes.push({
@@ -2569,7 +2635,11 @@ export default function ImportarIngredientesPage() {
                         ingredientes: [],
                         subrecetasCascade: [],
                         totalNuevo: 0, delta: 0, deltaPct: 0,
+                        precioventa: row.precioventa != null ? Number(row.precioventa) : null,
+                        costoPctActual: null, costoPctNuevo: null,
                       }
+                    } else if (grupos[k].precioventa == null && row.precioventa != null) {
+                      grupos[k].precioventa = Number(row.precioventa)
                     }
                     grupos[k].ingredientes.push({
                       ingrediente: String(row.ingrediente ?? ""),
@@ -2608,6 +2678,7 @@ export default function ImportarIngredientesPage() {
                         ingredientes: [],
                         subrecetasCascade: [],
                         totalNuevo: 0, delta: 0, deltaPct: 0,
+                        precioventa: null, costoPctActual: null, costoPctNuevo: null,
                       }
                     }
                     const subBase = parseFloat(String(c.subrecetaBaseCantidad ?? "")) || 0
@@ -2640,7 +2711,11 @@ export default function ImportarIngredientesPage() {
                         ingredientes: [],
                         subrecetasCascade: [],
                         totalNuevo: 0, delta: 0, deltaPct: 0,
+                        precioventa: c.precioventa != null ? Number(c.precioventa) : null,
+                        costoPctActual: null, costoPctNuevo: null,
                       }
+                    } else if (grupos[k].precioventa == null && c.precioventa != null) {
+                      grupos[k].precioventa = Number(c.precioventa)
                     }
                     const subBase = parseFloat(String(c.subrecetaBaseCantidad ?? "")) || 0
                     const cantPlat = parseFloat(String(c.cantidadEnPlatillo ?? "")) || 0
@@ -2666,7 +2741,16 @@ export default function ImportarIngredientesPage() {
                     const totalNuevo = g.costoTotal - sumIngA - sumSubA + sumIngN + sumSubN
                     const delta = totalNuevo - g.costoTotal
                     const deltaPct = g.costoTotal > 0 ? (delta / g.costoTotal) * 100 : 0
-                    return { ...g, totalNuevo, delta, deltaPct }
+                    // costo% = (costo / precioventa) * 100 — misma formula que el
+                    // resto del sistema (analisis-costos-actions.ts, importar.ts
+                    // respaldarHistoricoRecetas, etc.). Null si falta precio.
+                    const costoPctActual = g.precioventa != null && g.precioventa > 0
+                      ? (g.costoTotal / g.precioventa) * 100
+                      : null
+                    const costoPctNuevo = g.precioventa != null && g.precioventa > 0
+                      ? (totalNuevo / g.precioventa) * 100
+                      : null
+                    return { ...g, totalNuevo, delta, deltaPct, costoPctActual, costoPctNuevo }
                   })
                   // Tab Recetas = todo lo top-level (recetas + platillos, conceptualmente lo mismo).
                   // Tab Subrecetas = componentes usados dentro de recetas/platillos.
@@ -2801,15 +2885,54 @@ export default function ImportarIngredientesPage() {
                             {g.delta > 0 ? "+" : ""}{g.delta.toFixed(2)} ({g.deltaPct > 0 ? "+" : ""}{g.deltaPct.toFixed(1)}%)
                           </div>
                         )}
+                        {/* Costo% nuevo vs actual — solo cuando hay precioventa
+                            resuelto (platillos en menu). Resaltado en rojo si
+                            excede el umbral del filtro. */}
+                        {g.costoPctNuevo != null && (
+                          <div className="mt-1 pt-1 border-t border-slate-200 flex items-center justify-between text-[10px]">
+                            <span className="text-slate-500 uppercase tracking-wide font-medium">
+                              Costo% (vs ${g.precioventa?.toFixed(2)})
+                            </span>
+                            <div className="flex items-center gap-1 font-mono">
+                              {g.costoPctActual != null && (
+                                <>
+                                  <span className="text-slate-500">{g.costoPctActual.toFixed(1)}%</span>
+                                  <span className="text-slate-400">→</span>
+                                </>
+                              )}
+                              <span className={`font-bold ${
+                                g.costoPctNuevo > COSTO_PCT_ALERTA
+                                  ? "text-red-600"
+                                  : g.costoPctNuevo > COSTO_PCT_ALERTA - 5
+                                    ? "text-amber-600"
+                                    : "text-emerald-700"
+                              }`}>
+                                {g.costoPctNuevo.toFixed(1)}%
+                              </span>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
 
                   const itemsActivos = visualizarSubTab === "recetas" ? recetas : subrecetas
                   const queryNorm = busquedaReceta.trim().toLowerCase()
-                  const itemsFiltrados = queryNorm
+                  const itemsTrasBusqueda = queryNorm
                     ? itemsActivos.filter(g => g.nombre.toLowerCase().includes(queryNorm))
                     : itemsActivos
+                  // Filtro costo% configurable: solo aplica a recetas (platillos)
+                  // con precioventa resuelto. En subrecetas costoPctNuevo siempre
+                  // es null, asi que filtrar las dejaria vacias.
+                  const aplicaFiltroPct = filtroCostoPctActivo && visualizarSubTab === "recetas"
+                  const itemsFiltrados = aplicaFiltroPct
+                    ? itemsTrasBusqueda.filter(g => {
+                        if (g.costoPctNuevo == null) return false
+                        return costoPctComparador === "gt"
+                          ? g.costoPctNuevo > costoPctUmbral
+                          : g.costoPctNuevo < costoPctUmbral
+                      })
+                    : itemsTrasBusqueda
 
                   // Aplicar ordenamiento por variación de costo
                   const itemsOrdenados = [...itemsFiltrados].sort((a, b) => {
@@ -2891,6 +3014,47 @@ export default function ImportarIngredientesPage() {
                           <option value="mayor_abs">↕ Mayor variación absoluta</option>
                           <option value="menor_abs">≈ Menor variación absoluta</option>
                         </select>
+                        {visualizarSubTab === "recetas" && (
+                          <div className={`flex items-center gap-1 border rounded-md px-2 py-1 transition-colors ${
+                            filtroCostoPctActivo ? "bg-red-50 border-red-300" : "bg-white border-slate-300"
+                          }`}>
+                            <AlertTriangle className={`h-4 w-4 ${filtroCostoPctActivo ? "text-red-600" : "text-slate-400"}`} />
+                            <span className="text-xs font-semibold text-slate-700">Costo%</span>
+                            <select
+                              value={costoPctComparador}
+                              onChange={(e) => setCostoPctComparador(e.target.value as "gt" | "lt")}
+                              title="Mayor o menor que el umbral"
+                              className="text-sm font-semibold bg-transparent border-0 focus:outline-none cursor-pointer px-0.5"
+                            >
+                              <option value="gt">&gt; mayor</option>
+                              <option value="lt">&lt; menor</option>
+                            </select>
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="any"
+                              value={costoPctUmbral}
+                              onChange={(e) => {
+                                const v = parseFloat(e.target.value)
+                                setCostoPctUmbral(Number.isFinite(v) ? v : 0)
+                              }}
+                              className="w-14 text-sm font-semibold text-right bg-transparent border-b border-slate-300 focus:border-slate-500 focus:outline-none px-1 py-0"
+                            />
+                            <span className="text-xs font-semibold text-slate-600">%</span>
+                            <button
+                              onClick={() => setFiltroCostoPctActivo(v => !v)}
+                              title={filtroCostoPctActivo ? "Desactivar filtro" : `Aplicar filtro: costo% ${costoPctComparador === "gt" ? ">" : "<"} ${costoPctUmbral}%`}
+                              className={`ml-1 px-2 py-0.5 text-xs font-bold rounded transition-colors ${
+                                filtroCostoPctActivo
+                                  ? "bg-red-600 text-white hover:bg-red-700"
+                                  : "bg-slate-200 text-slate-700 hover:bg-slate-300"
+                              }`}
+                            >
+                              {filtroCostoPctActivo ? "Activo ✓" : "Filtrar"}
+                            </button>
+                          </div>
+                        )}
                         <Button
                           size="sm"
                           onClick={() => descargarReporteVisualizar(itemsOrdenados, visualizarSubTab)}
@@ -2904,11 +3068,19 @@ export default function ImportarIngredientesPage() {
                       </div>
 
                       {/* Indicador de filtro activo */}
-                      {queryNorm && (
-                        <div className="text-xs text-slate-500">
-                          Mostrando <span className="font-semibold text-slate-700">{itemsFiltrados.length}</span> de{" "}
-                          <span className="font-semibold text-slate-700">{itemsActivos.length}</span>{" "}
-                          {visualizarSubTab === "recetas" ? "receta(s)" : "subreceta(s)"} que coinciden con "{busquedaReceta}"
+                      {(queryNorm || aplicaFiltroPct) && (
+                        <div className="text-xs text-slate-500 flex flex-wrap items-center gap-2">
+                          <span>
+                            Mostrando <span className="font-semibold text-slate-700">{itemsFiltrados.length}</span> de{" "}
+                            <span className="font-semibold text-slate-700">{itemsActivos.length}</span>{" "}
+                            {visualizarSubTab === "recetas" ? "receta(s)" : "subreceta(s)"}
+                          </span>
+                          {queryNorm && (
+                            <span className="text-slate-500">· busqueda "<span className="font-semibold text-slate-700">{busquedaReceta}</span>"</span>
+                          )}
+                          {aplicaFiltroPct && (
+                            <span className="text-red-600 font-semibold">· costo% nuevo {costoPctComparador === "gt" ? ">" : "<"} {costoPctUmbral}%</span>
+                          )}
                         </div>
                       )}
 
