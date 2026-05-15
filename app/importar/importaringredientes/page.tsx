@@ -3095,7 +3095,8 @@ export default function ImportarIngredientesPage() {
                         <div className="flex justify-end pt-3 border-t border-slate-200">
                           <Button
                             onClick={handleClickActualizarNuevosCostos}
-                            disabled={loadingHistorico || conversionData.length === 0}
+                            disabled
+                            title="Temporalmente deshabilitado"
                             className="bg-emerald-600 hover:bg-emerald-700 text-white"
                           >
                             <FileUp className="h-4 w-4 mr-2" />
