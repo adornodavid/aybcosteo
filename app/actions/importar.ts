@@ -948,12 +948,13 @@ export async function actualizarCostoUnitarioMasivo(
     costounitario: number | null;
     conversion?: number | null;
     porcentajemerma?: number | null;
+    cantidadproducto?: number | null;
     // Filtros opcionales — cuando se proveen, el UPDATE solo afecta la fila del
     // (year, mes) correspondiente. Sin estos, agarra la primera por id ascending
     // (comportamiento legacy: rompía si había múltiples cargas mes-a-mes).
     year?: number | null;
     mes?: number | null;
-    // Cuando se provee, también se hace UPDATE en ingredientes.{costo,conversion,porcentajemerma}
+    // Cuando se provee, también se hace UPDATE en ingredientes.{costo,conversion,porcentajemerma,cantidadproducto}
     // filtrando por este id — usado por la edición inline en /importar/importaringredientes.
     ingredienteid?: number;
   }[]
@@ -1050,6 +1051,7 @@ export async function actualizarCostoUnitarioMasivo(
         if (first.codigosecundario !== undefined) updateObj.codigosecundario = first.codigosecundario
         if (first.conversion !== undefined) updateObj.conversion = first.conversion
         if (first.porcentajemerma !== undefined) updateObj.porcentajemerma = first.porcentajemerma
+        if (first.cantidadproducto !== undefined) updateObj.cantidadproducto = first.cantidadproducto
         const { error: updErr, count: updCount } = await supabase
           .from("excel_carga_nuevo")
           .update(updateObj, { count: "exact" })
@@ -1073,6 +1075,7 @@ export async function actualizarCostoUnitarioMasivo(
             }
             if (u.conversion !== undefined) clone.conversion = u.conversion
             if (u.porcentajemerma !== undefined) clone.porcentajemerma = u.porcentajemerma
+            if (u.cantidadproducto !== undefined) clone.cantidadproducto = u.cantidadproducto
             return clone
           })
           const { data: ins, error: insErr } = await supabase
@@ -1115,6 +1118,7 @@ export async function actualizarCostoUnitarioMasivo(
           if (u.costounitario !== null && u.costounitario !== undefined) updateObj.costo = u.costounitario
           if (u.conversion !== undefined) updateObj.conversion = u.conversion
           if (u.porcentajemerma !== undefined) updateObj.porcentajemerma = u.porcentajemerma
+          if (u.cantidadproducto !== undefined) updateObj.cantidadproducto = u.cantidadproducto
           if (Object.keys(updateObj).length <= 1) return { ok: true } // solo fechamodificacion → no hay nada útil que actualizar
 
           const { error } = await supabase
@@ -1294,6 +1298,7 @@ export async function guardarExcelCargaNuevo(filas: any[]) {
       familia: toStr(get(fila, "familia")),
       porcentajemerma: toFloat(get(fila, "porcentajemerma", "merma")),
       subfamilia: toStr(get(fila, "subfamilia")),
+      cantidadproducto: toInt(get(fila, "cantidadproducto")),
       fechacarga: fechaHoy,
       activo: true,
     }))
@@ -1372,8 +1377,8 @@ export async function guardarExcelCargaNuevo(filas: any[]) {
             }
           })
 
-          // Lookup en ingredientes (key: hotelid|codigorapsodia → {conversion, porcentajemerma})
-          const ingMap: Record<string, { conversion: number | null; porcentajemerma: number | null }> = {}
+          // Lookup en ingredientes (key: hotelid|codigorapsodia → {conversion, porcentajemerma, cantidadproducto})
+          const ingMap: Record<string, { conversion: number | null; porcentajemerma: number | null; cantidadproducto: number | null }> = {}
           const LOOKUP_BATCH = 200
           for (const [hidStr, codSet] of Object.entries(codigosPorHotelid)) {
             const hid = Number(hidStr)
@@ -1382,7 +1387,7 @@ export async function guardarExcelCargaNuevo(filas: any[]) {
               const lote = codigos.slice(i, i + LOOKUP_BATCH)
               const { data: ings, error: ingErr } = await supabase
                 .from("ingredientes")
-                .select("codigorapsodia, conversion, porcentajemerma")
+                .select("codigorapsodia, conversion, porcentajemerma, cantidadproducto")
                 .eq("hotelid", hid)
                 .in("codigorapsodia", lote)
               if (ingErr) {
@@ -1394,6 +1399,7 @@ export async function guardarExcelCargaNuevo(filas: any[]) {
                 ingMap[k] = {
                   conversion: ing.conversion ?? null,
                   porcentajemerma: ing.porcentajemerma ?? null,
+                  cantidadproducto: ing.cantidadproducto ?? null,
                 }
               })
             }
@@ -1411,7 +1417,7 @@ export async function guardarExcelCargaNuevo(filas: any[]) {
               if (!match) return false
               const { error } = await supabase
                 .from("excel_carga_nuevo")
-                .update({ conversion: match.conversion, porcentajemerma: match.porcentajemerma })
+                .update({ conversion: match.conversion, porcentajemerma: match.porcentajemerma, cantidadproducto: match.cantidadproducto })
                 .eq("id", r.id)
               if (error) {
                 console.error(`[DEBUG] Error hidratando id=${r.id}:`, error.message)
@@ -1420,12 +1426,13 @@ export async function guardarExcelCargaNuevo(filas: any[]) {
               // Reflejar el nuevo valor en el objeto inserted que devolvemos al cliente
               r.conversion = match.conversion
               r.porcentajemerma = match.porcentajemerma
+              r.cantidadproducto = match.cantidadproducto
               return true
             })
             const res = await Promise.all(promises)
             hidratados += res.filter(Boolean).length
           }
-          console.log(`[DEBUG] Hidratados conversion+porcentajemerma desde ingredientes: ${hidratados}/${inserted.length}`)
+          console.log(`[DEBUG] Hidratados conversion+porcentajemerma+cantidadproducto desde ingredientes: ${hidratados}/${inserted.length}`)
         }
       }
     } catch (hidErr: any) {
@@ -1960,6 +1967,7 @@ export async function registrarInsumosNuevos(
     costo: number | null
     conversion: number | null
     porcentajemerma: number | null
+    cantidadproducto: number | null
     year: number | null
     mes: number | null
   }[]
@@ -1992,6 +2000,7 @@ export async function registrarInsumosNuevos(
       costo: f.costo,
       conversion: f.conversion,
       porcentajemerma: f.porcentajemerma,
+      cantidadproducto: f.cantidadproducto,
       year: f.year,
       mes: f.mes,
       activo: true,

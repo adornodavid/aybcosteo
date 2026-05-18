@@ -139,7 +139,14 @@ export default function ImportarIngredientesPage() {
     rows.map((row: any) => {
       const csExistente = String(row.codigosecundario ?? "").trim()
       const cs = csExistente || deriveCodigoSecundarioFromCodigo(row.codigo)
-      const next: any = { ...row, codigosecundario: cs }
+      // Asegurar que cantidadproducto exista como key aunque el Excel no la
+      // traiga: sin esto, la columna no aparece en visibleCols (que se deriva
+      // de Object.keys del primer row).
+      const next: any = {
+        cantidadproducto: row.cantidadproducto ?? "",
+        ...row,
+        codigosecundario: cs,
+      }
       const conv = parseFloat(String(next.conversion ?? ""))
       const cu = parseFloat(String(next.costounitario ?? ""))
       if (cs && Number.isFinite(conv) && conv > 0 && Number.isFinite(cu) && cu >= 0) {
@@ -566,10 +573,10 @@ export default function ImportarIngredientesPage() {
           // excel_carga_nuevo para "buscar por hotel"). En ambos casos las columnas
           // se llaman igual (year, mes), pero en Excel pueden venir con espacios.
           const yearMesMap: Record<string, { year: any; mes: any }> = {}
-          // Mapa codigorapsodia -> {conversion, porcentajemerma} desde excel_carga_nuevo
+          // Mapa codigorapsodia -> {conversion, porcentajemerma, cantidadproducto} desde excel_carga_nuevo
           // (dataParam viene siempre de excel_carga_nuevo: tras carga de Excel guarda+lee, o vía
           // buscar por hotel). La pestaña 2 muestra estos valores en vez de los de ingredientes.
-          const convMermaMap: Record<string, { conversion: any; porcentajemerma: any }> = {}
+          const convMermaMap: Record<string, { conversion: any; porcentajemerma: any; cantidadproducto: any }> = {}
           dataParam.forEach((fila: any) => {
             // Priorizar "codigo" (donde está el rapsodia) sobre "codigosecundario" (corto)
             const codigoKey = Object.keys(fila).find(k =>
@@ -587,6 +594,7 @@ export default function ImportarIngredientesPage() {
               const kl = k.toLowerCase().trim()
               return kl === "porcentajemerma" || kl === "merma"
             })
+            const cantProdKey = Object.keys(fila).find(k => k.toLowerCase().trim() === "cantidadproducto")
             const codigo = codigoKey ? String(fila[codigoKey]).trim() : ""
             const precio = precioKey ? String(fila[precioKey]).trim() : ""
             if (codigo) {
@@ -598,6 +606,7 @@ export default function ImportarIngredientesPage() {
               convMermaMap[codigo] = {
                 conversion: convKey !== undefined ? fila[convKey] : null,
                 porcentajemerma: mermaKey !== undefined ? fila[mermaKey] : null,
+                cantidadproducto: cantProdKey !== undefined ? fila[cantProdKey] : null,
               }
             }
           })
@@ -616,13 +625,14 @@ export default function ImportarIngredientesPage() {
           } else {
             colsDisplayConSec.push("codigosecundario")
           }
-          // Reordenar: "conversion" después de "precio" y "porcentajemerma" después de "costounitario".
-          // Ambas son editables y recalculan costounitario al cambiar.
+          // Reordenar: "conversion" después de "precio", "porcentajemerma" después de "costounitario"
+          // y "cantidadproducto" inmediatamente después de "porcentajemerma".
+          // Todas son editables y recalculan costounitario al cambiar.
           const colsSinEditables = colsDisplayConSec.filter(c => {
             const cl = c.toLowerCase()
-            return cl !== "conversion" && cl !== "porcentajemerma"
+            return cl !== "conversion" && cl !== "porcentajemerma" && cl !== "cantidadproducto"
           })
-          const cols = [...colsSinEditables, "precio", "conversion", "costo(actual)", "costounitario", "porcentajemerma", "Cambio"]
+          const cols = [...colsSinEditables, "precio", "conversion", "costo(actual)", "costounitario", "porcentajemerma", "cantidadproducto", "Cambio"]
 
           // Duplicidad REAL: misma combinación (codigorapsodia + codigosecundario).
           // Si codigorapsodia repite con codigosecundario distinto NO es duplicado (es cascade legítimo).
@@ -668,12 +678,14 @@ export default function ImportarIngredientesPage() {
             filtrado.precio = precioStr
             filtrado["costo(actual)"] = row.costo ?? ""
 
-            // Override conversion + porcentajemerma desde excel_carga_nuevo (convMermaMap)
-            // en lugar de los de ingredientes. Si la fila de ECN no trae valor, queda vacío.
+            // Override conversion + porcentajemerma + cantidadproducto desde excel_carga_nuevo
+            // (convMermaMap) en lugar de los de ingredientes. Si la fila de ECN no trae valor,
+            // queda vacío.
             const ecnVals = convMermaMap[cr]
             if (ecnVals) {
               filtrado.conversion = ecnVals.conversion ?? ""
               filtrado.porcentajemerma = ecnVals.porcentajemerma ?? ""
+              filtrado.cantidadproducto = ecnVals.cantidadproducto ?? ""
             }
 
             // Display de porcentajemerma: BD almacena decimal (0.05) pero la UI lo muestra como
@@ -685,9 +697,13 @@ export default function ImportarIngredientesPage() {
               : String(parseFloat((mermaDecimalInicial * 100).toFixed(6)))
 
             // Calcular costounitario usando los valores de excel_carga_nuevo (no ingredientes)
-            const precio = parseFloat(precioStr)
+            const precioRaw = parseFloat(precioStr)
             const conversion = parseFloat(String(filtrado.conversion ?? ""))
             const porcentajemerma = parseFloat(String(filtrado.porcentajemerma ?? ""))
+            const cantidadproducto = parseFloat(String(filtrado.cantidadproducto ?? ""))
+            const precio = !isNaN(cantidadproducto) && cantidadproducto > 0
+              ? precioRaw / cantidadproducto
+              : precioRaw
 
             if (!isNaN(precio) && !isNaN(conversion) && conversion !== 0) {
               if (!isNaN(porcentajemerma) && porcentajemerma !== 0) {
@@ -1171,14 +1187,19 @@ export default function ImportarIngredientesPage() {
   }
 
   // Replica la fórmula de runGenerarConversion para "Nuevos / No encontrados":
-  //   costounitario = precio / (conversion * (1 - porcentajemerma))   si merma > 0
-  //   costounitario = precio / conversion                              si no
+  //   precioBase = cantidadproducto > 0 ? precio / cantidadproducto : precio
+  //   costounitario = precioBase / (conversion * (1 - porcentajemerma))   si merma > 0
+  //   costounitario = precioBase / conversion                              si no
   // Devuelve "" cuando faltan datos para calcular.
   const calcularCostoUnitarioFila = (row: any): string => {
-    const precio = parseFloat(String(row.precio ?? ""))
+    const precioRaw = parseFloat(String(row.precio ?? ""))
     const conversion = parseFloat(String(row.conversion ?? ""))
     const porcentajemerma = parseFloat(String(row.porcentajemerma ?? ""))
-    if (isNaN(precio) || isNaN(conversion) || conversion === 0) return ""
+    const cantidadproducto = parseFloat(String(row.cantidadproducto ?? ""))
+    if (isNaN(precioRaw) || isNaN(conversion) || conversion === 0) return ""
+    const precio = !isNaN(cantidadproducto) && cantidadproducto > 0
+      ? precioRaw / cantidadproducto
+      : precioRaw
     if (!isNaN(porcentajemerma) && porcentajemerma !== 0) {
       return (precio / (conversion * (1 - porcentajemerma))).toFixed(6)
     }
@@ -1197,7 +1218,7 @@ export default function ImportarIngredientesPage() {
       const campoLow = campo.toLowerCase()
       // Recalcular costounitario si cambio un input de la formula (no si el
       // usuario edito costounitario directamente: ese valor stands).
-      if (campoLow === "conversion" || campoLow === "porcentajemerma" || campoLow === "precio") {
+      if (campoLow === "conversion" || campoLow === "porcentajemerma" || campoLow === "precio" || campoLow === "cantidadproducto") {
         updated.costounitario = calcularCostoUnitarioFila(updated)
       }
       if (isFilaCompletaParaRegistrar(updated)) {
@@ -1236,6 +1257,7 @@ export default function ImportarIngredientesPage() {
       const conv = parseFloat(String(row.conversion ?? ""))
       const cu = parseFloat(String(row.costounitario ?? ""))
       const merma = parseFloat(String(row.porcentajemerma ?? ""))
+      const cantProd = parseInt(String(row.cantidadproducto ?? ""), 10)
       const y = parseInt(String(row.year ?? ""), 10)
       const m = parseInt(String(row.mes ?? ""), 10)
       filas.push({
@@ -1246,6 +1268,7 @@ export default function ImportarIngredientesPage() {
         costo: Number.isFinite(cu) ? cu : null,
         conversion: Number.isFinite(conv) ? conv : null,
         porcentajemerma: Number.isFinite(merma) ? merma : null,
+        cantidadproducto: Number.isFinite(cantProd) ? cantProd : null,
         year: Number.isFinite(y) ? y : null,
         mes: Number.isFinite(m) ? m : null,
       })
@@ -1878,32 +1901,55 @@ export default function ImportarIngredientesPage() {
                       >
                         <table className="border-collapse" style={{ tableLayout: "fixed", width: "max-content" }}>
                           <colgroup>
-                            <col style={{ width: "48px" }} />
+                            <col style={{ width: "40px" }} />
                             {conversionColumnas.map((col) => {
                               const stickyColumns = ["id", "codigo", "nombre"]
                               const stickyIndex = stickyColumns.indexOf(col.toLowerCase())
-                              const stickyWidthValues = [60, 100, 240]
+                              const stickyWidthValues = [50, 90, 200]
                               if (stickyIndex !== -1) {
                                 return <col key={col} style={{ width: `${stickyWidthValues[stickyIndex]}px` }} />
                               }
-                              return <col key={col} style={{ width: "140px" }} />
+                              // Anchos compactos por columna (heurística según contenido típico).
+                              const colWidthMap: Record<string, number> = {
+                                year: 55,
+                                mes: 45,
+                                hotel: 60,
+                                hotelid: 50,
+                                cantidad: 65,
+                                precio: 70,
+                                "costo(actual)": 85,
+                                costounitario: 90,
+                                conversion: 75,
+                                porcentajemerma: 80,
+                                cantidadproducto: 90,
+                                codigorapsodia: 110,
+                                codigosecundario: 100,
+                                unidadbase: 80,
+                                unidad: 70,
+                                subfamilia: 110,
+                                familia: 100,
+                                articulo: 200,
+                                Cambio: 55,
+                              }
+                              const w = colWidthMap[col.toLowerCase()] ?? colWidthMap[col] ?? 100
+                              return <col key={col} style={{ width: `${w}px` }} />
                             })}
-                            <col style={{ width: "64px" }} />
+                            <col style={{ width: "52px" }} />
                           </colgroup>
                           <thead className="sticky top-0 z-20">
                             <tr>
-                              <th className="px-2 py-1 text-left text-xs font-semibold whitespace-nowrap bg-slate-900 text-white sticky left-0 z-30" style={{ width: "48px" }}>
+                              <th className="px-1.5 py-1 text-left text-xs font-semibold whitespace-nowrap bg-slate-900 text-white sticky left-0 z-30" style={{ width: "40px" }}>
                                 #
                               </th>
                               {conversionColumnas.map((col, colIndex) => {
                                 const stickyColumns = ["id", "codigo", "nombre"]
                                 const stickyIndex = stickyColumns.indexOf(col.toLowerCase())
                                 const isSticky = stickyIndex !== -1
-                                const stickyLeftValues = [48, 108, 208]
-                                const stickyWidthValues = [60, 100, 240]
+                                const stickyLeftValues = [40, 90, 180]
+                                const stickyWidthValues = [50, 90, 200]
                                 const isLastSticky = isSticky && stickyIndex === stickyColumns.length - 1
                                 const isGreen = col === "costounitario"
-                                const isEditableHeader = col === "conversion" || col === "porcentajemerma"
+                                const isEditableHeader = col === "conversion" || col === "porcentajemerma" || col === "cantidadproducto"
 
                                 return (
                                 <th
@@ -1953,7 +1999,7 @@ export default function ImportarIngredientesPage() {
                                 </th>
                                 )
                               })}
-                              <th className="px-2 py-1 text-center text-xs font-semibold whitespace-nowrap w-16 bg-slate-900 text-white">
+                              <th className="px-1.5 py-1 text-center text-xs font-semibold whitespace-nowrap bg-slate-900 text-white" style={{ width: "52px" }}>
                                 Acción
                               </th>
                             </tr>
@@ -1984,19 +2030,20 @@ export default function ImportarIngredientesPage() {
                                     : displayIndex % 2 === 0 ? "bg-slate-50 hover:bg-blue-50" : "bg-white hover:bg-blue-50"
                                 } transition-colors`}
                               >
-                                <td className={`px-2 py-1 text-xs whitespace-nowrap font-semibold w-12 sticky left-0 z-10 ${esDuplicado ? "text-red-700 bg-red-100" : "text-slate-500 " + rowBg}`}>
+                                <td className={`px-1.5 py-1 text-xs whitespace-nowrap font-semibold sticky left-0 z-10 ${esDuplicado ? "text-red-700 bg-red-100" : "text-slate-500 " + rowBg}`} style={{ width: "40px" }}>
                                   {displayIndex + 1}
                                 </td>
                                 {conversionColumnas.map((col) => {
                                   const stickyColumns = ["id", "codigo", "nombre"]
                                   const stickyIndex = stickyColumns.indexOf(col.toLowerCase())
                                   const isSticky = stickyIndex !== -1
-                                  const stickyLeftValues = [48, 108, 208]
-                                  const stickyWidthValues = [60, 100, 240]
+                                  const stickyLeftValues = [40, 90, 180]
+                                  const stickyWidthValues = [50, 90, 200]
                                   const isLastSticky = isSticky && stickyIndex === stickyColumns.length - 1
                                   const isGreen = col === "costounitario"
                                   const isConversion = col === "conversion"
                                   const isPorcentajeMerma = col === "porcentajemerma"
+                                  const isCantidadProducto = col === "cantidadproducto"
 
                                   const isCambio = col === "Cambio"
 
@@ -2006,7 +2053,7 @@ export default function ImportarIngredientesPage() {
                                     title={isSticky ? String(row[col] ?? "") : undefined}
                                     className={`text-xs ${!isSticky ? "px-2 py-1 whitespace-nowrap" : ""} ${
                                       isGreen ? "bg-green-50 text-green-800 font-semibold"
-                                      : (isConversion || isPorcentajeMerma) ? "bg-amber-50 text-amber-900 font-semibold"
+                                      : (isConversion || isPorcentajeMerma || isCantidadProducto) ? "bg-amber-50 text-amber-900 font-semibold"
                                       : isCambio ? "text-center"
                                       : isSticky ? (esDuplicado ? "bg-red-100" : rowBg) + " font-medium"
                                       : "text-slate-700"
@@ -2034,7 +2081,7 @@ export default function ImportarIngredientesPage() {
                                           : row[col] === "cambio"
                                             ? <span className="inline-block w-3 h-3 rounded-full bg-orange-400" />
                                             : null)
-                                      : (isConversion || isPorcentajeMerma)
+                                      : (isConversion || isPorcentajeMerma || isCantidadProducto)
                                         ? (
                                           <input
                                             type="text"
@@ -2047,6 +2094,8 @@ export default function ImportarIngredientesPage() {
                                               let updatedRow: any
                                               if (isConversion) {
                                                 updatedRow = { ...newData[originalIndex], conversion: newVal }
+                                              } else if (isCantidadProducto) {
+                                                updatedRow = { ...newData[originalIndex], cantidadproducto: newVal }
                                               } else {
                                                 // porcentajemerma: el usuario captura porcentaje ("50"),
                                                 // pero internamente y en BD se guarda como decimal (0.5).
@@ -2059,9 +2108,11 @@ export default function ImportarIngredientesPage() {
                                                 }
                                               }
 
-                                              const precio = parseFloat(String(updatedRow.precio ?? ""))
+                                              const precioRaw = parseFloat(String(updatedRow.precio ?? ""))
                                               const conv = parseFloat(String(updatedRow.conversion ?? ""))
                                               const merma = parseFloat(String(updatedRow.porcentajemerma ?? ""))
+                                              const cantProd = parseFloat(String(updatedRow.cantidadproducto ?? ""))
+                                              const precio = !isNaN(cantProd) && cantProd > 0 ? precioRaw / cantProd : precioRaw
 
                                               let nuevoCU = ""
                                               if (!isNaN(precio) && !isNaN(conv) && conv !== 0) {
@@ -2092,6 +2143,7 @@ export default function ImportarIngredientesPage() {
                                                 costoUpdateTimersRef.current[ingredId] = setTimeout(async () => {
                                                   const convNum = parseFloat(String(updatedRow.conversion ?? ""))
                                                   const mermaNum = parseFloat(String(updatedRow.porcentajemerma ?? ""))
+                                                  const cantProdNum = parseInt(String(updatedRow.cantidadproducto ?? ""), 10)
                                                   const cuNum = parseFloat(nuevoCU)
                                                   const yearNum = Number(updatedRow.year)
                                                   const mesNum = Number(updatedRow.mes)
@@ -2100,6 +2152,7 @@ export default function ImportarIngredientesPage() {
                                                     codigorapsodia,
                                                     conversion: isNaN(convNum) ? null : convNum,
                                                     porcentajemerma: isNaN(mermaNum) ? null : mermaNum,
+                                                    cantidadproducto: Number.isFinite(cantProdNum) ? cantProdNum : null,
                                                     costounitario: isNaN(cuNum) ? null : cuNum,
                                                     year: Number.isFinite(yearNum) && yearNum > 0 ? yearNum : null,
                                                     mes: Number.isFinite(mesNum) && mesNum > 0 ? mesNum : null,
@@ -2181,6 +2234,7 @@ export default function ImportarIngredientesPage() {
                                                   const num = parseFloat(valorActual)
                                                   const convCur = parseFloat(String(updatedRow.conversion ?? ""))
                                                   const mermaCur = parseFloat(String(updatedRow.porcentajemerma ?? ""))
+                                                  const cantProdCur = parseInt(String(updatedRow.cantidadproducto ?? ""), 10)
                                                   const yearNum = Number(updatedRow.year)
                                                   const mesNum = Number(updatedRow.mes)
                                                   const result = await actualizarCostoUnitarioMasivo([{
@@ -2189,6 +2243,7 @@ export default function ImportarIngredientesPage() {
                                                     costounitario: isNaN(num) ? null : num,
                                                     conversion: isNaN(convCur) ? null : convCur,
                                                     porcentajemerma: isNaN(mermaCur) ? null : mermaCur,
+                                                    cantidadproducto: Number.isFinite(cantProdCur) ? cantProdCur : null,
                                                     year: Number.isFinite(yearNum) && yearNum > 0 ? yearNum : null,
                                                     mes: Number.isFinite(mesNum) && mesNum > 0 ? mesNum : null,
                                                   }])
@@ -2211,7 +2266,7 @@ export default function ImportarIngredientesPage() {
                                   </td>
                                   )
                                 })}
-                                <td className="px-2 py-1 whitespace-nowrap w-16 text-center">
+                                <td className="px-1.5 py-1 whitespace-nowrap text-center" style={{ width: "52px" }}>
                                   <button
                                     onClick={() => solicitarEliminarFilaConversion(originalIndex)}
                                     disabled={loadingImport || loadingVisualizar || eliminandoRegistro}
@@ -2327,23 +2382,24 @@ export default function ImportarIngredientesPage() {
                           // Anchos por columna (heurística según contenido típico).
                           // Si una columna no está mapeada, usa DEFAULT_WIDTH.
                           const COL_WIDTHS: Record<string, number> = {
-                            id: 60,
-                            codigo: 130,
-                            codigorapsodia: 130,
-                            codigosecundario: 110,
-                            hotel: 70,
-                            articulo: 220,
-                            year: 60,
-                            mes: 50,
-                            cantidad: 75,
-                            precio: 80,
-                            unidadbase: 100,
-                            conversion: 90,
-                            costounitario: 110,
-                            porcentajemerma: 110,
-                            subfamilia: 130,
+                            id: 50,
+                            codigo: 110,
+                            codigorapsodia: 110,
+                            codigosecundario: 95,
+                            hotel: 60,
+                            articulo: 180,
+                            year: 55,
+                            mes: 45,
+                            cantidad: 65,
+                            precio: 70,
+                            unidadbase: 80,
+                            conversion: 75,
+                            costounitario: 90,
+                            porcentajemerma: 80,
+                            cantidadproducto: 90,
+                            subfamilia: 110,
                           }
-                          const DEFAULT_WIDTH = 110
+                          const DEFAULT_WIDTH = 95
                           const widthOf = (col: string) => COL_WIDTHS[col.toLowerCase()] ?? DEFAULT_WIDTH
                           const rawCols = Object.keys(conversionNotFoundData[0] || {}).filter(isVisibleCol)
                           // Intercambiar articulo <-> codigosecundario para que articulo
@@ -2380,7 +2436,7 @@ export default function ImportarIngredientesPage() {
                             }
                           }
                           // Mover `codigosecundario` justo a la derecha de `unidadbase`.
-                          // Resultado: ... | precio | unidadbase | codigosecundario | conversion | costounitario | porcentajemerma | ...
+                          // Resultado: ... | unidadbase | codigosecundario | ...
                           {
                             const idxCsFinal = visibleCols.findIndex((c) => c.toLowerCase() === "codigosecundario")
                             const idxUnidad = visibleCols.findIndex((c) => c.toLowerCase() === "unidadbase")
@@ -2388,6 +2444,28 @@ export default function ImportarIngredientesPage() {
                               const [csCol] = visibleCols.splice(idxCsFinal, 1)
                               const newIdxUnidad = visibleCols.findIndex((c) => c.toLowerCase() === "unidadbase")
                               visibleCols.splice(newIdxUnidad + 1, 0, csCol)
+                            }
+                          }
+                          // Mover `precio` justo a la derecha de `codigosecundario`.
+                          // Resultado: ... | unidadbase | codigosecundario | precio | conversion | costounitario | porcentajemerma | cantidadproducto | ...
+                          {
+                            const idxPrecio = visibleCols.findIndex((c) => c.toLowerCase() === "precio")
+                            const idxCs = visibleCols.findIndex((c) => c.toLowerCase() === "codigosecundario")
+                            if (idxPrecio !== -1 && idxCs !== -1 && idxPrecio !== idxCs + 1) {
+                              const [precioCol] = visibleCols.splice(idxPrecio, 1)
+                              const newIdxCs = visibleCols.findIndex((c) => c.toLowerCase() === "codigosecundario")
+                              visibleCols.splice(newIdxCs + 1, 0, precioCol)
+                            }
+                          }
+                          // Mover `cantidadproducto` justo a la derecha de `porcentajemerma`.
+                          // Resultado: ... | porcentajemerma | cantidadproducto | ...
+                          {
+                            const idxCantProd = visibleCols.findIndex((c) => c.toLowerCase() === "cantidadproducto")
+                            const idxMerma = visibleCols.findIndex((c) => c.toLowerCase() === "porcentajemerma")
+                            if (idxCantProd !== -1 && idxMerma !== -1 && idxCantProd !== idxMerma + 1) {
+                              const [cpCol] = visibleCols.splice(idxCantProd, 1)
+                              const newIdxMerma = visibleCols.findIndex((c) => c.toLowerCase() === "porcentajemerma")
+                              visibleCols.splice(newIdxMerma + 1, 0, cpCol)
                             }
                           }
                           // Columnas sticky en pestaña Nuevos: id, codigo, articulo
@@ -2411,10 +2489,10 @@ export default function ImportarIngredientesPage() {
                           // automatico (precio / (conversion · (1 - merma))). El calculo
                           // sigue activo: si el usuario edita conversion/merma/precio
                           // despues, costounitario se sobrescribe (ultimo cambio gana).
-                          const EDITABLE_COLS = new Set(["codigosecundario", "conversion", "porcentajemerma", "costounitario"])
+                          const EDITABLE_COLS = new Set(["codigosecundario", "conversion", "porcentajemerma", "cantidadproducto", "costounitario"])
                           const isEditableCol = (c: string) => EDITABLE_COLS.has(c.toLowerCase())
                           // Texto vs número según la columna (codigosecundario es texto;
-                          // conversion/porcentajemerma/costounitario son numéricos).
+                          // conversion/porcentajemerma/cantidadproducto/costounitario son numéricos).
                           const editableType = (c: string) =>
                             c.toLowerCase() === "codigosecundario" ? "text" : "number"
                           const isCalculatedCol = (_c: string) => false
