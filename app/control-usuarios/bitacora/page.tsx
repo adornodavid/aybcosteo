@@ -193,7 +193,7 @@ function PageInner() {
                   onClick={() => router.push("/control-usuarios")}
                 >
                   <ArrowLeft className="h-4 w-4 mr-1" />
-                  Volver a Control de Usuarios
+                  Volver a Bitacora Usuarios
                 </Button>
               </div>
             </CardContent>
@@ -216,7 +216,7 @@ function PageInner() {
               onClick={() => router.push("/control-usuarios")}
             >
               <ArrowLeft className="h-4 w-4 mr-1" />
-              Control de Usuarios
+              Bitacora Usuarios
             </Button>
             <div>
               <div className="flex items-center gap-2">

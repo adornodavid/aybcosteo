@@ -147,7 +147,7 @@ export default function ControlUsuariosPage() {
             <Users className="h-4 w-4" />
           </div>
           <div className="flex items-baseline gap-2 flex-wrap">
-            <h1 className="text-lg font-bold leading-none">Control de Usuarios</h1>
+            <h1 className="text-lg font-bold leading-none">Bitacora Usuarios</h1>
             <p className="text-white/80 text-xs leading-none">
               Monitoreo de acceso y actividad
             </p>

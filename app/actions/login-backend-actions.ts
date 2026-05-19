@@ -3,6 +3,7 @@
 import { supabase } from "@/lib/supabase"
 import { setSessionCookies } from "./session-actions"
 import { cerrarSesion } from "./session-actions-with-expiration" // Importar cerrarSesion
+import { verifyPassword, hashPassword, isBcryptHash } from "@/lib/password"
 
 export interface LoginResult {
   success: boolean
@@ -12,41 +13,45 @@ export interface LoginResult {
 
 export async function procesarInicioSesion(email: string, password: string): Promise<LoginResult> {
   try {
-    // Paso 1: Validar credenciales
-    const { data: usuarios, error: loginError } = await supabase
+    // Paso 1: Buscar usuario por email + activo (sin filtrar por password — comparamos por hash en JS)
+    const { data: userData, error: userError } = await supabase
       .from("usuarios")
-      .select("*")
+      .select("id, email, nombrecompleto, hotelid, rolid, cantidadaccesos, password")
       .eq("email", email)
-      .eq("password", password)
       .eq("activo", true)
+      .maybeSingle()
 
-    if (loginError) {
-      console.error("Error en consulta de login:", loginError)
+    if (userError) {
+      console.error("Error en consulta de login:", userError)
       return {
         success: false,
         message: "Error en el servidor. Intenta nuevamente.",
       }
     }
 
-    if (!usuarios || usuarios.length === 0) {
+    if (!userData) {
       return {
         success: false,
         message: "El correo o el password está incorrecto, favor de verificar.",
       }
     }
 
-    // Paso 2: Obtener datos del usuario
-    const { data: userData, error: userError } = await supabase
-      .from("usuarios")
-      .select("id, email, nombrecompleto, hotelid, rolid, cantidadaccesos")
-      .eq("email", email)
-      .single()
-
-    if (userError || !userData) {
-      console.error("Error obteniendo datos del usuario:", userError)
+    // Paso 1.1: Validar password (soporta hash bcrypt y texto plano legacy)
+    const passwordMatches = await verifyPassword(password, userData.password)
+    if (!passwordMatches) {
       return {
         success: false,
-        message: "Error obteniendo datos del usuario.",
+        message: "El correo o el password está incorrecto, favor de verificar.",
+      }
+    }
+
+    // Paso 1.2: Auto-upgrade — si el password estaba en texto plano y coincidió, hashearlo
+    if (!isBcryptHash(userData.password)) {
+      try {
+        const newHash = await hashPassword(password)
+        await supabase.from("usuarios").update({ password: newHash }).eq("id", userData.id)
+      } catch (upgradeErr) {
+        console.error("Error al migrar password a bcrypt (no bloquea login):", upgradeErr)
       }
     }
 

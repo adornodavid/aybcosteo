@@ -110,7 +110,8 @@ export function AppSidebar() {
       hasSubmenu: true,
       onlyAdmin: true,
       submenu: [
-        { name: "Control de Usuarios", href: "/control-usuarios", icon: Icons.UsersRound },
+        { name: "Usuarios", href: "/admin/usuarios", icon: Icons.User },
+        { name: "Bitacora Usuarios", href: "/control-usuarios", icon: Icons.UsersRound },
         { name: "Importación de Datos", href: "/importar", icon: Icons.FileUp },
         { name: "Carga de Ventas", href: "/cargaventas", icon: Icons.Tag },
       ],
@@ -283,10 +284,10 @@ export function AppSidebar() {
                 className={`w-full flex flex-col items-center gap-1 p-2 rounded-md transition-colors ${
                   isActive("/control-usuarios") ? "bg-[#7BAEB8] text-white shadow-sm" : "text-white hover:bg-[#2D6470]"
                 }`}
-                title="Control de Usuarios"
+                title="Bitacora Usuarios"
               >
                 <Icons.UsersRound className="w-6 h-6" />
-                <span className="text-[10px] font-medium leading-tight text-center">Control Usuarios</span>
+                <span className="text-[10px] font-medium leading-tight text-center">Bitacora Usuarios</span>
               </button>
             )}
 
